@@ -1,0 +1,270 @@
+
+/**
+ * @file firestore.rules
+ * @description Security rules for the SkinSmith Clinic Management System.
+ *
+ * ## Core Philosophy
+ * This ruleset implements a Role-Based Access Control (RBAC) model for a private, internal clinic application.
+ * There are three primary roles defined in the `/users/{userId}` documents: 'Admin', 'Doctor', and 'Receptionist'.
+ * All data access is restricted to authenticated clinic staff; there is no public or patient-facing access.
+ * The default security posture is to deny all access unless explicitly granted to a specific role.
+ *
+ * ## Data Structure
+ * - `/users/{userId}`: Stores staff user accounts and their roles, which is the foundation for all authorization decisions.
+ * - `/doctors/{doctorId}`: Publicly readable profiles for doctors within the clinic. Managed by Admins.
+ * - `/inventory/{inventoryItemId}`: Clinic inventory records. Managed by Admins.
+ * - `/patients/{patientId}`: The root collection for all patient data.
+ * - `/patients/{patientId}/appointments`: Subcollection for a patient's appointments.
+ * - `/patients/{patientId}/billingRecords`: Subcollection for a patient's billing history.
+ * - `/patients/{patientId}/appointments/{appointmentId}/visitRecords`: Nested subcollection containing sensitive clinical data, with access restricted to Doctors and Admins.
+ *
+ * ## Key Security Decisions
+ * - **Strict Role-Based Access:** All operations are gated by a user's role, fetched from their document in the `/users` collection for most reads.
+ * - **No Patient Login:** Patients are treated as data records within the system and do not have login credentials. Access control is based on the staff member's role, not on patient ownership.
+ * - **Admin Supremacy:** Users with the 'Admin' role have broad permissions to manage core clinic data like user roles, doctor profiles, and inventory.
+ * - **Segregation of Duties:** Sensitive clinical data in `visitRecords` is strictly limited to 'Doctor' and 'Admin' roles, preventing access by 'Receptionist' staff.
+ * - **Default to Staff Access:** For general patient data like demographics, appointments, and billing, access is granted to all authenticated staff members to support flexible clinic workflows during prototyping.
+ *
+ * ## Denormalization for Authorization
+ * The data model is designed to be performant and secure by avoiding complex queries within rules.
+ * - The primary authorization check relies on a single `get()` to `/users/{request.auth.uid}` to determine the user's role. This role is then used to make all subsequent access decisions.
+ * - Relational integrity is maintained by ensuring that denormalized IDs within subcollection documents (e.g., `patientId` in an appointment document) match the IDs in the document path.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verifies that a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    /**
+     * Checks if the request comes from the user who owns the document.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Retrieves the role of the currently authenticated user from their profile document.
+     * This is the cornerstone of the Role-Based Access Control (RBAC) system.
+     */
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /**
+     * Checks if the authenticated user has the 'Admin' role.
+     * This now checks the user's document for the 'Admin' role.
+     */
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == 'Admin';
+    }
+
+    /**
+     * Checks if the authenticated user has the 'Doctor' role.
+     */
+    function isDoctor() {
+      return isSignedIn() && getUserData().role == 'Doctor';
+    }
+    
+    /**
+     * Checks if the authenticated user is a staff member with any valid role.
+     * In this system, any signed-in user is considered staff.
+     */
+    function isStaff() {
+      return isSignedIn();
+    }
+    
+    /**
+     * Validates that the patientId in a new document's body
+     * matches the patientId from the document path.
+     */
+    function isConsistentPatientDataOnCreate(patientId) {
+        return request.resource.data.patientId == patientId;
+    }
+
+    /**
+     * Enforces immutability of the patientId field during an update.
+     */
+    function isPatientLinkImmutable(patientId) {
+        return request.resource.data.patientId == resource.data.patientId && request.resource.data.patientId == patientId;
+    }
+    
+    /**
+     * @description Stores staff user profiles and their assigned roles.
+     * @path /users/{userId}
+     * @allow (get) An admin reading another user's profile.
+     * @allow (get) A user reading their own profile.
+     * @deny (update) A user trying to change their own role.
+     * @principle A user's own document is readable by them, but role management is a privileged, Admin-only operation.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isStaff();
+      allow create: if isOwner(userId);
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Stores doctor profiles for the clinic.
+     * @path /doctors/{doctorId}
+     * @allow (get) Any authenticated staff member viewing a doctor's profile.
+     * @deny (create) A Doctor or Receptionist trying to add a new doctor profile.
+     * @principle Core clinic information should be readable by all staff but managed only by Admins.
+     */
+    match /doctors/{doctorId} {
+      allow get: if isStaff();
+      allow list: if isStaff();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+    
+    /**
+     * @description Stores inventory items for the clinic.
+     * @path /inventory/{inventoryItemId}
+     * @allow (list) Any authenticated staff member listing inventory items.
+     * @deny (update) A Doctor trying to change the price of an inventory item.
+     * @principle Core clinic assets should be readable by all staff but managed only by Admins.
+     */
+    match /inventory/{inventoryItemId} {
+      allow get: if isStaff();
+      allow list: if isStaff();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Stores patient demographic and contact information.
+     * @path /patients/{patientId}
+     * @allow (create) An authenticated staff member creating a new patient record.
+     * @deny (get) An unauthenticated user trying to read patient data.
+     * @principle Patient data is private and accessible only to authenticated clinic staff.
+     */
+    match /patients/{patientId} {
+      allow read, write: if isStaff();
+
+      /**
+       * @description Stores appointments for a specific patient.
+       * @path /patients/{patientId}/appointments/{appointmentId}
+       * @allow (read, write) A staff member managing appointments for a patient.
+       * @principle Enforces that appointment data is managed by authenticated staff.
+       */
+      match /appointments/{appointmentId} {
+        allow read, write: if isStaff();
+
+        /**
+         * @description Stores sensitive clinical records for a specific appointment.
+         * @path /patients/{patientId}/appointments/{appointmentId}/visitRecords/{visitRecordId}
+         * @allow (read, write) A Doctor or Admin managing visit records.
+         * @deny (get) A Receptionist trying to read a patient's diagnosis and doctor's notes.
+         * @principle Access to sensitive medical data is strictly controlled.
+         */
+        match /visitRecords/{visitRecordId} {
+          allow read, write: if isAdmin() || isDoctor();
+        }
+      }
+
+      /**
+       * @description Stores billing records for a specific patient.
+       * @path /patients/{patientId}/billingRecords/{billingRecordId}
+       * @allow (read, write) A staff member creating a new bill for a patient.
+       * @principle Financial records are private and accessible only to authenticated clinic staff.
+       */
+      match /billingRecords/{billingRecordId} {
+        allow read, write: if isStaff();
+      }
+      
+      /**
+       * @description Stores family history records for a specific patient.
+       * @path /patients/{patientId}/familyHistory/{historyId}
+       * @allow (read, write) Any authenticated staff member.
+       * @principle Family history is considered part of the general patient record accessible to staff.
+       */
+      match /familyHistory/{historyId} {
+        allow read, write: if isStaff();
+      }
+
+      /**
+       * @description Stores medical history records for a specific patient.
+       * @path /patients/{patientId}/medicalHistory/{historyId}
+       * @allow (read, write) Any authenticated staff member.
+       * @principle Medical history is considered part of the general patient record accessible to staff.
+       */
+      match /medicalHistory/{historyId} {
+        allow read, write: if isStaff();
+      }
+
+      /**
+       * @description Stores health records for a specific patient.
+       * @path /patients/{patientId}/healthRecords/{recordId}
+       * @allow (read, write) Any authenticated staff member.
+       * @principle Health records are considered part of the general patient record accessible to staff.
+       */
+      match /healthRecords/{recordId} {
+        allow read, write: if isStaff();
+      }
+      
+      /**
+       * @description Stores communications for a specific patient.
+       * @path /patients/{patientId}/communications/{communicationId}
+       * @allow (read, write) Any authenticated staff member.
+       * @principle Communications are considered part of the general patient record accessible to staff.
+       */
+      match /communications/{communicationId} {
+        allow read, write: if isStaff();
+      }
+      
+      /**
+       * @description Stores treatment plans for a specific patient.
+       * @path /patients/{patientId}/treatmentPlans/{planId}
+       * @allow (read, write) Any authenticated staff member.
+       * @principle Treatment plans are part of the patient record accessible to staff.
+       */
+      match /treatmentPlans/{planId} {
+        allow read, write: if isStaff();
+      }
+    }
+    
+    /**
+     * @description Stores invoices for patients.
+     * @path /invoices/{invoiceId}
+     * @allow (read, write) Any authenticated staff member.
+     * @principle Invoices are accessible to all staff for billing and record-keeping.
+     */
+    match /invoices/{invoiceId} {
+        allow read, write: if isStaff();
+    }
+
+    /**
+     * @description Stores feature access control settings for each role.
+     * @path /feature_access/{role}
+     * @allow (read) Any authenticated staff member.
+     * @allow (write) Only Admins can change feature access settings.
+     * @principle Feature settings are readable by all staff to configure the UI, but only managed by Admins.
+     */
+    match /feature_access/{role} {
+      allow get: if isStaff();
+      allow list: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    /**
+     * @description Allows a collection group query on 'feature_access' collections.
+     * This is necessary for the UI to fetch all feature permissions for all roles at once.
+     */
+    match /{path=**}/feature_access/{role} {
+      allow read: if isStaff();
+    }
+  }
+}

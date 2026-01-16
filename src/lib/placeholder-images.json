@@ -1,0 +1,52 @@
+{
+  "placeholderImages": [
+    {
+      "id": "doctor-1",
+      "description": "Photo of Dr. Emily Carter",
+      "imageUrl": "https://images.unsplash.com/photo-1706565029539-d09af5896340?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHx3b21hbiUyMGRvY3RvcnxlbnwwfHx8fDE3NjYzNjA3MDh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "woman doctor"
+    },
+    {
+      "id": "doctor-2",
+      "description": "Photo of Dr. Ben Adams",
+      "imageUrl": "https://images.unsplash.com/photo-1612276529731-4b21494e6d71?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxtYW4lMjBkb2N0b3J8ZW58MHx8fHwxNzY2NDA2Nzk3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "man doctor"
+    },
+    {
+      "id": "doctor-3",
+      "description": "Photo of Dr. Chloe Davis",
+      "imageUrl": "https://images.unsplash.com/photo-1573497019236-17f8177b81e8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHx3b21hbiUyMHByb2Zlc3Npb25hbHxlbnwwfHx8fDE3NjYzNjg1NjB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "woman professional"
+    },
+    {
+      "id": "patient-1",
+      "description": "Avatar of Alex Johnson",
+      "imageUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxtYW4lMjBwb3J0cmFpdHxlbnwwfHx8fDE3NjYzODI4MjR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "man portrait"
+    },
+    {
+      "id": "patient-2",
+      "description": "Avatar of Maria Garcia",
+      "imageUrl": "https://images.unsplash.com/photo-1609505848912-b7c3b8b4beda?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHx3b21hbiUyMHBvcnRyYWl0fGVufDB8fHx8MTc2NjMwMTEzOHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "woman portrait"
+    },
+    {
+      "id": "patient-3",
+      "description": "Avatar of Chen Wei",
+      "imageUrl": "https://images.unsplash.com/photo-1611403119860-57c4937ef987?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxhc2lhbiUyMG1hbnxlbnwwfHx8fDE3NjY0MDY3OTd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "asian man"
+    },
+    {
+      "id": "patient-4",
+      "description": "Avatar of Fatima Al-Fassi",
+      "imageUrl": "https://images.unsplash.com/photo-1645088930126-f669feb0fc5f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxhcmFiJTIwd29tYW58ZW58MHx8fHwxNzY2MzYyMjc1fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "arab woman"
+    },
+    {
+      "id": "patient-5",
+      "description": "Avatar of James Smith",
+      "imageUrl": "https://images.unsplash.com/photo-1666620500685-ec01115fbbf2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxjYXVjYXNpYW4lMjBtYW58ZW58MHx8fHwxNzY2NDA2Nzk3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "caucasian man"
+    }
+  ]
+}

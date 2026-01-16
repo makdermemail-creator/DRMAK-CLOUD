@@ -1,0 +1,861 @@
+{
+  "entities": {
+    "Doctor": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Doctor",
+      "type": "object",
+      "description": "Represents a doctor within the SkinSmith Clinic.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Doctor entity."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name of the doctor."
+        },
+        "specialization": {
+          "type": "string",
+          "description": "Doctor's area of specialization (e.g., dermatology, cosmetic surgery)."
+        },
+        "qualification": {
+          "type": "string",
+          "description": "Doctor's professional qualifications."
+        },
+        "consultationFees": {
+          "type": "number",
+          "description": "The fee charged for a consultation with the doctor."
+        },
+        "availableDays": {
+          "type": "array",
+          "description": "Days of the week the doctor is available.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "availableTimings": {
+          "type": "string",
+          "description": "The time slots when the doctor is available on different days."
+        }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "specialization",
+        "qualification",
+        "consultationFees"
+      ]
+    },
+    "Patient": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Patient",
+      "type": "object",
+      "description": "Represents a patient at the SkinSmith Clinic.",
+      "properties": {
+        "mobileNumber": {
+          "type": "string",
+          "description": "Unique identifier for the Patient entity, using their mobile number."
+        },
+        "name": {
+          "type": "string",
+          "description": "Patient's full name."
+        },
+        "age": {
+          "type": "number",
+          "description": "Patient's age."
+        },
+        "gender": {
+          "type": "string",
+          "description": "Patient's gender."
+        },
+        "address": {
+          "type": "string",
+          "description": "Patient's address (optional)."
+        }
+      },
+      "required": [
+        "mobileNumber",
+        "name",
+        "age",
+        "gender"
+      ]
+    },
+    "Appointment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Appointment",
+      "type": "object",
+      "description": "Represents an appointment scheduled at the SkinSmith Clinic.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Appointment entity."
+        },
+        "doctorId": {
+          "type": "string",
+          "description": "Reference to Doctor. (Relationship: Doctor 1:N Appointment)"
+        },
+        "patientMobileNumber": {
+          "type": "string",
+          "description": "Reference to Patient. (Relationship: Patient 1:N Appointment)"
+        },
+        "appointmentDateTime": {
+          "type": "string",
+          "description": "Date and time of the appointment.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the appointment (e.g., Waiting, In consultation, Completed)."
+        },
+        "procedure": {
+          "type": "string",
+          "description": "Procedure for the appointment."
+        },
+        "comments": {
+          "type": "string",
+          "description": "Additional comments for the appointment."
+        }
+      },
+      "required": [
+        "id",
+        "doctorId",
+        "patientMobileNumber",
+        "appointmentDateTime",
+        "status"
+      ]
+    },
+    "VisitRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VisitRecord",
+      "type": "object",
+      "description": "Represents a record of a patient's visit to the SkinSmith Clinic.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the VisitRecord entity."
+        },
+        "patientMobileNumber": {
+          "type": "string",
+          "description": "Reference to Patient. (Relationship: Patient 1:N VisitRecord)"
+        },
+        "appointmentId": {
+          "type": "string",
+          "description": "Reference to Appointment. (Relationship: Appointment 1:1 VisitRecord)"
+        },
+        "diagnosis": {
+          "type": "string",
+          "description": "Diagnosis made during the visit."
+        },
+        "prescribedMedicines": {
+          "type": "array",
+          "description": "List of medicines prescribed during the visit.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "proceduresTreatments": {
+          "type": "array",
+          "description": "List of procedures or treatments performed during the visit.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doctorNotes": {
+          "type": "string",
+          "description": "Notes taken by the doctor during the visit."
+        },
+        "visitDateTime": {
+          "type": "string",
+          "description": "Date and time of the visit.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "patientMobileNumber",
+        "appointmentId",
+        "visitDateTime"
+      ]
+    },
+    "InventoryItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "InventoryItem",
+      "type": "object",
+      "description": "Represents an item in the SkinSmith Clinic's inventory.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the InventoryItem entity."
+        },
+        "productName": {
+          "type": "string",
+          "description": "Name of the product."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the product (e.g., Medical, Cosmetic)."
+        },
+        "supplier": {
+          "type": "string",
+          "description": "Name of the product supplier."
+        },
+        "purchasePrice": {
+          "type": "number",
+          "description": "Price at which the product was purchased."
+        },
+        "sellingPrice": {
+          "type": "number",
+          "description": "Price at which the product is sold."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Current quantity of the product in stock."
+        },
+        "expiryDate": {
+          "type": "string",
+          "description": "Expiry date of the product.",
+          "format": "date"
+        }
+      },
+      "required": [
+        "id",
+        "productName",
+        "category",
+        "supplier",
+        "purchasePrice",
+        "sellingPrice",
+        "quantity",
+        "expiryDate"
+      ]
+    },
+    "BillingRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BillingRecord",
+      "type": "object",
+      "description": "Represents a billing record for a patient at the SkinSmith Clinic.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the BillingRecord entity."
+        },
+        "patientMobileNumber": {
+          "type": "string",
+          "description": "Reference to Patient. (Relationship: Patient 1:N BillingRecord)"
+        },
+        "visitRecordId": {
+          "type": "string",
+          "description": "Reference to VisitRecord. (Relationship: VisitRecord 1:1 BillingRecord)"
+        },
+        "consultationFee": {
+          "type": "number",
+          "description": "Fee charged for the consultation."
+        },
+        "procedureCosts": {
+          "type": "number",
+          "description": "Costs of procedures performed."
+        },
+        "medicineCosts": {
+          "type": "number",
+          "description": "Costs of medicines prescribed."
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total amount due for the visit."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Method of payment used (e.g., Cash, UPI, Card)."
+        },
+        "billingDate": {
+          "type": "string",
+          "description": "Date of the billing record.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "patientMobileNumber",
+        "visitRecordId",
+        "totalAmount",
+        "paymentMethod",
+        "billingDate"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the SkinSmith Clinic Management System.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "username": {
+          "type": "string",
+          "description": "Username for the user."
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the user (e.g., Admin, Doctor, Receptionist)."
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "description": "Flag to indicate if the user has administrative privileges."
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "role"
+      ]
+    },
+    "Invoice": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Invoice",
+      "type": "object",
+      "description": "Represents a patient invoice.",
+      "properties": {
+        "patientId": {
+          "type": "string"
+        },
+        "patientMobileNumber": {
+          "type": "string"
+        },
+        "invoiceDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "procedure": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "rate": {
+                "type": "number"
+              },
+              "quantity": {
+                "type": "number"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "discount": {
+                "type": "number"
+              },
+              "performedBy": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "subTotal": {
+          "type": "number"
+        },
+        "totalDiscount": {
+          "type": "number"
+        },
+        "grandTotal": {
+          "type": "number"
+        },
+        "amountPaid": {
+          "type": "number"
+        },
+        "amountDue": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Paid",
+            "Pending",
+            "Cancelled"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "patientId",
+        "invoiceDate",
+        "grandTotal",
+        "status"
+      ]
+    },
+    "FamilyHistory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FamilyHistory",
+      "description": "Stores family history records for a patient.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string",
+          "description": "The ID of the patient this record belongs to."
+        },
+        "relativeName": {
+          "type": "string",
+          "description": "The name of the family member."
+        },
+        "gender": {
+          "type": "string",
+          "description": "The gender of the family member.",
+          "enum": ["Male", "Female", "Other"]
+        },
+        "relationship": {
+          "type": "string",
+          "description": "The relationship to the patient (e.g., Father, Mother)."
+        },
+        "bloodGroup": {
+          "type": "string",
+          "description": "The blood group of the family member."
+        },
+        "remarks": {
+          "type": "string",
+          "description": "Any relevant medical conditions or notes."
+        }
+      },
+      "required": [
+        "patientId",
+        "relativeName",
+        "relationship"
+      ]
+    },
+    "MedicalHistory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MedicalHistory",
+      "description": "Stores medical history, alerts, or suggestions for a patient.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string",
+          "description": "The ID of the patient this record belongs to."
+        },
+        "text": {
+          "type": "string",
+          "description": "The content of the history entry."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of entry.",
+          "enum": ["History", "Alert", "Suggestion"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the entry was created."
+        }
+      },
+      "required": [
+        "patientId",
+        "text",
+        "type",
+        "createdAt"
+      ]
+    },
+    "HealthRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HealthRecord",
+      "description": "Stores a comprehensive health record for a patient visit.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string",
+          "description": "The ID of the patient this record belongs to."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user creating the record."
+        },
+        "recordDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date the record was created."
+        },
+        "complaint": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "clinicalNotes": { "type": "string" },
+        "advice": { "type": "string" },
+        "investigation": { "type": "string" },
+        "plan": { "type": "string" },
+        "procedures": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "followUpDate": {
+            "type": "string",
+            "format": "date"
+        }
+      },
+      "required": ["patientId", "userId", "recordDate"]
+    },
+    "Communication": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Communication",
+      "description": "Represents a message sent to a patient.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string",
+          "description": "The ID of the patient this message was sent to."
+        },
+        "message": {
+          "type": "string",
+          "description": "The content of the message."
+        },
+        "service": {
+          "type": "string",
+          "description": "The service used to send the message (e.g., SMS, WhatsApp)."
+        },
+        "sentBy": {
+          "type": "string",
+          "description": "The ID of the user who sent the message."
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the message was sent."
+        }
+      },
+      "required": ["patientId", "message", "service", "sentBy", "sentAt"]
+    },
+    "TreatmentPlan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TreatmentPlan",
+      "description": "Represents a treatment plan for a patient.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string"
+        },
+        "procedure": {
+          "type": "string"
+        },
+        "total": {
+          "type": "number"
+        },
+        "scheduleDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "addedBy": {
+          "type": "string"
+        },
+        "createdDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "modifiedDate": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "patientId",
+        "procedure",
+        "total",
+        "scheduleDate",
+        "addedBy",
+        "createdDate",
+        "modifiedDate"
+      ]
+    },
+    "FeatureAccess": {
+      "title": "Feature Access",
+      "description": "Stores feature access rights for a specific user role.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "The user role (e.g., Admin, Doctor)."
+        },
+        "features": {
+          "type": "object",
+          "description": "A map of feature IDs to boolean access rights.",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required": ["role", "features"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/doctors/{doctorId}",
+        "definition": {
+          "entityName": "Doctor",
+          "schema": {
+            "$ref": "#/backend/entities/Doctor"
+          },
+          "description": "Stores doctor profiles.  Each document is identified by the doctor's unique ID.",
+          "params": [
+            {
+              "name": "doctorId",
+              "description": "The unique identifier of the doctor."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}",
+        "definition": {
+          "entityName": "Patient",
+          "schema": {
+            "$ref": "#/backend/entities/Patient"
+          },
+          "description": "Stores patient profiles. Each document is identified by the patient's mobile number.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The patient's unique identifier."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/appointments/{appointmentId}",
+        "definition": {
+          "entityName": "Appointment",
+          "schema": {
+            "$ref": "#/backend/entities/Appointment"
+          },
+          "description": "Stores appointments for a specific patient. Includes denormalized patientMobileNumber for authorization independence.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier of the patient associated with the appointment."
+            },
+            {
+              "name": "appointmentId",
+              "description": "The unique identifier of the appointment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/appointments/{appointmentId}/visitRecords/{visitRecordId}",
+        "definition": {
+          "entityName": "VisitRecord",
+          "schema": {
+            "$ref": "#/backend/entities/VisitRecord"
+          },
+          "description": "Stores visit records for a specific appointment of a specific patient. Includes denormalized patientMobileNumber and appointmentId for authorization independence.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The mobile number of the patient associated with the visit record."
+            },
+            {
+              "name": "appointmentId",
+              "description": "The unique identifier of the appointment associated with the visit record."
+            },
+            {
+              "name": "visitRecordId",
+              "description": "The unique identifier of the visit record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/inventory/{inventoryItemId}",
+        "definition": {
+          "entityName": "InventoryItem",
+          "schema": {
+            "$ref": "#/backend/entities/InventoryItem"
+          },
+          "description": "Stores inventory items. Each document is identified by the item's unique ID.",
+          "params": [
+            {
+              "name": "inventoryItemId",
+              "description": "The unique identifier of the inventory item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/billingRecords/{billingRecordId}",
+        "definition": {
+          "entityName": "BillingRecord",
+          "schema": {
+            "$ref": "#/backend/entities/BillingRecord"
+          },
+          "description": "Stores billing records for a specific patient.  Includes denormalized patientMobileNumber for authorization independence.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The mobile number of the patient associated with the billing record."
+            },
+            {
+              "name": "billingRecordId",
+              "description": "The unique identifier of the billing record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Used for authentication and authorization.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": {
+            "$ref": "#/backend/entities/Invoice"
+          },
+          "description": "Stores patient invoices.",
+          "params": [
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier of the invoice."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/familyHistory/{historyId}",
+        "definition": {
+          "entityName": "FamilyHistory",
+          "schema": {
+            "$ref": "#/backend/entities/FamilyHistory"
+          },
+          "description": "Stores family history records for a specific patient.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier of the patient."
+            },
+            {
+              "name": "historyId",
+              "description": "The unique identifier of the family history record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/medicalHistory/{historyId}",
+        "definition": {
+          "entityName": "MedicalHistory",
+          "schema": {
+            "$ref": "#/backend/entities/MedicalHistory"
+          },
+          "description": "Stores medical history records, alerts, and suggestions for a specific patient.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier of the patient."
+            },
+            {
+              "name": "historyId",
+              "description": "The unique identifier of the medical history record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/healthRecords/{recordId}",
+        "definition": {
+            "entityName": "HealthRecord",
+            "schema": {
+                "$ref": "#/backend/entities/HealthRecord"
+            },
+            "description": "Stores health records for a specific patient.",
+            "params": [
+                {
+                    "name": "patientId",
+                    "description": "The unique identifier of the patient."
+                },
+                {
+                    "name": "recordId",
+                    "description": "The unique identifier of the health record."
+                }
+            ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/communications/{communicationId}",
+        "definition": {
+          "entityName": "Communication",
+          "schema": {
+            "$ref": "#/backend/entities/Communication"
+          },
+          "description": "Stores communications sent to a specific patient.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier of the patient."
+            },
+            {
+              "name": "communicationId",
+              "description": "The unique identifier of the communication record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/treatmentPlans/{planId}",
+        "definition": {
+            "entityName": "TreatmentPlan",
+            "schema": {
+                "$ref": "#/backend/entities/TreatmentPlan"
+            },
+            "description": "Stores treatment plans for a specific patient.",
+            "params": [
+                {
+                    "name": "patientId",
+                    "description": "The unique identifier of the patient."
+                },
+                {
+                    "name": "planId",
+                    "description": "The unique identifier of the treatment plan."
+                }
+            ]
+        }
+      },
+      {
+        "path": "/feature_access/{role}",
+        "definition": {
+            "entityName": "FeatureAccess",
+            "schema": {
+                "$ref": "#/backend/entities/FeatureAccess"
+            },
+            "description": "Stores feature access permissions for each user role.",
+            "params": [
+                {
+                    "name": "role",
+                    "description": "The name of the user role (e.g., Admin, Doctor)."
+                }
+            ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure security, scalability, and debuggability, adhering to the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. The core strategy revolves around denormalization to avoid `get()` calls in security rules and structural segregation to maintain a homogeneous security posture within collections. \n\n**Authorization Independence:**\n\n*   Denormalization is used to achieve authorization independence. For instance, access to `appointments` or `visitRecords` related to a specific `patient` or `doctor` is controlled by denormalizing relevant user information (e.g., the patient's `mobileNumber` or the doctor's `id`) within these documents. This eliminates the need for security rules to fetch parent document data, simplifying the rules and ensuring atomicity.\n\n**Structural Segregation:**\n\n*   The structure avoids mixing data with different access needs within the same collection. For example, patient data is stored in `/patients/{mobileNumber}` while doctor data is stored in `/doctors/{doctorId}`.\n\n**Access Modeling:**\n\n*   **Private Data:** Path-based ownership is used for user-owned data like patients (`/patients/{mobileNumber}`) and doctors (`/doctors/{doctorId}`).\n*   **Hierarchical Paths:** The structure uses hierarchical paths to represent 1:N relationships. For example, appointments for a patient are stored under `/patients/{patientMobileNumber}/appointments/{appointmentId}` and visit records for an appointment are stored under `/patients/{patientMobileNumber}/appointments/{appointmentId}/visitRecords/{visitRecordId}`. This simplifies security rules based on ownership.\n*   **Collaborative Data:** While not explicitly present in this data model, if collaboration were needed (e.g., shared patient records between doctors), the Membership Map model (`members: {uid1: \"role\", uid2: \"role\"}`) would be adopted, with the `members` map denormalized into relevant subcollections for authorization independence.\n*   **Global Roles (DBAC):** User roles are stored in a dedicated collection `/users/{userId}`, enabling simple existence-based security rules for administrative functions.\n\n**QAPs (Rules are not Filters):**\n\n*   The segregated structure naturally supports secure `list` operations (QAPs). Listing patients is secure because the path `/patients/{mobileNumber}` only exposes patient data. Similarly, listing appointments under `/patients/{patientMobileNumber}/appointments/{appointmentId}` is secure because only the patient (or authorized personnel) should have access to that path.\n\nIn summary, this Firestore structure combines denormalization, structural segregation, and consistent access modeling to create a secure, scalable, and debuggable system. The explicit modeling of user roles and the enforcement of authorization independence ensure the integrity and confidentiality of the data."
+  }
+}
+    
