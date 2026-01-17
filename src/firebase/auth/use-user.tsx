@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useAuthUser } from '@/firebase/provider';
 import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
@@ -22,10 +23,26 @@ export function useUser() {
 
   const isLoading = isAuthLoading || (authUser && isProfileLoading);
 
-  return {
-    user: userProfile,
+  // Emergency fallback for main admin if Firestore profile is missing or broken
+  const adminFallback: User | null = React.useMemo(() =>
+    !isProfileLoading && !userProfile && authUser?.email === 'admin1@skinsmith.com'
+      ? {
+        id: authUser.uid,
+        name: 'Main Admin (Recovered)',
+        email: authUser.email!,
+        avatarUrl: `https://i.pravatar.cc/150?u=${authUser.uid}`,
+        role: 'Admin',
+        isAdmin: true,
+        isMainAdmin: true,
+      }
+      : null, [isProfileLoading, userProfile, authUser]);
+
+  const user = userProfile || adminFallback;
+
+  return React.useMemo(() => ({
+    user,
     authUser,
     isUserLoading: isLoading,
     error: authError || profileError,
-  };
+  }), [user, authUser, isLoading, authError, profileError]);
 }

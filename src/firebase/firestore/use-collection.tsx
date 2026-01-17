@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Query,
   onSnapshot,
@@ -23,6 +23,7 @@ export interface UseCollectionResult<T> {
   data: WithId<T>[] | null; // Document data with ID, or null.
   isLoading: boolean;       // True if loading.
   error: FirestoreError | Error | null; // Error object, or null.
+  forceRerender: () => void; // Function to force a data refresh.
 }
 
 /* Internal implementation of Query:
@@ -52,14 +53,17 @@ export interface InternalQuery extends Query<DocumentData> {
  * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
  */
 export function useCollection<T = any>(
-    memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
+  memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & { __memo?: boolean }) | null | undefined,
 ): UseCollectionResult<T> {
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
 
   const [data, setData] = useState<StateDataType>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(!!memoizedTargetRefOrQuery);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
+  const [tick, setTick] = useState(0);
+
+  const forceRerender = useCallback(() => setTick(prev => prev + 1), []);
 
   useEffect(() => {
     if (!memoizedTargetRefOrQuery) {
@@ -85,30 +89,45 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
-        // This logic extracts the path from either a ref or a query
-        const path: string =
-          memoizedTargetRefOrQuery.type === 'collection'
-            ? (memoizedTargetRefOrQuery as CollectionReference).path
-            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+        if (error.code === 'permission-denied') {
+          // This logic extracts the path from either a ref or a query
+          const path: string =
+            memoizedTargetRefOrQuery.type === 'collection'
+              ? (memoizedTargetRefOrQuery as CollectionReference).path
+              : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
 
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path,
-        })
+          const contextualError = new FirestorePermissionError({
+            operation: 'list',
+            path,
+          })
 
-        setError(contextualError)
+          setError(contextualError)
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
+        } else {
+          // For errors other than permission-denied (e.g. index missing), pass through the original error
+          setError(error);
+          console.error(`Firestore ${error.code}: ${error.message}`);
+        }
+
         setData(null)
         setIsLoading(false)
-
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
       }
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
-  if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
+  }, [memoizedTargetRefOrQuery, tick]); // Re-run if the target query/reference changes or force rerender is called.
+
+  if (memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }
-  return { data, isLoading, error };
+
+  const isActuallyLoading = isLoading || (!!memoizedTargetRefOrQuery && data === null && error === null);
+
+  return useMemo(() => ({
+    data,
+    isLoading: isActuallyLoading,
+    error,
+    forceRerender
+  }), [data, isActuallyLoading, error, forceRerender]);
 }

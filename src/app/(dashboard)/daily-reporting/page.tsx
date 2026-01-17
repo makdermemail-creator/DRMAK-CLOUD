@@ -1,19 +1,19 @@
 'use client';
 import * as React from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -38,8 +38,26 @@ export default function DailyReportingPage() {
         if (!firestore || !user?.id) return null;
         return query(collection(firestore, 'dailyReports'), where('userId', '==', user.id), orderBy('reportDate', 'desc'));
     }, [firestore, user]);
-    
-    const { data: reports, isLoading, forceRerender } = useCollection<DailyReport>(reportsQuery);
+
+    const { data: reports, isLoading, error, forceRerender } = useCollection<DailyReport>(reportsQuery);
+
+    const lastErrorRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        if (error && error.message !== lastErrorRef.current) {
+            console.error("DailyReporting Error:", error);
+            lastErrorRef.current = error.message;
+            if ((error as any).code !== 'permission-denied') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Database Error',
+                    description: error.message || 'An error occurred while fetching your reports.',
+                });
+            }
+        } else if (!error) {
+            lastErrorRef.current = null;
+        }
+    }, [error, toast]);
 
     const handleReportSubmit = async () => {
         if (!firestore || !user) {
@@ -78,7 +96,7 @@ export default function DailyReportingPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-6 w-6"/>
+                        <FileText className="h-6 w-6" />
                         Submit Daily Report
                     </CardTitle>
                     <CardDescription>Submit your end-of-day report.</CardDescription>
@@ -87,16 +105,16 @@ export default function DailyReportingPage() {
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="summary">Today's Summary</Label>
-                            <Textarea id="summary" placeholder="Summarize your key activities and achievements today..." value={summary} onChange={(e) => setSummary(e.target.value)} rows={5}/>
+                            <Textarea id="summary" placeholder="Summarize your key activities and achievements today..." value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} />
                         </div>
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             <Label htmlFor="plans">Plans for Tomorrow</Label>
-                            <Textarea id="plans" placeholder="Outline your main objectives and plans for tomorrow..." value={plans} onChange={(e) => setPlans(e.target.value)} rows={5}/>
+                            <Textarea id="plans" placeholder="Outline your main objectives and plans for tomorrow..." value={plans} onChange={(e) => setPlans(e.target.value)} rows={5} />
                         </div>
                     </div>
                     <div className="flex justify-end">
                         <Button onClick={handleReportSubmit} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Submit Report
                         </Button>
                     </div>
@@ -109,36 +127,36 @@ export default function DailyReportingPage() {
                     <CardDescription>A history of your submitted daily reports.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                     {isLoading ? (
+                    {isLoading ? (
                         <div className="flex justify-center items-center h-48">
                             <Loader2 className="h-8 w-8 animate-spin" />
                         </div>
                     ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Summary</TableHead>
-                                <TableHead>Plans for Next Day</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {reports?.map(report => (
-                                <TableRow key={report.id}>
-                                    <TableCell className="font-medium whitespace-nowrap">{format(new Date(report.reportDate), 'MMM dd, yyyy')}</TableCell>
-                                    <TableCell><p className="line-clamp-3">{report.summary}</p></TableCell>
-                                    <TableCell><p className="line-clamp-3">{report.plans}</p></TableCell>
-                                </TableRow>
-                            ))}
-                            {reports?.length === 0 && (
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center h-24">
-                                        You have not submitted any reports yet.
-                                    </TableCell>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Summary</TableHead>
+                                    <TableHead>Plans for Next Day</TableHead>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {reports?.map(report => (
+                                    <TableRow key={report.id}>
+                                        <TableCell className="font-medium whitespace-nowrap">{format(new Date(report.reportDate), 'MMM dd, yyyy')}</TableCell>
+                                        <TableCell><p className="line-clamp-3">{report.summary}</p></TableCell>
+                                        <TableCell><p className="line-clamp-3">{report.plans}</p></TableCell>
+                                    </TableRow>
+                                ))}
+                                {reports?.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center h-24">
+                                            You have not submitted any reports yet.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     )}
                 </CardContent>
             </Card>

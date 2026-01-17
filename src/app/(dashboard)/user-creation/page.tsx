@@ -26,7 +26,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useAuth, useUser } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useAuth, useUser, getSecondaryAuth } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { collection } from 'firebase/firestore';
@@ -38,6 +38,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useSearch } from '@/context/SearchProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { Checkbox } from '@/components/ui/checkbox';
+import { availableFeatures } from '@/lib/features';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenChange: (open: boolean) => void, user?: User }) => {
   const firestore = useFirestore();
@@ -82,8 +85,13 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
       // NOTE: Updating user email/password in Auth requires re-authentication and is a complex flow.
       // For this version, we will only update the Firestore document data (like name and role).
       const docRef = doc(collectionRef, user.id);
-      await updateDocumentNonBlocking(docRef, { name: formData.name, role: formData.role, isAdmin: isNowAdmin });
-      toast({ title: "User Updated", description: "The user's details have been updated." });
+      await updateDocumentNonBlocking(docRef, {
+        name: formData.name,
+        role: formData.role,
+        isAdmin: isNowAdmin,
+        featureAccess: formData.featureAccess
+      });
+      toast({ title: "User Updated", description: "The user's details and permissions have been updated." });
       onOpenChange(false);
     } else {
       // Create a new user
@@ -93,8 +101,12 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
         return;
       }
       try {
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, password);
+        const secondaryAuth = getSecondaryAuth();
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, password);
         const newUserId = userCredential.user.uid;
+
+        // Sign out from secondary auth to clean up (doesn't affect main auth)
+        await secondaryAuth.signOut();
 
         const newUserDoc: User = {
           id: newUserId,
@@ -103,12 +115,13 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
           role: formData.role,
           isAdmin: isNowAdmin,
           avatarUrl: formData.avatarUrl || `https://i.pravatar.cc/150?u=${newUserId}`, // Placeholder avatar
+          featureAccess: formData.featureAccess,
         };
 
         // Use setDoc with the new user's UID as the document ID
         await setDoc(doc(firestore, "users", newUserId), newUserDoc);
 
-        toast({ title: "User Added", description: "The new user has been created." });
+        toast({ title: "User Added", description: "The new user has been created with specified permissions." });
         onOpenChange(false);
       } catch (error: any) {
         console.error("Error creating user:", error);
@@ -166,6 +179,38 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
                 <SelectItem value="Designer">Designer</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-4 items-start gap-4">
+            <Label className="text-right pt-2">Feature Access</Label>
+            <Card className="col-span-3">
+              <ScrollArea className="h-[200px] p-4">
+                <div className="space-y-4">
+                  {availableFeatures.map((feature) => (
+                    <div key={feature.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`feature-${feature.id}`}
+                        checked={formData.featureAccess?.[feature.id] || false}
+                        onCheckedChange={(checked) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            featureAccess: {
+                              ...prev.featureAccess,
+                              [feature.id]: !!checked
+                            }
+                          }));
+                        }}
+                      />
+                      <Label
+                        htmlFor={`feature-${feature.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        {feature.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </Card>
           </div>
         </div>
         <DialogFooter>

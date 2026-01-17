@@ -25,42 +25,10 @@ import { collection, doc, setDoc } from 'firebase/firestore';
 
 const availableRoles: UserRole[] = ['Admin', 'Doctor', 'Receptionist', 'Sales', 'Social Media Manager', 'Operations Manager', 'Designer'];
 
-const availableFeatures = [
-    // General & Admin
-    { id: 'dashboard', label: 'Dashboard Access' },
-    { id: 'appointments', label: 'Appointments Management' },
-    { id: 'patients', label: 'Patient Management' },
-    { id: 'doctors', label: 'Doctor Management' },
-    { id: 'userManagement', label: 'User Management' },
-    { id: 'featureControl', label: 'Feature Access Control' },
-    { id: 'aiTools', label: 'AI Recommendations' },
+import { availableFeatures } from '@/lib/features';
 
-    // Pharmacy
-    { id: 'pharmacy.full', label: 'Pharmacy (Full Access)' },
-    { id: 'pharmacy.pos', label: 'Pharmacy (POS Only)' },
 
-    // Reports
-    { id: 'reports.full', label: 'Reports (Full Access)' },
-    { id: 'reports.financial', label: 'Financial Reports' },
-    { id: 'reports.inventory', label: 'Inventory Reports' },
-
-    // Doctor Specific
-    { id: 'healthRecords', label: 'Health Records (Doctor)' },
-    { id: 'ePrescription', label: 'E-Prescription (Doctor)' },
-
-    // Sales Specific
-    { id: 'leads', label: 'Leads Management (Sales)' },
-    { id: 'dailyReporting', label: 'Daily Reporting (Sales)' },
-    { id: 'dailyTasks', label: 'Daily Tasks (Sales)' },
-    { id: 'dailyProgress', label: 'Daily Progress (Sales)' },
-
-    // Social Media Specific
-    { id: 'socialReporting', label: 'Social Media Reporting' },
-    { id: 'contentPlanner', label: 'Content Planner' },
-    { id: 'analytics', label: 'Social Analytics' },
-    { id: 'socialInbox', label: 'Social Inbox' },
-];
-
+import Link from 'next/link';
 
 type FeatureAccessState = {
     [role in UserRole]?: {
@@ -186,7 +154,11 @@ export default function FeaturesPage() {
                             <TableBody>
                                 {availableFeatures.map(feature => (
                                     <TableRow key={feature.id}>
-                                        <TableCell className="font-medium sticky left-0 bg-background z-10">{feature.label}</TableCell>
+                                        <TableCell className="font-medium sticky left-0 bg-background z-10">
+                                            <Link href={feature.href || '#'} className="hover:text-primary hover:underline transition-colors">
+                                                {feature.label}
+                                            </Link>
+                                        </TableCell>
                                         {availableRoles.map(role => (
                                             <TableCell key={`${role}-${feature.id}`} className="text-center">
                                                 <Checkbox

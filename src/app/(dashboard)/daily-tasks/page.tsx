@@ -1,19 +1,19 @@
 'use client';
 import * as React from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,9 +36,27 @@ export default function DailyTasksPage() {
         if (!firestore || !user?.id) return null;
         return query(collection(firestore, 'dailyTasks'), where('userId', '==', user.id), orderBy('dueDate', 'desc'));
     }, [firestore, user]);
-    
-    const { data: tasks, isLoading, forceRerender } = useCollection<DailyTask>(tasksQuery);
-    
+
+    const { data: tasks, isLoading, error, forceRerender } = useCollection<DailyTask>(tasksQuery);
+
+    const lastErrorRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        if (error && error.message !== lastErrorRef.current) {
+            console.error("DailyTasks Error:", error);
+            lastErrorRef.current = error.message;
+            if ((error as any).code !== 'permission-denied') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Database Error',
+                    description: error.message || 'An error occurred while fetching your tasks.',
+                });
+            }
+        } else if (!error) {
+            lastErrorRef.current = null;
+        }
+    }, [error, toast]);
+
     const sortedTasks = React.useMemo(() => {
         if (!tasks) return [];
         return [...tasks].sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
@@ -71,7 +89,7 @@ export default function DailyTasksPage() {
             toast({ variant: "destructive", title: "Submission Failed", description: "Could not save your task." });
         }
     };
-    
+
     const handleTaskStatusChange = (task: DailyTask, isCompleted: boolean) => {
         if (!firestore) return;
         const taskRef = doc(firestore, 'dailyTasks', task.id);
@@ -89,15 +107,15 @@ export default function DailyTasksPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <ListTodo className="h-6 w-6"/>
+                        <ListTodo className="h-6 w-6" />
                         Daily Tasks
                     </CardTitle>
                     <CardDescription>Manage your daily to-do list.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex gap-2">
-                        <Input 
-                            placeholder="Add a new task..." 
+                        <Input
+                            placeholder="Add a new task..."
                             value={newTask}
                             onChange={(e) => setNewTask(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
@@ -113,7 +131,7 @@ export default function DailyTasksPage() {
                                 <Loader2 className="h-8 w-8 animate-spin" />
                             </div>
                         ) : sortedTasks && sortedTasks.length > 0 ? (
-                             <Table>
+                            <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-12">Status</TableHead>
@@ -126,8 +144,8 @@ export default function DailyTasksPage() {
                                     {sortedTasks.map(task => (
                                         <TableRow key={task.id} className={task.status === 'Completed' ? 'bg-muted/50' : ''}>
                                             <TableCell>
-                                                <Checkbox 
-                                                    checked={task.status === 'Completed'} 
+                                                <Checkbox
+                                                    checked={task.status === 'Completed'}
                                                     onCheckedChange={(checked) => handleTaskStatusChange(task, !!checked)}
                                                     aria-label={`Mark task ${task.status === 'Completed' ? 'incomplete' : 'complete'}`}
                                                 />
@@ -146,7 +164,7 @@ export default function DailyTasksPage() {
                                 </TableBody>
                             </Table>
                         ) : (
-                             <div className="p-8 text-center text-muted-foreground">
+                            <div className="p-8 text-center text-muted-foreground">
                                 You have no tasks yet. Add one above to get started!
                             </div>
                         )}

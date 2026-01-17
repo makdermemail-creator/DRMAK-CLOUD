@@ -16,6 +16,7 @@ export type User = {
   role: UserRole;
   isAdmin?: boolean;
   isMainAdmin?: boolean;
+  featureAccess?: { [key: string]: boolean };
 };
 
 export type Doctor = {
@@ -63,16 +64,16 @@ export type Appointment = {
 };
 
 export type VisitRecord = {
-    id: string;
-    appointmentId: string;
-    appointmentDate: string; // ISO String
-    diagnosis: string;
-    prescribedMedicines?: string[];
-    proceduresTreatments?: string[];
-    doctorNotes?: string;
-    // Enriched fields
-    patient?: Patient;
-    doctor?: Doctor;
+  id: string;
+  appointmentId: string;
+  appointmentDate: string; // ISO String
+  diagnosis: string;
+  prescribedMedicines?: string[];
+  proceduresTreatments?: string[];
+  doctorNotes?: string;
+  // Enriched fields
+  patient?: Patient;
+  doctor?: Doctor;
 };
 
 export type FamilyHistory = {
@@ -86,26 +87,26 @@ export type FamilyHistory = {
 };
 
 export type MedicalHistory = {
-    id: string;
-    patientId: string;
-    text: string;
-    type: 'History' | 'Alert' | 'Suggestion';
-    createdAt: string; // ISO string
+  id: string;
+  patientId: string;
+  text: string;
+  type: 'History' | 'Alert' | 'Suggestion';
+  createdAt: string; // ISO string
 }
 
 export type HealthRecord = {
-    id: string;
-    patientId: string;
-    userId: string;
-    recordDate: string; // ISO string
-    complaint?: string;
-    diagnosis?: string;
-    clinicalNotes?: string;
-    advice?: string;
-    investigation?: string;
-    plan?: string;
-    procedures?: string[];
-    followUpDate?: string; // ISO string
+  id: string;
+  patientId: string;
+  userId: string;
+  recordDate: string; // ISO string
+  complaint?: string;
+  diagnosis?: string;
+  clinicalNotes?: string;
+  advice?: string;
+  investigation?: string;
+  plan?: string;
+  procedures?: string[];
+  followUpDate?: string; // ISO string
 };
 
 
@@ -139,109 +140,109 @@ export type Visit = {
 };
 
 export type BillingRecord = {
-    id: string;
-    patientMobileNumber: string;
-    consultationCharges: number;
-    procedureCharges: number;
-    medicineCharges: number;
-    paymentMethod: string;
-    billingDate: string; // ISO String
+  id: string;
+  patientMobileNumber: string;
+  consultationCharges: number;
+  procedureCharges: number;
+  medicineCharges: number;
+  paymentMethod: string;
+  billingDate: string; // ISO String
 }
 
 export type PharmacyRack = {
-    id: string;
-    name: string;
-    createdAt: { seconds: number, nanoseconds: number };
-    items: string[];
+  id: string;
+  name: string;
+  createdAt: { seconds: number, nanoseconds: number };
+  items: string[];
 }
 
 export type StockEntry = {
-    id: string;
-    supplier: string;
-    document: string;
-    sku: number;
-    createdAt: string;
-    supplierInvoiceDate: string;
-    supplierInvoice: string;
-    items: StockItem[];
+  id: string;
+  supplier: string;
+  document: string;
+  sku: number;
+  createdAt: string;
+  supplierInvoiceDate: string;
+  supplierInvoice: string;
+  items: StockItem[];
 }
 
 export type StockItem = {
-    sr: number;
-    itemName: string;
-    manufacturer: string;
-    category: string;
-    conversionUnit: number;
-    totalQty: number;
-    qtyInUnits: number;
-    unit: string;
-    unitCost: number;
-    unitCostWithTax: number;
-    discountedPrice: number;
-    netUnitCost: number;
-    totalCost: number;
+  sr: number;
+  itemName: string;
+  manufacturer: string;
+  category: string;
+  conversionUnit: number;
+  totalQty: number;
+  qtyInUnits: number;
+  unit: string;
+  unitCost: number;
+  unitCostWithTax: number;
+  discountedPrice: number;
+  netUnitCost: number;
+  totalCost: number;
 }
 
 export type Lead = {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    status: 'New' | 'Contacted' | 'Qualified' | 'Lost' | 'Converted';
-    source: string;
-    assignedTo: string;
-    createdAt: string;
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: 'New' | 'Contacted' | 'Qualified' | 'Lost' | 'Converted';
+  source: string;
+  assignedTo: string;
+  createdAt: string;
 };
 
 export type DailyReport = {
-    id: string;
-    userId: string;
-    reportDate: string; // ISO string
-    summary: string;
-    plans: string;
+  id: string;
+  userId: string;
+  reportDate: string; // ISO string
+  summary: string;
+  plans: string;
 }
 
 export type DailyTask = {
-    id: string;
-    userId: string;
-    task: string;
-    status: 'Pending' | 'Completed';
-    dueDate: string; // ISO string
+  id: string;
+  userId: string;
+  task: string;
+  status: 'Pending' | 'Completed';
+  dueDate: string; // ISO string
 };
 
 export type SocialReport = {
-    id: string;
-    userId: string;
-    reportDate: string; // ISO string
-    summary: string;
-    metrics: string;
-    plans: string;
+  id: string;
+  userId: string;
+  reportDate: string; // ISO string
+  summary: string;
+  metrics: string;
+  plans: string;
 };
 
 export type InvoiceItem = {
-    id: string;
-    procedure: string;
-    description: string;
-    rate: number;
-    quantity: number;
-    amount: number;
-    discount: number;
-    performedBy: string;
+  id: string;
+  procedure: string;
+  description: string;
+  rate: number;
+  quantity: number;
+  amount: number;
+  discount: number;
+  performedBy: string;
 };
 
 export type Invoice = {
-    id: string;
-    patientId: string;
-    patientMobileNumber: string;
-    invoiceDate: string; // ISO string
-    items: InvoiceItem[];
-    subTotal: number;
-    totalDiscount: number;
-    grandTotal: number;
-    amountPaid: number;
-    amountDue: number;
-    status: 'Paid' | 'Pending' | 'Cancelled';
-    notes?: string;
+  id: string;
+  patientId: string;
+  patientMobileNumber: string;
+  invoiceDate: string; // ISO string
+  items: InvoiceItem[];
+  subTotal: number;
+  totalDiscount: number;
+  grandTotal: number;
+  amountPaid: number;
+  amountDue: number;
+  status: 'Paid' | 'Pending' | 'Cancelled';
+  notes?: string;
 };
 
 export type Communication = {
@@ -270,4 +271,3 @@ export type FeatureAccess = {
   features: { [key: string]: boolean };
 };
 
-    

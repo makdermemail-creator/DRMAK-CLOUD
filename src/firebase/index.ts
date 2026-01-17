@@ -40,6 +40,16 @@ export function getSdks(firebaseApp: FirebaseApp) {
   };
 }
 
+/**
+ * Creates a secondary Auth instance to allow creating new users
+ * without signing out the current admin.
+ */
+export function getSecondaryAuth() {
+  const secondaryAppName = 'secondary-' + Math.random().toString(36).substring(7);
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  return getAuth(secondaryApp);
+}
+
 export * from './provider';
 export * from './client-provider';
 export * from './firestore/use-collection';

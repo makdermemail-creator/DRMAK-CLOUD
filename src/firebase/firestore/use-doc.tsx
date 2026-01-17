@@ -1,6 +1,6 @@
 'use client';
-    
-import { useState, useEffect } from 'react';
+
+import { useState, useEffect, useMemo } from 'react';
 import {
   DocumentReference,
   onSnapshot,
@@ -44,7 +44,7 @@ export function useDoc<T = any>(
   type StateDataType = WithId<T> | null;
 
   const [data, setData] = useState<StateDataType>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(!!memoizedDocRef);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
@@ -72,22 +72,29 @@ export function useDoc<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
-        const contextualError = new FirestorePermissionError({
-          operation: 'get',
-          path: memoizedDocRef.path,
-        })
+        if (error.code === 'permission-denied') {
+          const contextualError = new FirestorePermissionError({
+            operation: 'get',
+            path: memoizedDocRef.path,
+          })
 
-        setError(contextualError)
+          setError(contextualError)
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
+        } else {
+          setError(error);
+          console.error(`Firestore ${error.code}: ${error.message}`);
+        }
+
         setData(null)
         setIsLoading(false)
-
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
       }
     );
 
     return () => unsubscribe();
   }, [memoizedDocRef]); // Re-run if the memoizedDocRef changes.
 
-  return { data, isLoading, error };
+  const isActuallyLoading = isLoading || (!!memoizedDocRef && data === null && error === null);
+
+  return useMemo(() => ({ data, isLoading: isActuallyLoading, error }), [data, isActuallyLoading, error]);
 }

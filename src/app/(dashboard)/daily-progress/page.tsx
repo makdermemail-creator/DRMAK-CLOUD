@@ -1,22 +1,23 @@
 'use client';
 import * as React from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, TrendingUp, CheckCircle2, ListTodo, FileText } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import type { DailyTask, DailyReport } from '@/lib/types';
 import { collection, query, where, orderBy } from 'firebase/firestore';
@@ -25,6 +26,7 @@ import { format, isToday } from 'date-fns';
 export default function DailyProgressPage() {
     const firestore = useFirestore();
     const { user, isUserLoading } = useUser();
+    const { toast } = useToast();
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
@@ -35,11 +37,31 @@ export default function DailyProgressPage() {
         if (!firestore || !user?.id) return null;
         return query(collection(firestore, 'dailyReports'), where('userId', '==', user.id), orderBy('reportDate', 'desc'));
     }, [firestore, user]);
-    
-    const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
-    const { data: latestReport, isLoading: reportsLoading } = useCollection<DailyReport>(reportsQuery);
+
+    const { data: tasks, isLoading: tasksLoading, error: tasksError } = useCollection<DailyTask>(tasksQuery);
+    const { data: latestReport, isLoading: reportsLoading, error: reportsError } = useCollection<DailyReport>(reportsQuery);
 
     const isLoading = isUserLoading || tasksLoading || reportsLoading;
+
+    const lastErrorRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        const error = tasksError || reportsError;
+        if (error && error.message !== lastErrorRef.current) {
+            console.error("DailyProgress Error:", error);
+            lastErrorRef.current = error.message;
+            // Don't show toast for permission errors as they might be handled globally
+            if ((error as any).code !== 'permission-denied') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Database Error',
+                    description: error.message || 'An error occurred while fetching your data.',
+                });
+            }
+        } else if (!error) {
+            lastErrorRef.current = null;
+        }
+    }, [tasksError, reportsError, toast]);
 
     const dailyStats = React.useMemo(() => {
         if (!tasks) return { completed: 0, pending: 0, total: 0, progress: 0 };
@@ -54,17 +76,17 @@ export default function DailyProgressPage() {
             progress,
         };
     }, [tasks]);
-    
+
     const sortedTasks = React.useMemo(() => {
         if (!tasks) return [];
         return tasks
             .filter(task => isToday(new Date(task.dueDate)))
             .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
     }, [tasks]);
-    
+
     const sortedLatestReport = React.useMemo(() => {
-        if(!latestReport) return [];
-        return latestReport.sort((a,b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
+        if (!latestReport) return [];
+        return latestReport.sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
     }, [latestReport]);
 
     if (isLoading) {
@@ -80,7 +102,7 @@ export default function DailyProgressPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6"/>
+                        <TrendingUp className="h-6 w-6" />
                         Your Daily Progress
                     </CardTitle>
                     <CardDescription>An overview of your tasks and reports for today, {format(new Date(), 'MMMM dd, yyyy')}.</CardDescription>
@@ -101,7 +123,7 @@ export default function DailyProgressPage() {
                 <Card className="lg:col-span-2">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Task Completion Progress</CardTitle>
-                         <ListTodo className="h-4 w-4 text-muted-foreground" />
+                        <ListTodo className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{dailyStats.progress.toFixed(0)}%</div>
@@ -126,7 +148,7 @@ export default function DailyProgressPage() {
                                     <h4 className="font-semibold mb-2">Summary</h4>
                                     <p className="text-sm p-3 bg-muted rounded-md">{sortedLatestReport[0].summary}</p>
                                 </div>
-                                 <div>
+                                <div>
                                     <h4 className="font-semibold mb-2">Plans for Next Day</h4>
                                     <p className="text-sm p-3 bg-muted rounded-md">{sortedLatestReport[0].plans}</p>
                                 </div>
@@ -138,7 +160,7 @@ export default function DailyProgressPage() {
                 </CardContent>
             </Card>
 
-             <Card>
+            <Card>
                 <CardHeader>
                     <CardTitle>Today's Task List</CardTitle>
                 </CardHeader>
@@ -169,7 +191,7 @@ export default function DailyProgressPage() {
                         </TableBody>
                     </Table>
                 </CardContent>
-             </Card>
+            </Card>
         </div>
     );
 }

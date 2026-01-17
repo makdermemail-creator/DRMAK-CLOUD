@@ -167,14 +167,29 @@ const NavContent = () => {
             return allMenuItems;
         }
 
+        // 1. Check for per-user Feature Access Overrides
+        if (userProfile?.featureAccess) {
+            return allMenuItems.filter(item => {
+                // Check direct feature match
+                if (userProfile.featureAccess?.[item.id]) return true;
+
+                // For menus, check if any sub-item is allowed (or if the menu itself is enabled)
+                if (item.subItems) {
+                    return item.subItems.some(sub => userProfile.featureAccess?.[sub.id]);
+                }
+
+                return false;
+            });
+        }
+
+        // 2. Fallback to Role-based defaults (Existing Logic)
         if (userProfile?.role === 'Admin') {
             // Regular Admins see everything EXCEPT User Management and Feature Control
             return allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl');
         }
 
         if (userProfile) {
-            // For any non-admin user, show a default minimal set of items.
-            // This can be expanded later with feature flag logic.
+            // For any other user without specific feature access, show a default minimal set.
             const defaultAccess = ['dashboard', 'appointments', 'patients'];
             return allMenuItems.filter(item => defaultAccess.includes(item.id));
         }
