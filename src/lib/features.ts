@@ -24,6 +24,7 @@ export const availableFeatures = [
     // Sales Specific
     { id: 'leads', label: 'Leads Management (Sales)', href: '/leads' },
     { id: 'dailyReporting', label: 'Daily Reporting (Sales)', href: '/daily-reporting' },
+    { id: 'dailyPosting', label: 'Daily Posting (Sales)', href: '/daily-posting' },
     { id: 'dailyTasks', label: 'Daily Tasks (Sales)', href: '/daily-tasks' },
     { id: 'dailyProgress', label: 'Daily Progress (Sales)', href: '/daily-progress' },
 
