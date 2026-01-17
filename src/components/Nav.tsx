@@ -32,6 +32,7 @@ import {
     TrendingUp,
     HeartPulse,
     Share2,
+    Video,
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import {
@@ -105,6 +106,7 @@ const allMenuItems = [
     // Sales Specific
     { id: 'leads', href: '/leads', label: 'Leads', icon: FileBarChart },
     { id: 'dailyReporting', href: '/daily-reporting', label: 'Daily Reporting', icon: FileText },
+    { id: 'dailyPosting', href: '/daily-posting', label: 'Daily Posting', icon: Video },
     { id: 'dailyTasks', href: '/daily-tasks', label: 'Daily Tasks', icon: ListTodo },
     { id: 'dailyProgress', href: '/daily-progress', label: 'Daily Progress', icon: TrendingUp },
 

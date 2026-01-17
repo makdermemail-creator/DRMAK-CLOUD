@@ -94,7 +94,5 @@ export function useDoc<T = any>(
     return () => unsubscribe();
   }, [memoizedDocRef]); // Re-run if the memoizedDocRef changes.
 
-  const isActuallyLoading = isLoading || (!!memoizedDocRef && data === null && error === null);
-
-  return useMemo(() => ({ data, isLoading: isActuallyLoading, error }), [data, isActuallyLoading, error]);
+  return useMemo(() => ({ data, isLoading, error }), [data, isLoading, error]);
 }

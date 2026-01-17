@@ -188,7 +188,7 @@ export type Lead = {
   name: string;
   email: string;
   phone: string;
-  status: 'New' | 'Contacted' | 'Qualified' | 'Lost' | 'Converted';
+  status: 'New Lead' | 'In Progress' | 'Dead' | 'Converted' | 'Previous';
   source: string;
   assignedTo: string;
   createdAt: string;
@@ -208,6 +208,16 @@ export type DailyTask = {
   task: string;
   status: 'Pending' | 'Completed';
   dueDate: string; // ISO string
+};
+
+export type DailyPosting = {
+  id: string;
+  userId: string;
+  platform: 'Instagram' | 'Facebook' | 'WhatsApp' | 'TikTok' | 'Other';
+  activityType: 'Post' | 'Story' | 'Reel' | 'Video';
+  description: string;
+  link?: string;
+  postedAt: string; // ISO string
 };
 
 export type SocialReport = {

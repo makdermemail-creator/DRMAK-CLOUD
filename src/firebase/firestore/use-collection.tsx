@@ -122,12 +122,10 @@ export function useCollection<T = any>(
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }
 
-  const isActuallyLoading = isLoading || (!!memoizedTargetRefOrQuery && data === null && error === null);
-
   return useMemo(() => ({
     data,
-    isLoading: isActuallyLoading,
+    isLoading,
     error,
     forceRerender
-  }), [data, isActuallyLoading, error, forceRerender]);
+  }), [data, isLoading, error, forceRerender]);
 }

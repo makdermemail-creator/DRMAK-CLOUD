@@ -18,12 +18,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, FileText, Send } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, FileText, Send, PieChart, Activity, UserPlus, Video } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
-import type { DailyReport } from '@/lib/types';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import type { DailyReport, DailyPosting, Lead } from '@/lib/types';
+import { collection, query, where, orderBy, startOfDay, endOfDay } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 
 export default function DailyReportingPage() {
     const firestore = useFirestore();
@@ -34,12 +35,39 @@ export default function DailyReportingPage() {
     const [plans, setPlans] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+    // Fetch past reports
     const reportsQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
         return query(collection(firestore, 'dailyReports'), where('userId', '==', user.id), orderBy('reportDate', 'desc'));
     }, [firestore, user]);
 
-    const { data: reports, isLoading, error, forceRerender } = useCollection<DailyReport>(reportsQuery);
+    const { data: reports, isLoading: reportsLoading, error, forceRerender } = useCollection<DailyReport>(reportsQuery);
+
+    // Fetch Today's Postings for summary glance
+    const todayPostingsQuery = useMemoFirebase(() => {
+        if (!firestore || !user?.id) return null;
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return query(
+            collection(firestore, 'dailyPostings'),
+            where('userId', '==', user.id),
+            where('postedAt', '>=', start.toISOString())
+        );
+    }, [firestore, user]);
+    const { data: todayPostings } = useCollection<DailyPosting>(todayPostingsQuery);
+
+    // Fetch Today's Lead Activity
+    const todayLeadsQuery = useMemoFirebase(() => {
+        if (!firestore || !user?.id) return null;
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return query(
+            collection(firestore, 'leads'),
+            where('assignedTo', '==', user.id),
+            where('createdAt', '>=', start.toISOString())
+        );
+    }, [firestore, user]);
+    const { data: todayLeads } = useCollection<Lead>(todayLeadsQuery);
 
     const lastErrorRef = React.useRef<string | null>(null);
 
@@ -93,29 +121,81 @@ export default function DailyReportingPage() {
 
     return (
         <div className="space-y-6">
+            {/* Today's Activity Glance */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-blue-50 dark:bg-blue-900/20">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <UserPlus className="h-4 w-4 text-blue-600" />
+                            New Leads Today
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{todayLeads?.length || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Leads assigned to you</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-purple-50 dark:bg-purple-900/20">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <Video className="h-4 w-4 text-purple-600" />
+                            Social Postings
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{todayPostings?.length || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Updates logged today</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-green-50 dark:bg-green-900/20">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-green-600" />
+                            Efficiency
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">100%</div>
+                        <p className="text-xs text-muted-foreground mt-1">Report pending submission</p>
+                    </CardContent>
+                </Card>
+            </div>
+
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <FileText className="h-6 w-6" />
-                        Submit Daily Report
+                        Day End Report
                     </CardTitle>
-                    <CardDescription>Submit your end-of-day report.</CardDescription>
+                    <CardDescription>Consolidate your daily activities and set objectives for tomorrow.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="summary">Today's Summary</Label>
-                            <Textarea id="summary" placeholder="Summarize your key activities and achievements today..." value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} />
+                            <Textarea
+                                id="summary"
+                                placeholder="Key achievements? Major lead conversions? Successful postings?"
+                                value={summary}
+                                onChange={(e) => setSummary(e.target.value)}
+                                rows={6}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="plans">Plans for Tomorrow</Label>
-                            <Textarea id="plans" placeholder="Outline your main objectives and plans for tomorrow..." value={plans} onChange={(e) => setPlans(e.target.value)} rows={5} />
+                            <Textarea
+                                id="plans"
+                                placeholder="Major targets? Follow-up calls? Content creation plans?"
+                                value={plans}
+                                onChange={(e) => setPlans(e.target.value)}
+                                rows={6}
+                            />
                         </div>
                     </div>
                     <div className="flex justify-end">
                         <Button onClick={handleReportSubmit} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                            Submit Report
+                            Submit End Day Report
                         </Button>
                     </div>
                 </CardContent>
@@ -123,11 +203,11 @@ export default function DailyReportingPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>My Past Reports</CardTitle>
-                    <CardDescription>A history of your submitted daily reports.</CardDescription>
+                    <CardTitle>Reporting History</CardTitle>
+                    <CardDescription>A track record of your past performance.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
+                    {reportsLoading ? (
                         <div className="flex justify-center items-center h-48">
                             <Loader2 className="h-8 w-8 animate-spin" />
                         </div>
@@ -137,21 +217,21 @@ export default function DailyReportingPage() {
                                 <TableRow>
                                     <TableHead>Date</TableHead>
                                     <TableHead>Summary</TableHead>
-                                    <TableHead>Plans for Next Day</TableHead>
+                                    <TableHead>Plans</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {reports?.map(report => (
                                     <TableRow key={report.id}>
                                         <TableCell className="font-medium whitespace-nowrap">{format(new Date(report.reportDate), 'MMM dd, yyyy')}</TableCell>
-                                        <TableCell><p className="line-clamp-3">{report.summary}</p></TableCell>
-                                        <TableCell><p className="line-clamp-3">{report.plans}</p></TableCell>
+                                        <TableCell><p className="line-clamp-2 text-sm">{report.summary}</p></TableCell>
+                                        <TableCell><p className="line-clamp-2 text-sm">{report.plans}</p></TableCell>
                                     </TableRow>
                                 ))}
                                 {reports?.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="text-center h-24">
-                                            You have not submitted any reports yet.
+                                        <TableCell colSpan={3} className="text-center h-24 text-muted-foreground">
+                                            No reports found.
                                         </TableCell>
                                     </TableRow>
                                 )}
