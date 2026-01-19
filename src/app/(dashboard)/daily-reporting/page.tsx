@@ -19,12 +19,12 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileText, Send, PieChart, Activity, UserPlus, Video } from 'lucide-react';
+import { Loader2, FileText, Send, PieChart, Activity, UserPlus, Video, PlusCircle } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
 import type { DailyReport, DailyPosting, Lead } from '@/lib/types';
-import { collection, query, where, orderBy, startOfDay, endOfDay } from 'firebase/firestore';
+import { collection, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { format, isToday } from 'date-fns';
+import { format } from 'date-fns';
 
 export default function DailyReportingPage() {
     const firestore = useFirestore();
@@ -33,6 +33,8 @@ export default function DailyReportingPage() {
 
     const [summary, setSummary] = React.useState('');
     const [plans, setPlans] = React.useState('');
+    const [completingTasks, setCompletingTasks] = React.useState('');
+    const [showTasks, setShowTasks] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     // Fetch past reports
@@ -86,7 +88,6 @@ export default function DailyReportingPage() {
             lastErrorRef.current = null;
         }
     }, [error, toast]);
-
     const handleReportSubmit = async () => {
         if (!firestore || !user) {
             toast({ variant: "destructive", title: "Error", description: "Authentication error." });
@@ -103,6 +104,7 @@ export default function DailyReportingPage() {
             reportDate: new Date().toISOString(),
             summary,
             plans,
+            completingTasks: showTasks ? completingTasks : '',
         };
 
         try {
@@ -110,6 +112,8 @@ export default function DailyReportingPage() {
             toast({ title: "Report Submitted", description: "Your daily report has been saved." });
             setSummary('');
             setPlans('');
+            setCompletingTasks('');
+            setShowTasks(false);
             forceRerender();
         } catch (error) {
             console.error("Failed to submit report:", error);
@@ -192,6 +196,25 @@ export default function DailyReportingPage() {
                             />
                         </div>
                     </div>
+
+                    {!showTasks ? (
+                        <Button variant="outline" className="w-full" onClick={() => setShowTasks(true)}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Write your today's completing tasks
+                        </Button>
+                    ) : (
+                        <div className="space-y-2">
+                            <Label htmlFor="tasks">Today's Completing Tasks</Label>
+                            <Textarea
+                                id="tasks"
+                                placeholder="What tasks did you complete today?"
+                                value={completingTasks}
+                                onChange={(e) => setCompletingTasks(e.target.value)}
+                                rows={4}
+                            />
+                        </div>
+                    )}
+
                     <div className="flex justify-end">
                         <Button onClick={handleReportSubmit} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

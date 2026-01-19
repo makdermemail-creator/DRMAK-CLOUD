@@ -192,6 +192,8 @@ export type Lead = {
   source: string;
   assignedTo: string;
   createdAt: string;
+  product?: string; // What the client wants
+  isOnlineOnly?: boolean; // Flag for Google Sheet leads
 };
 
 export type DailyReport = {
@@ -200,6 +202,7 @@ export type DailyReport = {
   reportDate: string; // ISO string
   summary: string;
   plans: string;
+  completingTasks?: string;
 }
 
 export type DailyTask = {

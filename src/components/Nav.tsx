@@ -102,8 +102,10 @@ const allMenuItems = [
     // Admin Specific
     { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog }, // Corrected ID from features page
     { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
+    { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: FileBarChart },
 
     // Sales Specific
+    { id: 'salesDashboard', href: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'leads', href: '/leads', label: 'Leads', icon: FileBarChart },
     { id: 'dailyReporting', href: '/daily-reporting', label: 'Daily Reporting', icon: FileText },
     { id: 'dailyPosting', href: '/daily-posting', label: 'Daily Posting', icon: Video },

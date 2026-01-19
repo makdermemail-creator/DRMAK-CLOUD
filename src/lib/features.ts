@@ -22,6 +22,7 @@ export const availableFeatures = [
     { id: 'ePrescription', label: 'E-Prescription (Doctor)', href: '/e-prescription' },
 
     // Sales Specific
+    { id: 'salesDashboard', label: 'Sales Dashboard', href: '/sales-dashboard' },
     { id: 'leads', label: 'Leads Management (Sales)', href: '/leads' },
     { id: 'dailyReporting', label: 'Daily Reporting (Sales)', href: '/daily-reporting' },
     { id: 'dailyPosting', label: 'Daily Posting (Sales)', href: '/daily-posting' },
@@ -33,4 +34,7 @@ export const availableFeatures = [
     { id: 'contentPlanner', label: 'Content Planner', href: '/content-planner' },
     { id: 'analytics', label: 'Social Analytics', href: '/analytics' },
     { id: 'socialInbox', label: 'Social Inbox', href: '/social-inbox' },
+
+    // Admin Specific Overrides/New
+    { id: 'employeeReports', label: 'Employee Reports (Admin)', href: '/employee-reports' },
 ];

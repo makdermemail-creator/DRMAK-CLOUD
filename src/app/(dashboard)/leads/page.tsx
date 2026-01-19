@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, PlusCircle, Loader2, Upload, Trash2, Filter } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Upload, Trash2, Filter, FileText, Settings, Eye } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   DropdownMenu,
@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Lead, User } from '@/lib/types';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -37,122 +37,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useSearch } from '@/context/SearchProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/firebase/auth/use-user';
+import { LeadFormDialog } from '@/components/leads/LeadFormDialog';
 
-const LeadFormDialog = ({ open, onOpenChange, lead, users }: { open: boolean, onOpenChange: (open: boolean) => void, lead?: Lead, users: User[] }) => {
-  const firestore = useFirestore();
-  const { toast } = useToast();
-  const [formData, setFormData] = React.useState<Partial<Lead>>({});
 
-  React.useEffect(() => {
-    if (open) {
-      if (lead) {
-        setFormData(lead);
-      } else {
-        setFormData({ status: 'New', source: 'Manual Entry' });
-      }
-    }
-  }, [lead, open]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = e.target;
-    setFormData(prev => ({ ...prev, [id]: value }));
-  };
-
-  const handleSelectChange = (field: keyof Lead, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = () => {
-    if (!firestore) return;
-
-    if (!formData.name || !formData.status) {
-      toast({ variant: 'destructive', title: 'Missing Fields', description: 'Name and Status are required.' });
-      return;
-    }
-
-    const collectionRef = collection(firestore, 'leads');
-
-    if (lead?.id) {
-      const docRef = doc(collectionRef, lead.id);
-      updateDocumentNonBlocking(docRef, formData);
-      toast({ title: "Lead Updated", description: "The lead's details have been updated." });
-    } else {
-      addDocumentNonBlocking(collectionRef, {
-        ...formData,
-        createdAt: new Date().toISOString(),
-      });
-      toast({ title: "Lead Added", description: "The new lead has been added." });
-    }
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{lead ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
-          <DialogDescription>
-            {lead ? "Update the lead's details below." : "Fill in the details for the new lead."}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">Name</Label>
-            <Input id="name" value={formData.name || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="email" className="text-right">Email</Label>
-            <Input id="email" type="email" value={formData.email || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="phone" className="text-right">Phone</Label>
-            <Input id="phone" value={formData.phone || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="status" className="text-right">Status</Label>
-            <Select onValueChange={(value) => handleSelectChange('status', value)} value={formData.status}>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="New Lead">New Lead</SelectItem>
-                <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="Dead">Dead</SelectItem>
-                <SelectItem value="Previous">Previous</SelectItem>
-                <SelectItem value="Converted">Converted</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="source" className="text-right">Source</Label>
-            <Input id="source" value={formData.source || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="assignedTo" className="text-right">Assigned To</Label>
-            <Select onValueChange={(value) => handleSelectChange('assignedTo', value)} value={formData.assignedTo}>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Assign to user" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.filter(u => u.role === 'Sales').map(user => (
-                  <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={handleSubmit}>{lead ? 'Save Changes' : 'Add Lead'}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-const ImportLeadsDialog = ({ open, onOpenChange, onLeadsImported }: { open: boolean, onOpenChange: (open: boolean) => void, onLeadsImported: () => void }) => {
+const ImportLeadsDialog = ({ open, onOpenChange, onLeadsImported, sheetUrl }: { open: boolean, onOpenChange: (open: boolean) => void, onLeadsImported: () => void, sheetUrl?: string }) => {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [file, setFile] = React.useState<File | null>(null);
+  const [isImporting, setIsImporting] = React.useState(false);
   const { user } = useUser();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,65 +54,214 @@ const ImportLeadsDialog = ({ open, onOpenChange, onLeadsImported }: { open: bool
     }
   };
 
-  const handleImport = () => {
-    if (!file || !firestore || !user) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Please select a file to import.' });
-      return;
-    }
+  const processLeads = async (text: string, sourcePrefix: string) => {
+    if (!firestore || !user) return;
+    const rows = text.split('\n').slice(1); // Skip header
+    const leadsCollection = collection(firestore, 'leads');
+    let count = 0;
 
+    for (const row of rows) {
+      const [name, email, phone] = row.split(',');
+      if (name && name.trim()) {
+        const newLead: Omit<Lead, 'id'> = {
+          name: name.trim(),
+          email: email?.trim() || '',
+          phone: phone?.trim() || '',
+          status: 'New Lead',
+          source: sourcePrefix,
+          assignedTo: user.id,
+          createdAt: new Date().toISOString(),
+        };
+        await addDocumentNonBlocking(leadsCollection, newLead);
+        count++;
+      }
+    }
+    toast({ title: 'Import Successful', description: `${count} leads have been imported.` });
+    onLeadsImported();
+  };
+
+  const handleImportFromFile = () => {
+    if (!file) return;
+    setIsImporting(true);
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result;
-      if (typeof text !== 'string') return;
-
-      // Basic CSV parsing
-      const rows = text.split('\n').slice(1); // Skip header
-      const leadsCollection = collection(firestore, 'leads');
-
-      for (const row of rows) {
-        const [name, email, phone] = row.split(',');
-        if (name) {
-          const newLead: Omit<Lead, 'id'> = {
-            name: name.trim(),
-            email: email?.trim() || '',
-            phone: phone?.trim() || '',
-            status: 'New',
-            source: `CSV: ${file.name}`,
-            assignedTo: user.id, // Assign to current user
-            createdAt: new Date().toISOString(),
-          };
-          await addDocumentNonBlocking(leadsCollection, newLead);
-        }
+      if (typeof text === 'string') {
+        await processLeads(text, `CSV: ${file.name}`);
       }
-      toast({ title: 'Import Successful', description: `${rows.length} leads have been imported.` });
-      onLeadsImported();
+      setIsImporting(false);
       onOpenChange(false);
     };
     reader.readAsText(file);
+  };
+
+  const handleImportFromLink = async () => {
+    if (!sheetUrl) return;
+    setIsImporting(true);
+    try {
+      // Construct export URL for Google Sheet (CSV format)
+      const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
+      if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
+      const sheetId = sheetIdMatch[1];
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+
+      const response = await fetch(exportUrl);
+      if (!response.ok) throw new Error("Failed to fetch sheet data");
+      const text = await response.text();
+      await processLeads(text, "Google Sheet Link");
+      setIsImporting(false);
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Import error:", error);
+      toast({ variant: 'destructive', title: 'Import Failed', description: "Make sure the sheet is public/readable." });
+      setIsImporting(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import Leads from CSV</DialogTitle>
+          <DialogTitle>Import Leads</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with columns: Name, Email, Phone. The first row should be headers.
+            Import leads from a local CSV file or directly from your configured Google Sheet.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label>Local CSV File</Label>
+            <div className="flex gap-2">
+              <Input type="file" accept=".csv" onChange={handleFileChange} className="flex-1" />
+              <Button onClick={handleImportFromFile} disabled={!file || isImporting}>
+                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Upload'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">Or</span></div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>From Google Sheet Link</Label>
+            <Button variant="outline" className="w-full gap-2" onClick={handleImportFromLink} disabled={!sheetUrl || isImporting}>
+              <Upload className="h-4 w-4" />
+              Sync from Online Sheet
+            </Button>
+            {!sheetUrl && <p className="text-xs text-red-500">Please configure your sheet link first.</p>}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+const ConfigureSheetDialog = ({ open, onOpenChange, currentUrl, onSave }: { open: boolean, onOpenChange: (open: boolean) => void, currentUrl: string, onSave: (url: string) => void }) => {
+  const [url, setUrl] = React.useState(currentUrl);
+
+  React.useEffect(() => {
+    setUrl(currentUrl);
+  }, [currentUrl, open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Configure Google Sheet</DialogTitle>
+          <DialogDescription>
+            Enter the URL of your Google Sheet. Make sure the sheet is shared so the system can access it (export to CSV).
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <Input type="file" accept=".csv" onChange={handleFileChange} />
+          <Label htmlFor="sheetUrl">Google Sheet URL</Label>
+          <Input id="sheetUrl" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
         </div>
         <DialogFooter>
-          <Button onClick={handleImport} disabled={!file}>Import</Button>
+          <Button onClick={() => onSave(url)}>Save Configuration</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
+const LiveSheetPreview = ({ sheetUrl }: { sheetUrl: string }) => {
+  const [data, setData] = React.useState<string[][]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const { toast } = useToast();
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      if (!sheetUrl) return;
+      setLoading(true);
+      try {
+        const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
+        if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
+        const sheetId = sheetIdMatch[1];
+        const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+
+        const response = await fetch(exportUrl);
+        if (!response.ok) throw new Error("Failed to fetch sheet data");
+        const text = await response.text();
+
+        const rows = text.split('\n').map(row => {
+          const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^",]*))/g;
+          const cells = [];
+          let match;
+          while ((match = regex.exec(row)) !== null) {
+            cells.push(match[1] ? match[1].replace(/""/g, '"') : match[2]);
+          }
+          return cells.map(cell => cell?.trim() || '');
+        });
+
+        setData(rows.filter(r => r.some(cell => cell !== '')));
+      } catch (error) {
+        console.error("Preview error:", error);
+        toast({ variant: 'destructive', title: 'Preview Failed', description: "Ensure the sheet is public/readable." });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [sheetUrl, toast]);
+
+  if (loading) return (
+    <div className="flex justify-center items-center h-48">
+      <Loader2 className="h-8 w-8 animate-spin" />
+    </div>
+  );
+
+  if (data.length === 0) return <div className="p-8 text-center text-muted-foreground">No data found in the configured sheet.</div>;
+
+  const headers = data[0];
+  const body = data.slice(1);
+
+  return (
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {headers.map((h, i) => (
+              <TableHead key={i} className="whitespace-nowrap font-bold text-primary">{h}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {body.map((row, rowIndex) => (
+            <TableRow key={rowIndex}>
+              {row.map((cell, cellIndex) => (
+                <TableCell key={cellIndex} className="whitespace-nowrap">{cell}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
 
 
 export default function LeadsPage() {
+  const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const { searchTerm } = useSearch();
@@ -232,18 +274,189 @@ export default function LeadsPage() {
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [isImportOpen, setIsImportOpen] = React.useState(false);
+  const [isConfigOpen, setIsConfigOpen] = React.useState(false);
   const [selectedLead, setSelectedLead] = React.useState<Lead | undefined>(undefined);
+  const [sheetUrl, setSheetUrl] = React.useState<string>('https://docs.google.com/spreadsheets/d/1Xz8F2v5i_5V6mG0X_8m6Xv1X_X_X_X_X/edit');
+
+  const [statusFilter, setStatusFilter] = React.useState<string>('all');
+  const [onlineLeads, setOnlineLeads] = React.useState<Lead[]>([]);
+  const [isSheetLoading, setIsSheetLoading] = React.useState(false);
+
+  // Fetch settings
+  React.useEffect(() => {
+    if (!firestore) return;
+    const fetchSettings = async () => {
+      const settingsRef = doc(firestore, 'settings', 'sales');
+      const snap = await getDoc(settingsRef);
+      if (snap.exists() && snap.data().googleSheetUrl) {
+        setSheetUrl(snap.data().googleSheetUrl);
+      }
+    };
+    fetchSettings();
+  }, [firestore]);
+
+  // Fetch Sheet Data
+  React.useEffect(() => {
+    const fetchSheetLeads = async () => {
+      if (!sheetUrl || statusFilter === 'online') return;
+      setIsSheetLoading(true);
+      try {
+        const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
+        if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
+        const sheetId = sheetIdMatch[1];
+        const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+
+        const response = await fetch(exportUrl);
+        if (!response.ok) throw new Error("Failed to fetch sheet data");
+        const text = await response.text();
+
+        const rows = text.split('\n').filter(line => line.trim()).map(row => {
+          const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^",]*))/g;
+          const cells = [];
+          let match;
+          while ((match = regex.exec(row)) !== null) {
+            cells.push(match[1] ? match[1].replace(/""/g, '"') : match[2]);
+          }
+          return cells.map(cell => cell?.trim() || '');
+        });
+
+        if (rows.length < 2) {
+          setOnlineLeads([]);
+          return;
+        }
+
+        const headers = rows[0].map(h => h.toLowerCase().trim());
+
+        // Helper to score columns based on content
+        const scoreColumn = (rows: string[][], checkFn: (cell: string) => boolean): number => {
+          const sampleRows = rows.slice(0, 10); // Check first 10 rows
+          let bestCol = -1;
+          let maxScore = 0;
+
+          if (sampleRows.length === 0) return -1;
+
+          const numCols = sampleRows[0].length;
+          for (let col = 0; col < numCols; col++) {
+            let score = 0;
+            let validCount = 0;
+            for (const row of sampleRows) {
+              if (row[col] && checkFn(row[col])) {
+                score++;
+              }
+              if (row[col]) validCount++;
+            }
+            // Require at least a few matches to consider it valid
+            if (score > maxScore && score >= 1) {
+              maxScore = score;
+              bestCol = col;
+            }
+          }
+          return bestCol;
+        };
+
+        const isEmail = (text: string) => /\S+@\S+\.\S+/.test(text);
+
+        const isPhone = (text: string) => {
+          const cleaned = text.replace(/\D/g, ''); // Remove non-digits
+          // Look for at least 7 digits, or starts with 'p:'
+          return (cleaned.length > 6) || text.trim().toLowerCase().startsWith('p:');
+        };
+
+        const isProduct = (text: string) => {
+          const lower = text.toLowerCase();
+          return lower.startsWith('c:') || lower.startsWith('f:') || lower.includes('exosome') || lower.includes('hair') || lower.includes('skin') || lower.includes('lead');
+        };
+
+        // Content-based Detection
+        const emailIdx = scoreColumn(rows.slice(1), isEmail);
+        const contactIdx = scoreColumn(rows.slice(1), isPhone);
+
+        // For Product, if header exists, use it, otherwise try to guess.
+        // Priority: Header with 'form_name'/'product' -> Content guess -> Header with 'campaign'
+        let productIdx = headers.findIndex(h => h.includes('form_name') || h.includes('form_id') || h.includes('product') || h.includes('service'));
+        if (productIdx === -1) {
+          // Try content based if no clear header
+          productIdx = scoreColumn(rows.slice(1), isProduct);
+        }
+        // Fallback to campaign header
+        if (productIdx === -1) {
+          productIdx = headers.findIndex(h => h.includes('campaign') || h.includes('ad set'));
+        }
+
+        // For Name: complicated because "phone_number" header had names.
+        // Strategy: Exclude detected Email, Phone, Product columns.
+        // Then prefer header "name", then "phone_number" (if it has no digits), then valid string column.
+        let nameIdx = headers.findIndex(h => (h.includes('name') || h.includes('full name')) && !h.includes('campaign') && !h.includes('ad'));
+
+        // If the 'name' header points to a column that is actually email or phone, ignore it.
+        if (nameIdx === emailIdx || nameIdx === contactIdx) nameIdx = -1;
+
+        // If we can't find a clean 'Name' header, look for the "phone_number" header IF it's not the actual phone column
+        if (nameIdx === -1) {
+          const ambiguousHeaderIdx = headers.findIndex(h => h.includes('phone') || h.includes('number'));
+          if (ambiguousHeaderIdx !== -1 && ambiguousHeaderIdx !== contactIdx && ambiguousHeaderIdx !== emailIdx) {
+            nameIdx = ambiguousHeaderIdx;
+          }
+        }
+
+        // Final Fallback for Name: First text column that isn't others
+        if (nameIdx === -1) {
+          // Find a column that has text but isn't the others
+          nameIdx = 0; // simplistic fallback
+        }
+
+        const finalNameIdx = nameIdx;
+        const finalContactIdx = contactIdx;
+        const finalEmailIdx = emailIdx;
+        const finalProductIdx = productIdx;
+
+        const sheetLeads: Lead[] = rows.slice(1)
+          .filter(r => r[finalNameIdx] && r[finalNameIdx].trim())
+          .map((r, i) => ({
+            id: `sheet-${i}-${Date.now()}`,
+            name: r[finalNameIdx],
+            email: finalEmailIdx !== -1 ? r[finalEmailIdx] : '',
+            phone: r[finalContactIdx] || '',
+            product: finalProductIdx !== -1 ? r[finalProductIdx] : '',
+            status: 'New Lead',
+            source: 'Google Sheet',
+            assignedTo: '',
+            createdAt: new Date().toISOString(),
+            isOnlineOnly: true
+          }));
+
+        setOnlineLeads(sheetLeads);
+      } catch (error) {
+        console.error("Sheet fetch error:", error);
+      } finally {
+        setIsSheetLoading(false);
+      }
+    };
+
+    fetchSheetLeads();
+  }, [sheetUrl, statusFilter]);
 
   const isLoading = leadsLoading || usersLoading;
 
-  const [statusFilter, setStatusFilter] = React.useState<string>('all');
-
   const filteredLeads = React.useMemo(() => {
-    if (!leads) return [];
-    let result = leads;
+    let result = leads ? [...leads] : [];
+
+    // Merge online leads if in 'all' view
+    if (statusFilter === 'all' && onlineLeads.length > 0) {
+      // Filter out online leads that are already in Firestore (by name/email/phone match)
+      const existingEmails = new Set(result.map(l => l.email.toLowerCase()).filter(e => e));
+      const existingPhones = new Set(result.map(l => l.phone).filter(p => p));
+
+      const uniqueOnline = onlineLeads.filter(ol =>
+        !existingEmails.has(ol.email.toLowerCase()) &&
+        !existingPhones.has(ol.phone)
+      );
+
+      result = [...result, ...uniqueOnline];
+    }
 
     // Status Filter
-    if (statusFilter !== 'all') {
+    if (statusFilter !== 'all' && statusFilter !== 'online') {
       result = result.filter(l => l.status === statusFilter);
     }
 
@@ -257,7 +470,7 @@ export default function LeadsPage() {
       );
     }
     return result;
-  }, [leads, searchTerm, statusFilter]);
+  }, [leads, searchTerm, statusFilter, onlineLeads]);
 
   const usersMap = React.useMemo(() => {
     if (!users) return new Map();
@@ -272,6 +485,31 @@ export default function LeadsPage() {
   const handleEdit = (lead: Lead) => {
     setSelectedLead(lead);
     setIsFormOpen(true);
+  };
+
+  const handleStatusChange = async (lead: Lead, newStatus: string) => {
+    if (!firestore || !user) return;
+
+    if ((lead as any).isOnlineOnly) {
+      const newLead: Omit<Lead, 'id'> = {
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        product: lead.product || '',
+        status: newStatus as Lead['status'],
+        source: 'Google Sheet (Imported)',
+        assignedTo: user?.id || '',
+        createdAt: new Date().toISOString(),
+      };
+      await addDocumentNonBlocking(collection(firestore, 'leads'), newLead);
+      toast({ title: "Lead Imported", description: `Saved ${lead.name} to database with status ${newStatus}.` });
+      forceRerender();
+    } else {
+      // Update existing
+      const docRef = doc(firestore, 'leads', lead.id);
+      updateDocumentNonBlocking(docRef, { status: newStatus });
+      toast({ title: "Status Updated", description: `Updated status to ${newStatus}.` });
+    }
   };
 
   const handleDelete = (leadId: string) => {
@@ -297,6 +535,14 @@ export default function LeadsPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => window.open(sheetUrl, '_blank')}>
+                <FileText className="h-4 w-4" />
+                View Google Sheet
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => setIsConfigOpen(true)}>
+                <Settings className="h-4 w-4" />
+                Configure
+              </Button>
               <Button size="sm" variant="outline" className="gap-1" onClick={() => setIsImportOpen(true)}>
                 <Upload className="h-4 w-4" />
                 Import from Sheet
@@ -309,19 +555,25 @@ export default function LeadsPage() {
           </div>
           <div className="mt-4">
             <Tabs defaultValue="all" onValueChange={setStatusFilter}>
-              <TabsList className="grid grid-cols-6 w-full max-w-2xl">
+              <TabsList className="grid grid-cols-7 w-full max-w-3xl">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="New Lead">New</TabsTrigger>
                 <TabsTrigger value="In Progress">In Progress</TabsTrigger>
                 <TabsTrigger value="Dead">Dead</TabsTrigger>
                 <TabsTrigger value="Previous">Previous</TabsTrigger>
                 <TabsTrigger value="Converted">Converted</TabsTrigger>
+                <TabsTrigger value="online" className="gap-1">
+                  <Eye className="h-3 w-3" />
+                  Online Sheet
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {statusFilter === 'online' ? (
+            <LiveSheetPreview sheetUrl={sheetUrl} />
+          ) : isLoading ? (
             <div className="flex justify-center items-center h-48">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
@@ -330,7 +582,8 @@ export default function LeadsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
+                  <TableHead>Lead Contact</TableHead>
+                  <TableHead>Product/Service</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Assigned To</TableHead>
@@ -353,9 +606,42 @@ export default function LeadsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{lead.status}</Badge>
+                      <span className="text-sm font-medium">{lead.product || '-'}</span>
                     </TableCell>
-                    <TableCell>{lead.source}</TableCell>
+                    <TableCell>
+                      {(lead as any).isOnlineOnly ? (
+                        <Select onValueChange={(val) => handleStatusChange(lead, val)} value={lead.status}>
+                          <SelectTrigger className={`h-8 w-[130px] ${lead.status === 'New Lead' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            lead.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              lead.status === 'Dead' ? 'bg-red-50 text-red-700 border-red-200' :
+                                lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  'bg-slate-50 text-slate-700 border-slate-200'
+                            }`}>
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="New Lead">New Lead</SelectItem>
+                            <SelectItem value="In Progress">In Progress</SelectItem>
+                            <SelectItem value="Dead">Dead</SelectItem>
+                            <SelectItem value="Previous">Previous</SelectItem>
+                            <SelectItem value="Converted">Converted</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge className={`${lead.status === 'New Lead' ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100' :
+                          lead.status === 'In Progress' ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100' :
+                            lead.status === 'Dead' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100' :
+                              lead.status === 'Converted' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100' :
+                                'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-100'
+                          }`} variant="outline">{lead.status}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {lead.source}
+                        {(lead as any).isOnlineOnly && <Badge variant="secondary" className="text-[10px] px-1 h-4">Online</Badge>}
+                      </div>
+                    </TableCell>
                     <TableCell>{usersMap.get(lead.assignedTo) || 'Unassigned'}</TableCell>
                     <TableCell>{new Date(lead.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell>
@@ -397,7 +683,20 @@ export default function LeadsPage() {
         </CardContent>
       </Card>
       <LeadFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} lead={selectedLead} users={users || []} />
-      <ImportLeadsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onLeadsImported={forceRerender} />
+      <ImportLeadsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onLeadsImported={forceRerender} sheetUrl={sheetUrl} />
+      <ConfigureSheetDialog
+        open={isConfigOpen}
+        onOpenChange={setIsConfigOpen}
+        currentUrl={sheetUrl}
+        onSave={async (url) => {
+          if (firestore) {
+            await setDoc(doc(firestore, 'settings', 'sales'), { googleSheetUrl: url }, { merge: true });
+            setSheetUrl(url);
+            toast({ title: "Settings Saved", description: "Google Sheet URL has been updated." });
+            setIsConfigOpen(false);
+          }
+        }}
+      />
     </>
   );
 }
