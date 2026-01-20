@@ -609,32 +609,23 @@ export default function LeadsPage() {
                       <span className="text-sm font-medium">{lead.product || '-'}</span>
                     </TableCell>
                     <TableCell>
-                      {(lead as any).isOnlineOnly ? (
-                        <Select onValueChange={(val) => handleStatusChange(lead, val)} value={lead.status}>
-                          <SelectTrigger className={`h-8 w-[130px] ${lead.status === 'New Lead' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            lead.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              lead.status === 'Dead' ? 'bg-red-50 text-red-700 border-red-200' :
-                                lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                  'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}>
-                            <SelectValue placeholder="Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="New Lead">New Lead</SelectItem>
-                            <SelectItem value="In Progress">In Progress</SelectItem>
-                            <SelectItem value="Dead">Dead</SelectItem>
-                            <SelectItem value="Previous">Previous</SelectItem>
-                            <SelectItem value="Converted">Converted</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge className={`${lead.status === 'New Lead' ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100' :
-                          lead.status === 'In Progress' ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100' :
-                            lead.status === 'Dead' ? 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100' :
-                              lead.status === 'Converted' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100' :
-                                'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-100'
-                          }`} variant="outline">{lead.status}</Badge>
-                      )}
+                      <Select onValueChange={(val) => handleStatusChange(lead, val)} value={lead.status}>
+                        <SelectTrigger className={`h-8 w-[130px] ${lead.status === 'New Lead' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          lead.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            lead.status === 'Dead' ? 'bg-red-50 text-red-700 border-red-200' :
+                              lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                'bg-slate-50 text-slate-700 border-slate-200'
+                          }`}>
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="New Lead">New Lead</SelectItem>
+                          <SelectItem value="In Progress">In Progress</SelectItem>
+                          <SelectItem value="Dead">Dead</SelectItem>
+                          <SelectItem value="Previous">Previous</SelectItem>
+                          <SelectItem value="Converted">Converted</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
