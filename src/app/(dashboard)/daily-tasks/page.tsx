@@ -96,11 +96,15 @@ export default function DailyTasksPage() {
         updateDocumentNonBlocking(taskRef, { status: isCompleted ? 'Completed' : 'Pending' });
     };
 
-    // ADMIN TEMPLATES LOGIC
+    // ADMIN TEMPLATES LOGIC - Filter by assigned user
     const templateQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'adminTaskTemplates'), orderBy('createdAt', 'desc'));
-    }, [firestore]);
+        if (!firestore || !user) return null;
+        // Show templates assigned to this user OR assigned to "all"
+        return query(
+            collection(firestore, 'adminTaskTemplates'),
+            orderBy('createdAt', 'desc')
+        );
+    }, [firestore, user]);
     const { data: templates } = useCollection<any>(templateQuery);
 
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -145,11 +149,11 @@ export default function DailyTasksPage() {
                 <CardContent>
                     {templates && templates.length > 0 ? (
                         <div className="space-y-6">
-                            {Array.from(new Set(templates.map((t: any) => t.category))).map((category: any) => (
+                            {Array.from(new Set(templates.filter((t: any) => t.assignedTo === 'all' || t.assignedTo === user?.id).map((t: any) => t.category))).map((category: any) => (
                                 <div key={category} className="space-y-2">
                                     <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">{category}</h3>
                                     <div className="bg-background rounded-md border divide-y">
-                                        {templates.filter((t: any) => t.category === category).map((t: any) => (
+                                        {templates.filter((t: any) => t.category === category && (t.assignedTo === 'all' || t.assignedTo === user?.id)).map((t: any) => (
                                             <div key={t.id} className="p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors">
                                                 <Checkbox
                                                     id={`tpl-${t.id}`}

@@ -37,4 +37,5 @@ export const availableFeatures = [
 
     // Admin Specific Overrides/New
     { id: 'employeeReports', label: 'Employee Reports (Admin)', href: '/employee-reports' },
+    { id: 'taskManagement', label: 'Manage Tasks (Admin)', href: '/admin/manage-tasks' },
 ];

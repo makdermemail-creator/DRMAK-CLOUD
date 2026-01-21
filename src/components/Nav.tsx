@@ -103,7 +103,7 @@ const allMenuItems = [
     { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog }, // Corrected ID from features page
     { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
     { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: FileBarChart },
-    { id: 'taskManagement', href: '/admin/tasks', label: 'Manage Tasks', icon: ListTodo },
+    { id: 'taskManagement', href: '/admin/manage-tasks', label: 'Manage Tasks', icon: ListTodo },
 
     // Sales Specific
     { id: 'salesDashboard', href: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },

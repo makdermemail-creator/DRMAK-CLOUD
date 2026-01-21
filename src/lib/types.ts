@@ -232,6 +232,15 @@ export type SocialReport = {
   plans: string;
 };
 
+export type AdminTaskTemplate = {
+  id: string;
+  content: string; // Task description
+  category: string; // e.g., "Sales", "Social Media", "General"
+  assignedTo: string; // userId or "all" for all users
+  createdAt: string; // ISO string
+  createdBy: string; // Admin userId
+};
+
 export type InvoiceItem = {
   id: string;
   procedure: string;
