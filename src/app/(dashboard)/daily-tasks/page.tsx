@@ -18,12 +18,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, PlusCircle, Trash2, ListTodo } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, ListTodo, CheckCircle2, Circle } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import type { DailyTask } from '@/lib/types';
 import { collection, query, where, doc, orderBy, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
+
 
 export default function DailyTasksPage() {
     const firestore = useFirestore();
@@ -150,25 +157,63 @@ export default function DailyTasksPage() {
                     {templates && templates.length > 0 ? (
                         <div className="space-y-6">
                             {Array.from(new Set(templates.filter((t: any) => t.assignedTo === 'all' || t.assignedTo === user?.id).map((t: any) => t.category))).map((category: any) => (
-                                <div key={category} className="space-y-2">
+                                <div key={category} className="space-y-3">
                                     <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">{category}</h3>
-                                    <div className="bg-background rounded-md border divide-y">
-                                        {templates.filter((t: any) => t.category === category && (t.assignedTo === 'all' || t.assignedTo === user?.id)).map((t: any) => (
-                                            <div key={t.id} className="p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors">
-                                                <Checkbox
-                                                    id={`tpl-${t.id}`}
-                                                    checked={completedTemplateIds.includes(t.id)}
-                                                    onCheckedChange={(c) => toggleTemplateTask(t.id, !!c)}
-                                                />
-                                                <label
-                                                    htmlFor={`tpl-${t.id}`}
-                                                    className={`flex-1 text-sm font-medium cursor-pointer ${completedTemplateIds.includes(t.id) ? 'text-muted-foreground line-through' : ''}`}
+                                    <Accordion type="multiple" className="space-y-2">
+                                        {templates.filter((t: any) => t.category === category && (t.assignedTo === 'all' || t.assignedTo === user?.id)).map((t: any) => {
+                                            const isCompleted = completedTemplateIds.includes(t.id);
+                                            return (
+                                                <AccordionItem
+                                                    key={t.id}
+                                                    value={t.id}
+                                                    className={`border rounded-lg overflow-hidden transition-all ${isCompleted
+                                                            ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800'
+                                                            : 'bg-background border-border hover:border-primary/50'
+                                                        }`}
                                                 >
-                                                    {t.content}
-                                                </label>
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                                                        <div className="flex items-center gap-3 flex-1">
+                                                            {isCompleted ? (
+                                                                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                                                            ) : (
+                                                                <Circle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                                                            )}
+                                                            <span className={`text-left font-medium ${isCompleted ? 'text-emerald-700 dark:text-emerald-300 line-through' : 'text-foreground'}`}>
+                                                                {t.content}
+                                                            </span>
+                                                        </div>
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="px-4 pb-4 pt-2">
+                                                        <div className="space-y-3 pl-8">
+                                                            <p className="text-sm text-muted-foreground">
+                                                                {isCompleted
+                                                                    ? '✓ Task completed for today'
+                                                                    : 'Click the button below to mark this task as complete'}
+                                                            </p>
+                                                            <Button
+                                                                size="sm"
+                                                                variant={isCompleted ? "outline" : "default"}
+                                                                onClick={() => toggleTemplateTask(t.id, !isCompleted)}
+                                                                className={isCompleted ? "gap-2" : "gap-2 bg-emerald-600 hover:bg-emerald-700"}
+                                                            >
+                                                                {isCompleted ? (
+                                                                    <>
+                                                                        <Circle className="h-4 w-4" />
+                                                                        Mark as Incomplete
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <CheckCircle2 className="h-4 w-4" />
+                                                                        Mark as Complete
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                            );
+                                        })}
+                                    </Accordion>
                                 </div>
                             ))}
                         </div>

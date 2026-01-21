@@ -65,6 +65,7 @@ import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, u
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
+import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 
 type AppointmentStatus = 'Waiting' | 'In Consultation' | 'Completed' | 'Cancelled';
 
