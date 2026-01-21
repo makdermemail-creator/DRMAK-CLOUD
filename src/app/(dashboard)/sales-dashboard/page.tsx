@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, RadialBarChart, RadialBar } from 'recharts';
 import { Checkbox } from '@/components/ui/checkbox';
 import { updateDocumentNonBlocking } from '@/firebase';
+import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 
 export default function SalesDashboardPage() {
     const firestore = useFirestore();
