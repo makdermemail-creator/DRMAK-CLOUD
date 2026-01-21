@@ -18,12 +18,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Video, Send, Instagram, Facebook, Share2 } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import type { DailyPosting } from '@/lib/types';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -44,6 +46,32 @@ export default function DailyPostingPage() {
     }, [firestore, user]);
 
     const { data: postings, isLoading, forceRerender } = useCollection<DailyPosting>(postingsQuery);
+
+    // DAILY GOALS LOGIC
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const goalsDocRef = useMemoFirebase(
+        () => (firestore && user ? doc(firestore, 'dailySocialProgress', `${user.id}_${todayStr}`) : null),
+        [firestore, user, todayStr]
+    );
+    const { data: goalData, isLoading: isGoalLoading } = useDoc<any>(goalsDocRef);
+
+    const platforms = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok'];
+    const completedPlatforms: string[] = goalData?.completedPlatforms || [];
+    const progress = Math.round((completedPlatforms.length / platforms.length) * 100);
+
+    const togglePlatform = async (plt: string, checked: boolean) => {
+        if (!firestore || !user) return;
+        const ref = doc(firestore, 'dailySocialProgress', `${user.id}_${todayStr}`);
+        const current = new Set(goalData?.completedPlatforms || []);
+        if (checked) current.add(plt);
+        else current.delete(plt);
+
+        await setDoc(ref, {
+            userId: user.id,
+            date: todayStr,
+            completedPlatforms: Array.from(current)
+        }, { merge: true });
+    };
 
     const handleSubmit = async () => {
         if (!firestore || !user) return;
@@ -86,6 +114,37 @@ export default function DailyPostingPage() {
 
     return (
         <div className="space-y-6">
+            <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 dark:from-purple-950 dark:to-pink-950 dark:border-purple-900">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                        <Share2 className="h-6 w-6" />
+                        Daily Social Progress
+                    </CardTitle>
+                    <CardDescription>Track your daily platform presence goal ({progress}% Complete)</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <Progress value={progress} className="h-3 bg-purple-100 dark:bg-purple-900"
+                    // Custom indicator class if needed, or rely on default
+                    />
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {platforms.map(plt => (
+                            <div key={plt} className="flex items-center space-x-2 bg-white dark:bg-slate-900 p-3 rounded-lg border shadow-sm">
+                                <Checkbox
+                                    id={`goal-${plt}`}
+                                    checked={completedPlatforms.includes(plt)}
+                                    onCheckedChange={(c) => togglePlatform(plt, !!c)}
+                                />
+                                <Label htmlFor={`goal-${plt}`} className="flex items-center gap-2 cursor-pointer font-medium">
+                                    {getPlatformIcon(plt)}
+                                    {plt}
+                                </Label>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">

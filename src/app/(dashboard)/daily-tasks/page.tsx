@@ -19,9 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, PlusCircle, Trash2, ListTodo } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import type { DailyTask } from '@/lib/types';
-import { collection, query, where, doc, orderBy } from 'firebase/firestore';
+import { collection, query, where, doc, orderBy, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -96,6 +96,35 @@ export default function DailyTasksPage() {
         updateDocumentNonBlocking(taskRef, { status: isCompleted ? 'Completed' : 'Pending' });
     };
 
+    // ADMIN TEMPLATES LOGIC
+    const templateQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'adminTaskTemplates'), orderBy('createdAt', 'desc'));
+    }, [firestore]);
+    const { data: templates } = useCollection<any>(templateQuery);
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const completionRef = useMemoFirebase(
+        () => (firestore && user ? doc(firestore, 'dailyTaskCompletions', `${user.id}_${todayStr}`) : null),
+        [firestore, user, todayStr]
+    );
+    const { data: completionData } = useDoc<any>(completionRef);
+    const completedTemplateIds: string[] = completionData?.completedTemplateIds || [];
+
+    const toggleTemplateTask = async (templateId: string, checked: boolean) => {
+        if (!firestore || !user) return;
+        const ref = doc(firestore, 'dailyTaskCompletions', `${user.id}_${todayStr}`);
+        const current = new Set(completionData?.completedTemplateIds || []);
+        if (checked) current.add(templateId);
+        else current.delete(templateId);
+
+        await setDoc(ref, {
+            userId: user.id,
+            date: todayStr,
+            completedTemplateIds: Array.from(current)
+        }, { merge: true });
+    };
+
     const handleDeleteTask = (taskId: string) => {
         if (!firestore) return;
         const taskRef = doc(firestore, 'dailyTasks', taskId);
@@ -104,6 +133,47 @@ export default function DailyTasksPage() {
 
     return (
         <div className="space-y-6">
+            {/* Admin Assigned Tasks */}
+            <Card className="bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <ListTodo className="h-6 w-6 text-indigo-500" />
+                        Assigned Daily Tasks
+                    </CardTitle>
+                    <CardDescription>Recurring tasks assigned by management.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {templates && templates.length > 0 ? (
+                        <div className="space-y-6">
+                            {Array.from(new Set(templates.map((t: any) => t.category))).map((category: any) => (
+                                <div key={category} className="space-y-2">
+                                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">{category}</h3>
+                                    <div className="bg-background rounded-md border divide-y">
+                                        {templates.filter((t: any) => t.category === category).map((t: any) => (
+                                            <div key={t.id} className="p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors">
+                                                <Checkbox
+                                                    id={`tpl-${t.id}`}
+                                                    checked={completedTemplateIds.includes(t.id)}
+                                                    onCheckedChange={(c) => toggleTemplateTask(t.id, !!c)}
+                                                />
+                                                <label
+                                                    htmlFor={`tpl-${t.id}`}
+                                                    className={`flex-1 text-sm font-medium cursor-pointer ${completedTemplateIds.includes(t.id) ? 'text-muted-foreground line-through' : ''}`}
+                                                >
+                                                    {t.content}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-6 text-muted-foreground">No assigned tasks found.</div>
+                    )}
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">

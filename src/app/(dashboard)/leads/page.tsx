@@ -99,13 +99,9 @@ const ImportLeadsDialog = ({ open, onOpenChange, onLeadsImported, sheetUrl }: { 
     if (!sheetUrl) return;
     setIsImporting(true);
     try {
-      // Construct export URL for Google Sheet (CSV format)
-      const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
-      if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
-      const sheetId = sheetIdMatch[1];
-      const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-
-      const response = await fetch(exportUrl);
+      // Use server-side proxy to avoid CORS issues
+      const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(sheetUrl)}`;
+      const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Failed to fetch sheet data");
       const text = await response.text();
       await processLeads(text, "Google Sheet Link");
@@ -183,7 +179,17 @@ const ConfigureSheetDialog = ({ open, onOpenChange, currentUrl, onSave }: { open
     </Dialog>
   );
 };
-const LiveSheetPreview = ({ sheetUrl }: { sheetUrl: string }) => {
+const LiveSheetPreview = ({
+  sheetUrl,
+  onlineLeads,
+  existingLeads = [],
+  onStatusChange
+}: {
+  sheetUrl: string,
+  onlineLeads: Lead[],
+  existingLeads?: Lead[],
+  onStatusChange: (lead: Lead, status: string) => void
+}) => {
   const [data, setData] = React.useState<string[][]>([]);
   const [loading, setLoading] = React.useState(false);
   const { toast } = useToast();
@@ -193,12 +199,9 @@ const LiveSheetPreview = ({ sheetUrl }: { sheetUrl: string }) => {
       if (!sheetUrl) return;
       setLoading(true);
       try {
-        const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
-        if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
-        const sheetId = sheetIdMatch[1];
-        const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-
-        const response = await fetch(exportUrl);
+        // Use server-side proxy to avoid CORS issues
+        const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(sheetUrl)}`;
+        const response = await fetch(proxyUrl);
         if (!response.ok) throw new Error("Failed to fetch sheet data");
         const text = await response.text();
 
@@ -234,24 +237,67 @@ const LiveSheetPreview = ({ sheetUrl }: { sheetUrl: string }) => {
   const headers = data[0];
   const body = data.slice(1);
 
+  // Helper to find matching existing lead
+  const findExistingLead = (onlineLead: Lead) => {
+    return existingLeads.find(l =>
+      (l.email && onlineLead.email && l.email.toLowerCase() === onlineLead.email.toLowerCase()) ||
+      (l.phone && onlineLead.phone && l.phone === onlineLead.phone)
+    );
+  };
+
   return (
     <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="whitespace-nowrap font-bold text-primary bg-muted/50 w-[150px]">App Status</TableHead>
             {headers.map((h, i) => (
               <TableHead key={i} className="whitespace-nowrap font-bold text-primary">{h}</TableHead>
             ))}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {body.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {row.map((cell, cellIndex) => (
-                <TableCell key={cellIndex} className="whitespace-nowrap">{cell}</TableCell>
-              ))}
-            </TableRow>
-          ))}
+          {body.map((row, rowIndex) => {
+            // Correlate with onlineLeads (assuming same order)
+            const onlineLead = onlineLeads[rowIndex];
+            const existingLead = onlineLead ? findExistingLead(onlineLead) : null;
+
+            // Use existing lead status or 'New Lead'
+            const currentStatus = existingLead ? existingLead.status : 'New Lead';
+            const leadToUpdate = existingLead || onlineLead;
+
+            // If we don't have a valid lead object (e.g. row mismatch), disable action?
+            // But usually they match.
+
+            return (
+              <TableRow key={rowIndex}>
+                <TableCell>
+                  {leadToUpdate ? (
+                    <Select onValueChange={(val) => onStatusChange(leadToUpdate, val)} value={currentStatus}>
+                      <SelectTrigger className={`h-8 w-[130px] ${currentStatus === 'New Lead' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        currentStatus === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          currentStatus === 'Dead' ? 'bg-red-50 text-red-700 border-red-200' :
+                            currentStatus === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              'bg-slate-50 text-slate-700 border-slate-200'
+                        }`}>
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="New Lead">New Lead</SelectItem>
+                        <SelectItem value="In Progress">In Progress</SelectItem>
+                        <SelectItem value="Dead">Dead</SelectItem>
+                        <SelectItem value="Previous">Previous</SelectItem>
+                        <SelectItem value="Converted">Converted</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : <Badge variant="outline">Invalid Row</Badge>}
+                </TableCell>
+                {row.map((cell, cellIndex) => (
+                  <TableCell key={cellIndex} className="whitespace-nowrap">{cell}</TableCell>
+                ))}
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
@@ -276,7 +322,7 @@ export default function LeadsPage() {
   const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [isConfigOpen, setIsConfigOpen] = React.useState(false);
   const [selectedLead, setSelectedLead] = React.useState<Lead | undefined>(undefined);
-  const [sheetUrl, setSheetUrl] = React.useState<string>('https://docs.google.com/spreadsheets/d/1Xz8F2v5i_5V6mG0X_8m6Xv1X_X_X_X_X/edit');
+  const [sheetUrl, setSheetUrl] = React.useState<string>('');
 
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
   const [onlineLeads, setOnlineLeads] = React.useState<Lead[]>([]);
@@ -298,15 +344,16 @@ export default function LeadsPage() {
   // Fetch Sheet Data
   React.useEffect(() => {
     const fetchSheetLeads = async () => {
-      if (!sheetUrl || statusFilter === 'online') return;
+      // Validate URL before fetching
+      if (!sheetUrl || !sheetUrl.includes('docs.google.com/spreadsheets')) return;
+
+      if (statusFilter === 'online') return;
+
       setIsSheetLoading(true);
       try {
-        const sheetIdMatch = sheetUrl.match(/\/d\/(.*?)(\/|$)/);
-        if (!sheetIdMatch) throw new Error("Invalid Google Sheet URL");
-        const sheetId = sheetIdMatch[1];
-        const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-
-        const response = await fetch(exportUrl);
+        // Use server-side proxy to avoid CORS issues
+        const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(sheetUrl)}`;
+        const response = await fetch(proxyUrl);
         if (!response.ok) throw new Error("Failed to fetch sheet data");
         const text = await response.text();
 
@@ -572,7 +619,12 @@ export default function LeadsPage() {
         </CardHeader>
         <CardContent>
           {statusFilter === 'online' ? (
-            <LiveSheetPreview sheetUrl={sheetUrl} />
+            <LiveSheetPreview
+              sheetUrl={sheetUrl}
+              onlineLeads={onlineLeads}
+              existingLeads={leads || []}
+              onStatusChange={handleStatusChange}
+            />
           ) : isLoading ? (
             <div className="flex justify-center items-center h-48">
               <Loader2 className="h-8 w-8 animate-spin" />
