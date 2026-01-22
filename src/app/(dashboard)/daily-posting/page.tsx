@@ -22,8 +22,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Video, Send, Instagram, Facebook, Share2 } from 'lucide-react';
+import { Upload, Loader2, Video, Send, Instagram, Facebook, Share2 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
+import { uploadFile } from '@/firebase/storage';
 import type { DailyPosting } from '@/lib/types';
 import { collection, query, where, orderBy, doc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +39,7 @@ export default function DailyPostingPage() {
     const [activityType, setActivityType] = React.useState<string>('Post');
     const [description, setDescription] = React.useState('');
     const [link, setLink] = React.useState('');
+    const [screenshotFile, setScreenshotFile] = React.useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const postingsQuery = useMemoFirebase(() => {
@@ -86,15 +88,24 @@ export default function DailyPostingPage() {
             platform: platform as any,
             activityType: activityType as any,
             description,
+            description,
             link: link.trim() || undefined,
+            screenshotUrl: undefined,
             postedAt: new Date().toISOString(),
         };
 
         try {
+            if (screenshotFile) {
+                const path = `daily-postings/${user.id}/${Date.now()}_${screenshotFile.name}`;
+                const url = await uploadFile(screenshotFile, path);
+                posting.screenshotUrl = url;
+            }
+
             await addDocumentNonBlocking(collection(firestore, 'dailyPostings'), posting);
             toast({ title: 'Post Logged', description: 'Your social media activity has been recorded.' });
             setDescription('');
             setLink('');
+            setScreenshotFile(null);
             forceRerender();
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not log your activity.' });
@@ -201,6 +212,22 @@ export default function DailyPostingPage() {
                             onChange={(e) => setLink(e.target.value)}
                         />
                     </div>
+                    <div className="space-y-2">
+                        <Label>Screenshot / Proof (Optional)</Label>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                        setScreenshotFile(e.target.files[0]);
+                                    }
+                                }}
+                                className="cursor-pointer"
+                            />
+                            {screenshotFile && <span className="text-sm text-muted-foreground">{screenshotFile.name}</span>}
+                        </div>
+                    </div>
                     <div className="flex justify-end">
                         <Button onClick={handleSubmit} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
@@ -226,6 +253,7 @@ export default function DailyPostingPage() {
                                     <TableHead>Type</TableHead>
                                     <TableHead>Description</TableHead>
                                     <TableHead>Link</TableHead>
+                                    <TableHead>Proof</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -245,10 +273,17 @@ export default function DailyPostingPage() {
                                                 <a href={post.link} target="_blank" className="text-primary hover:underline">View Post</a>
                                             ) : '-'}
                                         </TableCell>
+                                        <TableCell>
+                                            {post.screenshotUrl ? (
+                                                <a href={post.screenshotUrl} target="_blank" className="text-primary hover:underline flex items-center gap-1">
+                                                    <Upload className="h-3 w-3" /> View
+                                                </a>
+                                            ) : '-'}
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                                 {postings?.length === 0 && (
-                                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No activities logged yet.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No activities logged yet.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>

@@ -220,6 +220,7 @@ export type DailyPosting = {
   activityType: 'Post' | 'Story' | 'Reel' | 'Video';
   description: string;
   link?: string;
+  screenshotUrl?: string; // URL of the uploaded proof/screenshot
   postedAt: string; // ISO string
 };
 
