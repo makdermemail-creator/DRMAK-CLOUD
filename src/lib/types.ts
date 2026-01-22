@@ -233,6 +233,31 @@ export type SocialReport = {
   plans: string;
 };
 
+export type SocialReach = {
+  id: string;
+  userId: string;
+  date: string; // ISO date
+  platform: 'Instagram' | 'Facebook' | 'WhatsApp' | 'TikTok' | 'Other';
+  reach: number;
+  engagement?: number;
+  followers?: number;
+};
+
+export type SocialSettings = {
+  userId: string;
+  googleSheetLink?: string;
+};
+
+export type DesignerWork = {
+  id: string;
+  userId: string;
+  date: string; // ISO date
+  assetType: 'Post Graphic' | 'Story Design' | 'Youtube Thumbnail' | 'Banner' | 'Reel Edit' | 'Other';
+  title: string;
+  link?: string;
+  status: 'Draft' | 'Sent for Review' | 'Approved' | 'Published';
+};
+
 export type AdminTaskTemplate = {
   id: string;
   content: string; // Task description
