@@ -258,6 +258,17 @@ export type DesignerWork = {
   status: 'Draft' | 'Sent for Review' | 'Approved' | 'Published';
 };
 
+export type ScheduledPost = {
+  id: string;
+  userId: string;
+  title: string;
+  platform: 'Instagram' | 'Facebook' | 'WhatsApp' | 'TikTok' | 'YouTube' | 'Other';
+  scheduledAt: string; // ISO date-time
+  status: 'Draft' | 'Scheduled' | 'Published';
+  description?: string;
+  imageUrl?: string;
+};
+
 export type AdminTaskTemplate = {
   id: string;
   content: string; // Task description

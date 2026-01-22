@@ -108,6 +108,7 @@ const allMenuItems = [
     // Sales Specific
     { id: 'salesDashboard', href: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'leads', href: '/leads', label: 'Leads', icon: FileBarChart },
+    { id: 'leadAssignment', href: '/leads/assignment', label: 'Lead Assignment', icon: Users },
     { id: 'dailyReporting', href: '/daily-reporting', label: 'Daily Reporting', icon: FileText },
     { id: 'dailyPosting', href: '/daily-posting', label: 'Daily Posting', icon: Video },
     { id: 'dailyTasks', href: '/daily-tasks', label: 'Daily Tasks', icon: ListTodo },
@@ -119,10 +120,14 @@ const allMenuItems = [
 
     // Social Media Specific
     { id: 'socialReporting', href: '/social-reporting', label: 'Social Reporting', icon: FileText },
-    { id: 'contentPlanner', href: '/content-planner', label: 'Content Planner', icon: Calendar, isMore: true }, // Placeholder
-    { id: 'analytics', href: '/analytics', label: 'Social Analytics', icon: LineChart, isMore: true }, // Placeholder
-    { id: 'socialInbox', href: '/social-inbox', label: 'Social Inbox', icon: Share2, isMore: true },
+    { id: 'contentPlanner', href: '/content-planner', label: 'Content Planner', icon: Calendar },
+    { id: 'analytics', href: '/analytics', label: 'Social Analytics', icon: LineChart },
+    { id: 'socialInbox', href: '/social-inbox', label: 'Social Inbox', icon: Share2 },
+    { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
 
+    // Designer Specific
+    { id: 'designerWork', href: '/', label: 'Workstation', icon: LayoutDashboard },
+    { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
 ];
 
 const SidebarMenuSkeleton = ({ showIcon }: { showIcon?: boolean }) => {
@@ -191,6 +196,16 @@ const NavContent = () => {
         if (userProfile?.role === 'Admin') {
             // Regular Admins see everything EXCEPT User Management and Feature Control
             return allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl');
+        }
+
+        if (userProfile?.role === 'Social Media Manager') {
+            const socialAccess = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting'];
+            return allMenuItems.filter(item => socialAccess.includes(item.id));
+        }
+
+        if (userProfile?.role === 'Designer') {
+            const designerAccess = ['designerWork', 'creativeBriefs'];
+            return allMenuItems.filter(item => designerAccess.includes(item.id));
         }
 
         if (userProfile) {

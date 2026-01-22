@@ -639,102 +639,12 @@ const SocialMediaDashboard = () => {
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
-        return query(collection(firestore, 'adminTaskTemplates'), where('category', '==', 'Social Media'));
+        return query(collection(firestore, 'adminTaskTemplates'), where('category', '==', 'Social Media'), limit(5));
     }, [firestore, user]);
-
-    const metricsQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return query(collection(firestore, 'socialMetrics'), where('userId', '==', user.id), orderBy('date', 'desc'), limit(5));
-    }, [firestore, user]);
-
-    const settingsDoc = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return doc(firestore, 'socialSettings', user.id);
-    }, [firestore, user]);
-
-    const salesUsersQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'users'), where('role', '==', 'Sales'));
-    }, [firestore]);
 
     const { data: todayPosts } = useCollection<DailyPosting>(postQuery);
     const { data: todayReports } = useCollection<SocialReport>(reportQuery);
     const { data: adminTasks } = useCollection<AdminTaskTemplate>(tasksQuery);
-    const { data: reachMetrics } = useCollection<SocialReach>(metricsQuery);
-    const { data: socialSettings } = useDoc<SocialSettings>(settingsDoc);
-    const { data: salesUsers } = useCollection<User>(salesUsersQuery);
-
-    // Form States
-    const [sheetLink, setSheetLink] = React.useState('');
-    const [selectedSales, setSelectedSales] = React.useState('');
-    const [reachInput, setReachInput] = React.useState('');
-    const [platform, setPlatform] = React.useState('Instagram');
-    const [isUpdatingSettings, setIsUpdatingSettings] = React.useState(false);
-    const [isSubmittingReach, setIsSubmittingReach] = React.useState(false);
-
-    React.useEffect(() => {
-        if (socialSettings?.googleSheetLink) {
-            setSheetLink(socialSettings.googleSheetLink);
-        }
-    }, [socialSettings]);
-
-    const handleSaveSettings = async () => {
-        if (!firestore || !user) return;
-        setIsUpdatingSettings(true);
-        try {
-            await setDoc(doc(firestore, 'socialSettings', user.id), { googleSheetLink: sheetLink }, { merge: true });
-            toast({ title: "Settings Saved", description: "Google Sheet link updated." });
-        } catch (e) {
-            toast({ variant: "destructive", title: "Error", description: "Failed to save settings." });
-        } finally {
-            setIsUpdatingSettings(false);
-        }
-    };
-
-    const handleAssignLeads = async () => {
-        if (!selectedSales || !sheetLink) {
-            toast({ variant: "destructive", title: "Wait", description: "Please select a sales executive and ensure sheet link is set." });
-            return;
-        }
-        // In a real app, this might trigger a cloud function or update a shared doc.
-        // For now, we'll log it as an admin task for that sales person.
-        try {
-            const assignmentTask: Omit<AdminTaskTemplate, 'id'> = {
-                content: `Assign leads from sheet: ${sheetLink}`,
-                category: 'Sales',
-                assignedTo: selectedSales,
-                createdAt: new Date().toISOString(),
-                createdBy: user?.id || 'system',
-            };
-            await addDocumentNonBlocking(collection(firestore, 'adminTaskTemplates'), assignmentTask);
-            toast({ title: "Leads Assigned", description: "Sales executive has been notified via task." });
-        } catch (e) {
-            toast({ variant: "destructive", title: "Error", description: "Failed to assign leads." });
-        }
-    };
-
-    const handleLogReach = async () => {
-        if (!reachInput || isNaN(Number(reachInput))) {
-            toast({ variant: "destructive", title: "Invalid", description: "Please enter a valid reach number." });
-            return;
-        }
-        setIsSubmittingReach(true);
-        try {
-            const metric: Omit<SocialReach, 'id'> = {
-                userId: user?.id || '',
-                date: new Date().toISOString(),
-                platform: platform as any,
-                reach: Number(reachInput),
-            };
-            await addDocumentNonBlocking(collection(firestore, 'socialMetrics'), metric);
-            toast({ title: "Reach Logged", description: "Data saved successfully." });
-            setReachInput('');
-        } catch (e) {
-            toast({ variant: "destructive", title: "Error", description: "Failed to log reach." });
-        } finally {
-            setIsSubmittingReach(false);
-        }
-    };
 
     // Progress Logic
     const dailyGoals = { posts: 3, report: 1 };
@@ -747,7 +657,7 @@ const SocialMediaDashboard = () => {
     return (
         <div className="space-y-6">
             {/* Header with Progress */}
-            <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100 dark:from-indigo-950 dark:to-blue-950 dark:border-indigo-900">
+            <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100 dark:from-indigo-950 dark:to-blue-950 dark:border-indigo-900 shadow-sm border-2">
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <div>
@@ -764,11 +674,11 @@ const SocialMediaDashboard = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="flex items-center gap-2">
                             <div className={`h-2 w-2 rounded-full ${postsDone >= dailyGoals.posts ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <span className="text-sm">Posts: {postsDone}/{dailyGoals.posts}</span>
+                            <span className="text-sm font-medium">Posts: {postsDone}/{dailyGoals.posts}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className={`h-2 w-2 rounded-full ${reportsDone >= dailyGoals.report ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <span className="text-sm">Day End Report: {reportsDone}/{dailyGoals.report}</span>
+                            <span className="text-sm font-medium">Day End Report: {reportsDone}/{dailyGoals.report}</span>
                         </div>
                     </div>
                 </CardContent>
@@ -776,128 +686,67 @@ const SocialMediaDashboard = () => {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* Admin Tasks */}
-                <Card className="lg:col-span-1">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <ListTodo className="h-5 w-5" />
-                            Admin Tasks
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[300px] overflow-y-auto">
-                        <div className="space-y-3">
-                            {adminTasks?.map(t => (
-                                <div key={t.id} className="flex items-start gap-2 p-3 bg-muted rounded-md group">
-                                    <Checkbox id={`task-${t.id}`} />
-                                    <label htmlFor={`task-${t.id}`} className="text-sm leading-tight cursor-pointer">
-                                        {t.content}
-                                    </label>
-                                </div>
-                            ))}
-                            {adminTasks?.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No tasks assigned yet.</p>}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Log & View Reach */}
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <TrendingUp className="h-5 w-5" />
-                            Post Performance & Reach
+                        <CardTitle className="flex items-center gap-2 text-indigo-700">
+                            <ListTodo className="h-5 w-5" />
+                            Assigned Tasks
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                            <div className="space-y-2">
-                                <Label>Platform</Label>
-                                <Select value={platform} onValueChange={setPlatform}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Instagram">Instagram</SelectItem>
-                                        <SelectItem value="Facebook">Facebook</SelectItem>
-                                        <SelectItem value="TikTok">TikTok</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Reach Count</Label>
-                                <Input type="number" value={reachInput} onChange={e => setReachInput(e.target.value)} placeholder="0" />
-                            </div>
-                            <Button onClick={handleLogReach} disabled={isSubmittingReach}>
-                                {isSubmittingReach ? <Loader2 className="animate-spin h-4 w-4" /> : "Log Reach"}
-                            </Button>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {adminTasks?.map(t => (
+                                <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox id={`task-${t.id}`} className="mt-1" />
+                                        <div>
+                                            <p className="text-sm font-medium leading-none">{t.content}</p>
+                                            <p className="text-[10px] text-muted-foreground mt-1">{format(new Date(t.createdAt), 'MMM dd, yyyy')}</p>
+                                        </div>
+                                    </div>
+                                    <Button variant="ghost" size="sm" asChild>
+                                        <a href="/daily-tasks">View</a>
+                                    </Button>
+                                </div>
+                            ))}
+                            {adminTasks?.length === 0 && <p className="text-sm text-muted-foreground text-center py-6 italic">No active tasks assigned for your role.</p>}
                         </div>
-
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Platform</TableHead>
-                                    <TableHead className="text-right">Reach</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {reachMetrics?.map(m => (
-                                    <TableRow key={m.id}>
-                                        <TableCell className="text-xs">{format(new Date(m.date), 'MMM dd, HH:mm')}</TableCell>
-                                        <TableCell>{m.platform}</TableCell>
-                                        <TableCell className="text-right font-mono">{m.reach.toLocaleString()}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
                     </CardContent>
                 </Card>
 
-                {/* Google Sheet & Lead Assignment */}
-                <Card className="md:col-span-2 lg:col-span-3">
+                {/* Quick Shortcuts */}
+                <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <LinkIcon className="h-5 w-5" />
-                            Google Lead Sheet Management
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-pink-500" />
+                            Quick Actions
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="flex gap-4 items-end border-b pb-6">
-                            <div className="flex-1 space-y-2">
-                                <Label>Google Sheet URL</Label>
-                                <Input value={sheetLink} onChange={e => setSheetLink(e.target.value)} placeholder="Paste your Google Sheet link here..." />
-                            </div>
-                            <Button variant="secondary" onClick={handleSaveSettings} disabled={isUpdatingSettings}>
-                                {isUpdatingSettings ? <Loader2 className="animate-spin h-4 w-4" /> : "Save Link"}
-                            </Button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
-                            <div className="space-y-4">
-                                <h4 className="font-semibold text-sm">Assign Leads to Sales</h4>
-                                <div className="space-y-3">
-                                    <Select value={selectedSales} onValueChange={setSelectedSales}>
-                                        <SelectTrigger><SelectValue placeholder="Select Sales Executive" /></SelectTrigger>
-                                        <SelectContent>
-                                            {salesUsers?.map(u => (
-                                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button className="w-full" onClick={handleAssignLeads}>Assign Leads from Sheet</Button>
-                                    <p className="text-[10px] text-muted-foreground italic text-center">
-                                        This will create a high-priority task for the selected executive.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 bg-muted/40 p-4 rounded-lg">
-                                <h4 className="font-semibold text-sm">Quick Navigation</h4>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Button variant="outline" size="sm" asChild><Link href="/daily-posting"><Video className="mr-2 h-4 w-4" /> Log Posting</Link></Button>
-                                    <Button variant="outline" size="sm" asChild><Link href="/social-reporting"><FileText className="mr-2 h-4 w-4" /> Reports</Link></Button>
-                                    <Button variant="outline" size="sm" asChild><Link href="/social-inbox"><Share2 className="mr-2 h-4 w-4" /> Inbox</Link></Button>
-                                    <Button variant="outline" size="sm" asChild><Link href="/content-planner"><CalendarCheck className="mr-2 h-4 w-4" /> Planner</Link></Button>
-                                </div>
-                            </div>
-                        </div>
+                    <CardContent className="grid gap-3">
+                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-teal-100 hover:bg-teal-50 dark:border-teal-900 dark:hover:bg-teal-950/20 shadow-sm" asChild>
+                            <a href="/content-planner">
+                                <CalendarIcon className="h-4 w-4 text-teal-600" />
+                                <span className="text-xs font-semibold">Content Planner</span>
+                            </a>
+                        </Button>
+                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-indigo-100 hover:bg-indigo-50 dark:border-indigo-900 dark:hover:bg-indigo-950/20 shadow-sm" asChild>
+                            <a href="/analytics/reach">
+                                <TrendingUp className="h-4 w-4 text-indigo-600" />
+                                <span className="text-xs font-semibold">Reach Tracker</span>
+                            </a>
+                        </Button>
+                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-orange-100 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950/20 shadow-sm" asChild>
+                            <a href="/leads/assignment">
+                                <Users className="h-4 w-4 text-orange-600" />
+                                <span className="text-xs font-semibold">Lead Assignment</span>
+                            </a>
+                        </Button>
+                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-pink-100 hover:bg-pink-50 dark:border-pink-900 dark:hover:bg-pink-950/20 shadow-sm" asChild>
+                            <a href="/daily-posting">
+                                <Video className="h-4 w-4 text-pink-600" />
+                                <span className="text-xs font-semibold">Log Daily Posting</span>
+                            </a>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
