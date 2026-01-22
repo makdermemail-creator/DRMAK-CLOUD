@@ -154,7 +154,9 @@ const TaskFormDialog = ({
 export default function ManageTasksPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
+
+    if (isUserLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [selectedTask, setSelectedTask] = React.useState<AdminTaskTemplate | undefined>(undefined);

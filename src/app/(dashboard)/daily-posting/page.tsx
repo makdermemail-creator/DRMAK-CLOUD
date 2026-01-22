@@ -88,7 +88,6 @@ export default function DailyPostingPage() {
             platform: platform as any,
             activityType: activityType as any,
             description,
-            description,
             link: link.trim() || undefined,
             screenshotUrl: undefined,
             postedAt: new Date().toISOString(),
