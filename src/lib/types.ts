@@ -330,3 +330,25 @@ export type FeatureAccess = {
   features: { [key: string]: boolean };
 };
 
+export type ChatType = 'individual' | 'group';
+
+export type Chat = {
+  id: string;
+  type: ChatType;
+  participants: string[];
+  name?: string; // For group chats
+  avatarUrl?: string; // For group chats
+  lastMessage?: string;
+  lastMessageAt?: string; // ISO string
+  createdAt: string; // ISO string
+  createdBy: string; // User ID
+};
+
+export type Message = {
+  id: string;
+  senderId: string;
+  content: string;
+  timestamp: string; // ISO string
+  type: 'text' | 'image' | 'file';
+  readBy?: string[]; // Array of user IDs who have read the message
+};

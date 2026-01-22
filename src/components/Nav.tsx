@@ -11,6 +11,9 @@ import {
     SidebarMenuButton,
     SidebarFooter,
     useSidebar,
+    SidebarGroup,
+    SidebarGroupLabel,
+    SidebarGroupContent,
 } from '@/components/ui/sidebar';
 import Icon from '@/components/Icon';
 import {
@@ -33,6 +36,7 @@ import {
     HeartPulse,
     Share2,
     Video,
+    CalendarCheck,
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import {
@@ -110,7 +114,7 @@ const allMenuItems = [
     { id: 'leads', href: '/leads', label: 'Leads', icon: FileBarChart },
     { id: 'leadAssignment', href: '/leads/assignment', label: 'Lead Assignment', icon: Users },
     { id: 'dailyReporting', href: '/daily-reporting', label: 'Daily Reporting', icon: FileText },
-    { id: 'dailyPosting', href: '/daily-posting', label: 'Daily Posting', icon: Video },
+    { id: 'dailyPosting', href: '/daily-posting', label: 'Log Posting', icon: Video },
     { id: 'dailyTasks', href: '/daily-tasks', label: 'Daily Tasks', icon: ListTodo },
     { id: 'dailyProgress', href: '/daily-progress', label: 'Daily Progress', icon: TrendingUp },
 
@@ -119,10 +123,10 @@ const allMenuItems = [
 
 
     // Social Media Specific
-    { id: 'socialReporting', href: '/social-reporting', label: 'Social Reporting', icon: FileText },
-    { id: 'contentPlanner', href: '/content-planner', label: 'Content Planner', icon: Calendar },
-    { id: 'analytics', href: '/analytics', label: 'Social Analytics', icon: LineChart },
-    { id: 'socialInbox', href: '/social-inbox', label: 'Social Inbox', icon: Share2 },
+    { id: 'socialReporting', href: '/social-reporting', label: 'Reports', icon: FileText },
+    { id: 'contentPlanner', href: '/content-planner', label: 'Planner', icon: CalendarCheck },
+    { id: 'analytics', href: '/analytics', label: 'Analytics', icon: LineChart },
+    { id: 'socialInbox', href: '/social-inbox', label: 'Inbox', icon: Share2 },
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
 
     // Designer Specific
@@ -204,13 +208,13 @@ const NavContent = () => {
         }
 
         if (userProfile?.role === 'Designer') {
-            const designerAccess = ['designerWork', 'creativeBriefs'];
+            const designerAccess = ['designerWork', 'creativeBriefs', 'socialInbox'];
             return allMenuItems.filter(item => designerAccess.includes(item.id));
         }
 
         if (userProfile) {
             // For any other user without specific feature access, show a default minimal set.
-            const defaultAccess = ['dashboard', 'appointments', 'patients'];
+            const defaultAccess = ['dashboard', 'appointments', 'patients', 'socialInbox'];
             return allMenuItems.filter(item => defaultAccess.includes(item.id));
         }
 
@@ -228,6 +232,74 @@ const NavContent = () => {
 
     const moreMenuItems = filteredNavItems.filter(item => item.isMore);
     const mainMenuItems = filteredNavItems.filter(item => !item.isMore);
+
+    if (userProfile?.role === 'Social Media Manager') {
+        const overviewIds = ['dashboard'];
+        const toolIds = ['contentPlanner', 'dailyPosting', 'socialInbox'];
+        const insightIds = ['socialReporting', 'analytics', 'reachTracker', 'leadAssignment'];
+
+        const overviewItems = allMenuItems.filter(item => overviewIds.includes(item.id));
+        const toolItems = allMenuItems.filter(item => toolIds.includes(item.id));
+        const insightItems = allMenuItems.filter(item => insightIds.includes(item.id));
+
+        return (
+            <div className="space-y-4">
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4">Main</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {overviewItems.map((item) => (
+                                <SidebarMenuItem key={item.href}>
+                                    <Link href={item.href}>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
+                                            {item.icon && <item.icon />}
+                                            <span>{item.label}</span>
+                                        </SidebarMenuButton>
+                                    </Link>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500 px-4">Quick Tools</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {toolItems.map((item) => (
+                                <SidebarMenuItem key={item.href}>
+                                    <Link href={item.href}>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
+                                            {item.icon && <item.icon className="text-indigo-600" />}
+                                            <span className="font-bold text-slate-700">{item.label}</span>
+                                        </SidebarMenuButton>
+                                    </Link>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4">Insights & Assignment</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {insightItems.map((item) => (
+                                <SidebarMenuItem key={item.href}>
+                                    <Link href={item.href}>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
+                                            {item.icon && <item.icon />}
+                                            <span>{item.label}</span>
+                                        </SidebarMenuButton>
+                                    </Link>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+            </div>
+        );
+    }
 
     return (
         <SidebarMenu>

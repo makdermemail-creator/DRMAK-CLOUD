@@ -4,6 +4,7 @@ import {
     Activity,
     ArrowUpRight,
     CalendarCheck,
+    Calendar as CalendarIcon,
     CircleDollarSign,
     Users,
     Loader2,
@@ -619,140 +620,6 @@ const DoctorDashboard = () => {
     );
 };
 
-const SocialMediaDashboard = () => {
-    const firestore = useFirestore();
-    const { user } = useUser();
-    const { toast } = useToast();
-
-    // Data Fetching
-    const postQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        const today = startOfDay(new Date()).toISOString();
-        return query(collection(firestore, 'dailyPostings'), where('userId', '==', user.id), where('postedAt', '>=', today));
-    }, [firestore, user]);
-
-    const reportQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        const today = startOfDay(new Date()).toISOString();
-        return query(collection(firestore, 'socialReports'), where('userId', '==', user.id), where('reportDate', '>=', today));
-    }, [firestore, user]);
-
-    const tasksQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return query(collection(firestore, 'adminTaskTemplates'), where('category', '==', 'Social Media'), limit(5));
-    }, [firestore, user]);
-
-    const { data: todayPosts } = useCollection<DailyPosting>(postQuery);
-    const { data: todayReports } = useCollection<SocialReport>(reportQuery);
-    const { data: adminTasks } = useCollection<AdminTaskTemplate>(tasksQuery);
-
-    // Progress Logic
-    const dailyGoals = { posts: 3, report: 1 };
-    const postsDone = todayPosts?.length || 0;
-    const reportsDone = todayReports?.length || 0;
-    const totalGoal = dailyGoals.posts + dailyGoals.report;
-    const currentDone = Math.min(postsDone, dailyGoals.posts) + Math.min(reportsDone, dailyGoals.report);
-    const completionPercentage = (currentDone / totalGoal) * 100;
-
-    return (
-        <div className="space-y-6">
-            {/* Header with Progress */}
-            <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100 dark:from-indigo-950 dark:to-blue-950 dark:border-indigo-900 shadow-sm border-2">
-                <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <CardTitle className="text-2xl text-indigo-700 dark:text-indigo-300">Social Media Dashboard</CardTitle>
-                            <CardDescription>Target: {dailyGoals.posts} Posts & 1 Report Daily</CardDescription>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-3xl font-bold text-indigo-600">{Math.round(completionPercentage)}%</span>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Progress value={completionPercentage} className="h-3 mb-4" />
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center gap-2">
-                            <div className={`h-2 w-2 rounded-full ${postsDone >= dailyGoals.posts ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <span className="text-sm font-medium">Posts: {postsDone}/{dailyGoals.posts}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className={`h-2 w-2 rounded-full ${reportsDone >= dailyGoals.report ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <span className="text-sm font-medium">Day End Report: {reportsDone}/{dailyGoals.report}</span>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Admin Tasks */}
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-indigo-700">
-                            <ListTodo className="h-5 w-5" />
-                            Assigned Tasks
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {adminTasks?.map(t => (
-                                <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors group">
-                                    <div className="flex items-start gap-3">
-                                        <Checkbox id={`task-${t.id}`} className="mt-1" />
-                                        <div>
-                                            <p className="text-sm font-medium leading-none">{t.content}</p>
-                                            <p className="text-[10px] text-muted-foreground mt-1">{format(new Date(t.createdAt), 'MMM dd, yyyy')}</p>
-                                        </div>
-                                    </div>
-                                    <Button variant="ghost" size="sm" asChild>
-                                        <a href="/daily-tasks">View</a>
-                                    </Button>
-                                </div>
-                            ))}
-                            {adminTasks?.length === 0 && <p className="text-sm text-muted-foreground text-center py-6 italic">No active tasks assigned for your role.</p>}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Quick Shortcuts */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sm font-bold flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-pink-500" />
-                            Quick Actions
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-3">
-                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-teal-100 hover:bg-teal-50 dark:border-teal-900 dark:hover:bg-teal-950/20 shadow-sm" asChild>
-                            <a href="/content-planner">
-                                <CalendarIcon className="h-4 w-4 text-teal-600" />
-                                <span className="text-xs font-semibold">Content Planner</span>
-                            </a>
-                        </Button>
-                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-indigo-100 hover:bg-indigo-50 dark:border-indigo-900 dark:hover:bg-indigo-950/20 shadow-sm" asChild>
-                            <a href="/analytics/reach">
-                                <TrendingUp className="h-4 w-4 text-indigo-600" />
-                                <span className="text-xs font-semibold">Reach Tracker</span>
-                            </a>
-                        </Button>
-                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-orange-100 hover:bg-orange-50 dark:border-orange-900 dark:hover:bg-orange-950/20 shadow-sm" asChild>
-                            <a href="/leads/assignment">
-                                <Users className="h-4 w-4 text-orange-600" />
-                                <span className="text-xs font-semibold">Lead Assignment</span>
-                            </a>
-                        </Button>
-                        <Button variant="outline" className="w-full justify-start gap-3 h-12 border-pink-100 hover:bg-pink-50 dark:border-pink-900 dark:hover:bg-pink-950/20 shadow-sm" asChild>
-                            <a href="/daily-posting">
-                                <Video className="h-4 w-4 text-pink-600" />
-                                <span className="text-xs font-semibold">Log Daily Posting</span>
-                            </a>
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
-    );
-};
 
 const DesignerDashboard = () => {
     const firestore = useFirestore();
@@ -939,16 +806,19 @@ const ReceptionistDashboard = () => {
 
 
 export default function Dashboard() {
-    const { user, isLoading } = useUser();
+    const { user, isUserLoading } = useUser();
     const router = useRouter();
 
     React.useEffect(() => {
-        if (!isLoading && user?.role === 'Sales') {
+        if (!isUserLoading && user?.role === 'Sales') {
             router.push('/sales-dashboard');
         }
-    }, [user, isLoading, router]);
+        if (!isUserLoading && user?.role === 'Social Media Manager') {
+            router.push('/social-dashboard');
+        }
+    }, [user, isUserLoading, router]);
 
-    if (isLoading) {
+    if (isUserLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -965,7 +835,7 @@ export default function Dashboard() {
     }
 
     if (user?.role === 'Social Media Manager') {
-        return <SocialMediaDashboard />;
+        return <div className="p-8 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>;
     }
 
     if (user?.role === 'Designer') {
