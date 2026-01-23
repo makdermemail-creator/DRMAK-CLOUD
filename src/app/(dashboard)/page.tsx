@@ -99,8 +99,14 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
     const [patient, setPatient] = React.useState<string>('');
     const [doctor, setDoctor] = React.useState<string>('');
 
-    const { data: patients } = useCollection<Patient>(null);
-    const { data: doctors } = useCollection<Doctor>(null);
+    const firestore = useFirestore();
+
+    const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
+    const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+
+    const { data: patients } = useCollection<Patient>(patientsRef);
+    const { data: doctors } = useCollection<Doctor>(doctorsRef);
 
     React.useEffect(() => {
         if (open) {
@@ -125,7 +131,9 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
             appointmentDateTime: selectedTime.toISOString(),
             status: 'Waiting',
         };
-        addDocumentNonBlocking(null, newAppointment);
+        if (appointmentsRef) {
+            addDocumentNonBlocking(appointmentsRef, newAppointment);
+        }
         toast({
             title: 'Appointment Booked (Mock)',
             description: `Appointment has been successfully scheduled for ${format(selectedTime, 'PPp')}.`,
@@ -621,182 +629,6 @@ const DoctorDashboard = () => {
 };
 
 
-const DesignerDashboard = () => {
-    const firestore = useFirestore();
-    const { user } = useUser();
-    const { toast } = useToast();
-
-    // Data Fetching
-    const workQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        const today = startOfDay(new Date()).toISOString();
-        return query(collection(firestore, 'designerWorks'), where('userId', '==', user.id), where('date', '>=', today));
-    }, [firestore, user]);
-
-    const tasksQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return query(collection(firestore, 'adminTaskTemplates'), where('category', '==', 'Designer'));
-    }, [firestore, user]);
-
-    const recentWorkQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return query(collection(firestore, 'designerWorks'), where('userId', '==', user.id), orderBy('date', 'desc'), limit(5));
-    }, [firestore, user]);
-
-    const { data: todayWork } = useCollection<DesignerWork>(workQuery);
-    const { data: adminTasks } = useCollection<AdminTaskTemplate>(tasksQuery);
-    const { data: recentWork } = useCollection<DesignerWork>(recentWorkQuery);
-
-    // Form States
-    const [assetType, setAssetType] = React.useState('Post Graphic');
-    const [title, setTitle] = React.useState('');
-    const [assetLink, setAssetLink] = React.useState('');
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-    const handleLogWork = async () => {
-        if (!title.trim()) {
-            toast({ variant: "destructive", title: "Wait", description: "Please enter a title for your design." });
-            return;
-        }
-        setIsSubmitting(true);
-        try {
-            const entry: Omit<DesignerWork, 'id'> = {
-                userId: user?.id || '',
-                date: new Date().toISOString(),
-                assetType: assetType as any,
-                title,
-                link: assetLink,
-                status: 'Draft',
-            };
-            await addDocumentNonBlocking(collection(firestore, 'designerWorks'), entry);
-            toast({ title: "Work Logged", description: "Your design entry has been saved." });
-            setTitle('');
-            setAssetLink('');
-        } catch (e) {
-            toast({ variant: "destructive", title: "Error", description: "Failed to log work." });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    // Progress Logic
-    const dailyGoal = 3;
-    const workDone = todayWork?.length || 0;
-    const completionPercentage = Math.min((workDone / dailyGoal) * 100, 100);
-
-    return (
-        <div className="space-y-6">
-            {/* Header with Progress */}
-            <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 dark:from-purple-950 dark:to-pink-950 dark:border-purple-900">
-                <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <CardTitle className="text-2xl text-purple-700 dark:text-purple-300">Designer Workstation</CardTitle>
-                            <CardDescription>Creative Goal: {dailyGoal} Designs Daily</CardDescription>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-3xl font-bold text-purple-600">{Math.round(completionPercentage)}%</span>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Progress value={completionPercentage} className="h-3 mb-4" />
-                    <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${workDone >= dailyGoal ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                        <span className="text-sm">Designs Produced: {workDone}/{dailyGoal}</span>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Admin Tasks */}
-                <Card className="lg:col-span-1">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <ListTodo className="h-5 w-5" />
-                            Creative Briefs
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[400px] overflow-y-auto">
-                        <div className="space-y-3">
-                            {adminTasks?.map(t => (
-                                <div key={t.id} className="flex items-start gap-2 p-3 bg-muted rounded-md group">
-                                    <Checkbox id={`task-${t.id}`} />
-                                    <label htmlFor={`task-${t.id}`} className="text-sm leading-tight cursor-pointer">
-                                        {t.content}
-                                    </label>
-                                </div>
-                            ))}
-                            {adminTasks?.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No briefs assigned yet.</p>}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Log & Recent Work */}
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5" />
-                            Log New Design
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Asset Type</Label>
-                                <Select value={assetType} onValueChange={setAssetType}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Post Graphic">Post Graphic</SelectItem>
-                                        <SelectItem value="Story Design">Story Design</SelectItem>
-                                        <SelectItem value="Youtube Thumbnail">Youtube Thumbnail</SelectItem>
-                                        <SelectItem value="Reel Edit">Reel Edit</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Asset Title</Label>
-                                <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Winter Sale Social Post" />
-                            </div>
-                            <div className="sm:col-span-2 space-y-2">
-                                <Label>Asset Link (Optional)</Label>
-                                <Input value={assetLink} onChange={e => setAssetLink(e.target.value)} placeholder="Canva, Figma, or Drive link" />
-                            </div>
-                        </div>
-                        <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={handleLogWork} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : "Log Creative Output"}
-                        </Button>
-
-                        <div className="pt-4">
-                            <h4 className="font-semibold text-sm mb-3">Recent Projects</h4>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Asset</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead className="text-right">Status</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {recentWork?.map(w => (
-                                        <TableRow key={w.id}>
-                                            <TableCell className="font-medium">{w.title}</TableCell>
-                                            <TableCell className="text-xs">{w.assetType}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Badge variant="outline" className="text-[10px]">{w.status}</Badge>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
-    );
-};
 
 const ReceptionistDashboard = () => {
     // For now, the receptionist dashboard can be the same as the admin dashboard
@@ -815,6 +647,9 @@ export default function Dashboard() {
         }
         if (!isUserLoading && user?.role === 'Social Media Manager') {
             router.push('/social-dashboard');
+        }
+        if (!isUserLoading && user?.role === 'Designer') {
+            router.push('/designer-dashboard');
         }
     }, [user, isUserLoading, router]);
 
@@ -838,9 +673,6 @@ export default function Dashboard() {
         return <div className="p-8 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>;
     }
 
-    if (user?.role === 'Designer') {
-        return <DesignerDashboard />;
-    }
 
     if (user?.role === 'Receptionist') {
         return <ReceptionistDashboard />;

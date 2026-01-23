@@ -8,6 +8,9 @@ import {
     CardTitle
 } from '@/components/ui/card';
 import {
+    Badge
+} from "@/components/ui/badge";
+import {
     Progress
 } from "@/components/ui/progress";
 import {
@@ -33,6 +36,33 @@ import {
     startOfDay
 } from 'date-fns';
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DialogTrigger
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow
+} from '@/components/ui/table';
+import {
     ListTodo,
     Sparkles,
     Activity,
@@ -42,10 +72,16 @@ import {
     ArrowUpRight,
     CalendarCheck,
     Share2,
-    LineChart
+    LineChart,
+    Plus,
+    Palette,
+    ExternalLink
 } from 'lucide-react';
-import type { DailyPosting, SocialReport, AdminTaskTemplate } from '@/lib/types';
+import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { addDocumentNonBlocking } from '@/firebase';
+import { orderBy } from 'firebase/firestore';
 
 export default function SocialDashboardPage() {
     const firestore = useFirestore();
@@ -73,6 +109,54 @@ export default function SocialDashboardPage() {
     const { data: todayReports, isLoading: reportsLoading } = useCollection<SocialReport>(reportQuery);
     const { data: adminTasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksQuery);
 
+    // Design Requests Query
+    const requestsQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return query(collection(firestore, 'designRequests'), where('requesterId', '==', user.id), orderBy('createdAt', 'desc'), limit(10));
+    }, [firestore, user]);
+
+    const { data: designRequests, isLoading: requestsLoading } = useCollection<DesignRequest>(requestsQuery);
+
+    const { toast } = useToast();
+
+    // Design Request Form State
+    const [isRequestModalOpen, setIsRequestModalOpen] = React.useState(false);
+    const [requestTitle, setRequestTitle] = React.useState('');
+    const [requestDesc, setRequestDesc] = React.useState('');
+    const [requestType, setRequestType] = React.useState('Post Graphic');
+    const [requestDeadline, setRequestDeadline] = React.useState('');
+    const [isRequesting, setIsRequesting] = React.useState(false);
+
+    const handleRequestDesign = async () => {
+        if (!requestTitle.trim() || !user || !firestore) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please enter a title.' });
+            return;
+        }
+
+        setIsRequesting(true);
+        try {
+            const newRequest: Omit<DesignRequest, 'id'> = {
+                requesterId: user.id,
+                title: requestTitle,
+                description: requestDesc,
+                assetType: requestType as any,
+                status: 'Pending',
+                createdAt: new Date().toISOString(),
+                deadline: requestDeadline || undefined
+            };
+
+            await addDocumentNonBlocking(collection(firestore, 'designRequests'), newRequest);
+            toast({ title: 'Request Sent', description: 'The designer team has been notified.' });
+            setIsRequestModalOpen(false);
+            setRequestTitle('');
+            setRequestDesc('');
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to send request.' });
+        } finally {
+            setIsRequesting(false);
+        }
+    };
+
     // Progress Logic
     const dailyGoals = { posts: 3, report: 1 };
     const postsDone = todayPosts?.length || 0;
@@ -97,6 +181,73 @@ export default function SocialDashboardPage() {
                     <p className="text-slate-500 font-medium">Monitoring your daily digital presence & task queue.</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="bg-purple-600 hover:bg-purple-700 font-bold border-none shadow-lg shadow-purple-200">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Request Creative
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Palette className="h-5 w-5 text-purple-600" />
+                                    New Design Request
+                                </DialogTitle>
+                                <DialogDescription>Brief the designer on what you need for your social campaign.</DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-slate-500">Asset Title</Label>
+                                    <Input
+                                        placeholder="e.g., Winter Sale Instagram Post"
+                                        value={requestTitle}
+                                        onChange={e => setRequestTitle(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-slate-500">Asset Type</Label>
+                                    <Select value={requestType} onValueChange={setRequestType}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Post Graphic">Post Graphic</SelectItem>
+                                            <SelectItem value="Story Design">Story Design</SelectItem>
+                                            <SelectItem value="Youtube Thumbnail">Youtube Thumbnail</SelectItem>
+                                            <SelectItem value="Reel Edit">Reel Edit</SelectItem>
+                                            <SelectItem value="Banner">Banner</SelectItem>
+                                            <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-slate-500">Brief / Requirements</Label>
+                                    <Textarea
+                                        placeholder="Color codes, text to include, dimensions, etc."
+                                        className="h-24"
+                                        value={requestDesc}
+                                        onChange={e => setRequestDesc(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-slate-500">Deadline (Optional)</Label>
+                                    <Input type="date" value={requestDeadline} onChange={e => setRequestDeadline(e.target.value)} />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsRequestModalOpen(false)}>Cancel</Button>
+                                <Button
+                                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                                    onClick={handleRequestDesign}
+                                    disabled={isRequesting}
+                                >
+                                    {isRequesting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                                    Send Brief to Designer
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <Button variant="outline" className="border-indigo-100 text-indigo-700 font-bold" asChild>
                         <a href="/content-planner">
                             <CalendarCheck className="mr-2 h-4 w-4" />
@@ -150,6 +301,64 @@ export default function SocialDashboardPage() {
             </Card>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Design Requests Tracking */}
+                <Card className="lg:col-span-2 shadow-sm border-slate-200">
+                    <CardHeader className="border-b bg-slate-50/50 py-4">
+                        <CardTitle className="flex items-center gap-2 text-purple-800 text-base font-black uppercase tracking-tight">
+                            <Palette className="h-5 w-5 text-purple-600" />
+                            Requested Creatives
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-slate-50/30">
+                                    <TableHead className="font-bold text-slate-500 py-4 h-11">Asset</TableHead>
+                                    <TableHead className="font-bold text-slate-500 h-11">Status</TableHead>
+                                    <TableHead className="font-bold text-slate-500 h-11 text-right">Action</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {designRequests?.map(req => (
+                                    <TableRow key={req.id} className="hover:bg-slate-50/50">
+                                        <TableCell>
+                                            <p className="font-bold text-slate-800 text-sm">{req.title}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{req.assetType}</p>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge className={`
+                                                ${req.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
+                                                    req.status === 'Submitted' ? 'bg-blue-100 text-blue-700 animate-pulse' :
+                                                        'bg-slate-100 text-slate-600'} border-none font-bold text-[10px] h-5
+                                            `}>
+                                                {req.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {req.submissionUrl ? (
+                                                <Button size="sm" variant="outline" className="h-7 text-[10px] font-black border-blue-200 text-blue-700 hover:bg-blue-50" asChild>
+                                                    <a href={req.submissionUrl} target="_blank" rel="noopener noreferrer">
+                                                        VIEW ASSET
+                                                    </a>
+                                                </Button>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-300 italic">Designing...</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {designRequests?.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="h-24 text-center text-slate-400 text-xs italic">
+                                            No design requests yet.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
                 {/* Admin Tasks */}
                 <Card className="lg:col-span-2 shadow-sm border-slate-200">
                     <CardHeader className="border-b bg-slate-50/50 py-4">

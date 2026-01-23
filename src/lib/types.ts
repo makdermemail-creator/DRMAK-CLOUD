@@ -352,3 +352,31 @@ export type Message = {
   type: 'text' | 'image' | 'file';
   readBy?: string[]; // Array of user IDs who have read the message
 };
+
+export type DesignRequest = {
+  id: string;
+  requesterId: string;
+  title: string;
+  description: string;
+  assetType: DesignerWork['assetType'];
+  status: 'Pending' | 'In Progress' | 'Submitted' | 'Approved' | 'Rejected';
+  submissionUrl?: string; // Image, Video link or URL
+  deadline?: string; // ISO string
+  createdAt: string; // ISO string
+};
+
+export type SalesTraining = {
+  id: string;
+  title: string;
+  content: string; // Rich text/markdown content with headings
+  videoUrl?: string;
+  createdAt: string; // ISO string
+  createdBy: string; // Admin userId
+};
+
+export type SalesTrainingCompletion = {
+  id: string; // userId_trainingId
+  userId: string;
+  trainingId: string;
+  completedAt: string; // ISO string
+};

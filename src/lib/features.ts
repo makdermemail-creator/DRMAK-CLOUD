@@ -1,5 +1,6 @@
 export const availableFeatures = [
     // General & Admin
+    { id: 'trainings', label: 'Training', href: '/trainings' },
     { id: 'dashboard', label: 'Dashboard Access', href: '/' },
     { id: 'appointments', label: 'Appointments Management', href: '/appointments' },
     { id: 'patients', label: 'Patient Management', href: '/patients' },
@@ -28,6 +29,7 @@ export const availableFeatures = [
     { id: 'dailyPosting', label: 'Daily Posting (Sales)', href: '/daily-posting' },
     { id: 'dailyTasks', label: 'Daily Tasks (Sales)', href: '/daily-tasks' },
     { id: 'dailyProgress', label: 'Daily Progress (Sales)', href: '/daily-progress' },
+
 
     // Social Media Specific
     { id: 'socialReporting', label: 'Social Media Reporting', href: '/social-reporting' },

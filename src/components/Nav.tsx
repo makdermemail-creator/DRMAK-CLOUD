@@ -37,6 +37,7 @@ import {
     Share2,
     Video,
     CalendarCheck,
+    GraduationCap,
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import {
@@ -53,6 +54,11 @@ import { Skeleton } from './ui/skeleton';
 const allMenuItems = [
     // General
     { id: 'dashboard', href: '/', label: 'Dashboard', icon: LayoutDashboard },
+
+    // Designer Specific
+    { id: 'designerWork', href: '/designer-dashboard', label: 'Workstation', icon: LayoutDashboard },
+    { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
+
     { id: 'appointments', href: '/appointments', label: 'Appointments', icon: Calendar },
     { id: 'patients', href: '/patients', label: 'Patients', icon: Users },
     { id: 'doctors', href: '/doctors', label: 'Doctors', icon: Stethoscope },
@@ -108,6 +114,7 @@ const allMenuItems = [
     { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
     { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: FileBarChart },
     { id: 'taskManagement', href: '/admin/manage-tasks', label: 'Manage Tasks', icon: ListTodo },
+    { id: 'trainings', href: '/admin/trainings', label: 'Manage Trainings', icon: GraduationCap },
 
     // Sales Specific
     { id: 'salesDashboard', href: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -117,6 +124,8 @@ const allMenuItems = [
     { id: 'dailyPosting', href: '/daily-posting', label: 'Log Posting', icon: Video },
     { id: 'dailyTasks', href: '/daily-tasks', label: 'Daily Tasks', icon: ListTodo },
     { id: 'dailyProgress', href: '/daily-progress', label: 'Daily Progress', icon: TrendingUp },
+    { id: 'trainings_hub', href: '/trainings', label: 'Trainings', icon: GraduationCap },
+
 
     // Doctor Specific (already included in 'more')
     { id: 'ePrescription', href: '/e-prescription', label: 'E-Prescription', icon: FileText, isMore: true },
@@ -128,10 +137,6 @@ const allMenuItems = [
     { id: 'analytics', href: '/analytics', label: 'Analytics', icon: LineChart },
     { id: 'socialInbox', href: '/social-inbox', label: 'Inbox', icon: Share2 },
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
-
-    // Designer Specific
-    { id: 'designerWork', href: '/', label: 'Workstation', icon: LayoutDashboard },
-    { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
 ];
 
 const SidebarMenuSkeleton = ({ showIcon }: { showIcon?: boolean }) => {
@@ -187,6 +192,9 @@ const NavContent = () => {
                 // Check direct feature match
                 if (userProfile.featureAccess?.[item.id]) return true;
 
+                // Special handling for unified Training feature
+                if (item.id === 'trainings_hub' && userProfile.featureAccess?.['trainings']) return true;
+
                 // For menus, check if any sub-item is allowed (or if the menu itself is enabled)
                 if (item.subItems) {
                     return item.subItems.some(sub => userProfile.featureAccess?.[sub.id]);
@@ -208,11 +216,17 @@ const NavContent = () => {
         }
 
         if (userProfile?.role === 'Designer') {
-            const designerAccess = ['designerWork', 'creativeBriefs', 'socialInbox'];
+            const designerAccess = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks'];
             return allMenuItems.filter(item => designerAccess.includes(item.id));
         }
 
+        if (userProfile?.role === 'Sales') {
+            const salesAccess = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub'];
+            return allMenuItems.filter(item => salesAccess.includes(item.id));
+        }
+
         if (userProfile) {
+
             // For any other user without specific feature access, show a default minimal set.
             const defaultAccess = ['dashboard', 'appointments', 'patients', 'socialInbox'];
             return allMenuItems.filter(item => defaultAccess.includes(item.id));
@@ -249,7 +263,7 @@ const NavContent = () => {
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {overviewItems.map((item) => (
-                                <SidebarMenuItem key={item.href}>
+                                <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
                                             {item.icon && <item.icon />}
@@ -267,7 +281,7 @@ const NavContent = () => {
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {toolItems.map((item) => (
-                                <SidebarMenuItem key={item.href}>
+                                <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
                                             {item.icon && <item.icon className="text-indigo-600" />}
@@ -285,7 +299,7 @@ const NavContent = () => {
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {insightItems.map((item) => (
-                                <SidebarMenuItem key={item.href}>
+                                <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
                                             {item.icon && <item.icon />}
@@ -332,7 +346,7 @@ const NavContent = () => {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 ) : (
-                    <SidebarMenuItem key={item.href}>
+                    <SidebarMenuItem key={item.id}>
                         <Link href={item.href}>
                             <SidebarMenuButton
                                 isActive={pathname === item.href}

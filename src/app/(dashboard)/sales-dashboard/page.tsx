@@ -2,10 +2,10 @@
 import * as React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import type { User, Lead, DailyPosting, DailyReport, DailyTask } from '@/lib/types';
+import type { User, Lead, DailyPosting, DailyReport, DailyTask, SalesTraining, SalesTrainingCompletion } from '@/lib/types';
 import { LeadFormDialog } from '@/components/leads/LeadFormDialog';
-import { collection, query, where, orderBy, limit, doc, getDoc, addDoc } from 'firebase/firestore';
-import { Loader2, TrendingUp, Users, Video, FileText, RefreshCw, Upload, PlusCircle } from 'lucide-react';
+import { collection, query, where, orderBy, limit, doc, getDoc, addDoc, setDoc } from 'firebase/firestore';
+import { Loader2, TrendingUp, Users, Video, FileText, RefreshCw, Upload, PlusCircle, GraduationCap, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, RadialBarChart, RadialBar } from 'recharts';
@@ -46,6 +46,16 @@ export default function SalesDashboardPage() {
         return query(collection(firestore, 'dailyTasks'), where('userId', '==', user.id), where('status', '==', 'Pending'));
     }, [firestore, user]);
 
+    const trainingsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'salesTrainings'), orderBy('createdAt', 'desc'));
+    }, [firestore]);
+
+    const completionsQuery = useMemoFirebase(() => {
+        if (!firestore || !user?.id) return null;
+        return query(collection(firestore, 'salesTrainingCompletions'), where('userId', '==', user.id));
+    }, [firestore, user]);
+
     const usersQuery = useMemoFirebase(() => {
         if (!firestore) return null;
         return query(collection(firestore, 'users'));
@@ -55,6 +65,8 @@ export default function SalesDashboardPage() {
     const { data: postings, isLoading: postingsLoading } = useCollection<DailyPosting>(postingsQuery);
     const { data: reports, isLoading: reportsLoading } = useCollection<DailyReport>(reportsQuery);
     const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
+    const { data: trainings, isLoading: trainingsLoading } = useCollection<SalesTraining>(trainingsQuery);
+    const { data: completions, isLoading: completionsLoading } = useCollection<SalesTrainingCompletion>(completionsQuery);
     const { data: usersList } = useCollection<User>(usersQuery);
 
     const stats = React.useMemo(() => {
@@ -147,7 +159,29 @@ export default function SalesDashboardPage() {
         updateDocumentNonBlocking(taskRef, { status: isCompleted ? 'Completed' : 'Pending' });
     };
 
-    if (!mounted || userLoading || leadsLoading || postingsLoading || reportsLoading || tasksLoading) {
+    const handleMarkTrainingComplete = async (trainingId: string) => {
+        if (!firestore || !user) return;
+        const completionId = `${user.id}_${trainingId}`;
+        const completionRef = doc(firestore, 'salesTrainingCompletions', completionId);
+
+        try {
+            await setDoc(completionRef, {
+                id: completionId,
+                userId: user.id,
+                trainingId,
+                completedAt: new Date().toISOString()
+            });
+            toast({ title: 'Training Completed', description: 'Great job! Training marked as complete.' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to update completion status.' });
+        }
+    };
+
+    const isTrainingCompleted = (trainingId: string) => {
+        return completions?.some(c => c.trainingId === trainingId);
+    };
+
+    if (!mounted || userLoading || leadsLoading || postingsLoading || reportsLoading || tasksLoading || trainingsLoading || completionsLoading) {
         return (
             <div className="flex justify-center items-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -296,22 +330,77 @@ export default function SalesDashboardPage() {
                 </Card>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Lead Activity (Last 7 Days)</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="leads" fill="#3b82f6" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <GraduationCap className="h-5 w-5 text-primary" />
+                            Sales Training Materials
+                        </CardTitle>
+                        <CardDescription>Enhance your skills with these training modules.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {trainings?.map(training => {
+                            const completed = isTrainingCompleted(training.id);
+                            return (
+                                <div key={training.id} className="flex flex-col p-4 border rounded-lg bg-card hover:shadow-md transition-shadow">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h3 className="font-semibold text-lg">{training.title}</h3>
+                                                {completed && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                            </div>
+                                            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                                                {training.content}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col gap-2 shrink-0">
+                                            {training.videoUrl && (
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <a href={training.videoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+                                                        <Video className="h-4 w-4" /> Watch
+                                                    </a>
+                                                </Button>
+                                            )}
+                                            {!completed ? (
+                                                <Button size="sm" onClick={() => handleMarkTrainingComplete(training.id)}>
+                                                    Mark Complete
+                                                </Button>
+                                            ) : (
+                                                <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" /> Completed
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {trainings?.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground italic">
+                                No training materials available at the moment.
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Lead Activity (Last 7 Days)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="date" />
+                                <YAxis />
+                                <Tooltip />
+                                <Bar dataKey="leads" fill="#3b82f6" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
 
             <LeadFormDialog
                 open={isAddLeadOpen}

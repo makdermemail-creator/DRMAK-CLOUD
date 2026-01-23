@@ -156,8 +156,6 @@ export default function ManageTasksPage() {
     const { toast } = useToast();
     const { user, isUserLoading } = useUser();
 
-    if (isUserLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
-
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [selectedTask, setSelectedTask] = React.useState<AdminTaskTemplate | undefined>(undefined);
 
@@ -180,6 +178,8 @@ export default function ManageTasksPage() {
         if (!users) return new Map();
         return new Map(users.map(u => [u.id, u.name]));
     }, [users]);
+
+    if (isUserLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
     const handleAdd = () => {
         setSelectedTask(undefined);
