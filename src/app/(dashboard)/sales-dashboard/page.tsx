@@ -12,6 +12,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Checkbox } from '@/components/ui/checkbox';
 import { updateDocumentNonBlocking } from '@/firebase';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
+import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
+import { Eye } from 'lucide-react';
 
 export default function SalesDashboardPage() {
     const firestore = useFirestore();
@@ -21,6 +23,8 @@ export default function SalesDashboardPage() {
     const [sheetUrl, setSheetUrl] = React.useState<string | null>(null);
     const [mounted, setMounted] = React.useState(false);
     const [isAddLeadOpen, setIsAddLeadOpen] = React.useState(false);
+    const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
     React.useEffect(() => {
         setMounted(true);
@@ -343,31 +347,51 @@ export default function SalesDashboardPage() {
                         {trainings?.map(training => {
                             const completed = isTrainingCompleted(training.id);
                             return (
-                                <div key={training.id} className="flex flex-col p-4 border rounded-lg bg-card hover:shadow-md transition-shadow">
+                                <div
+                                    key={training.id}
+                                    className="flex flex-col p-4 border rounded-lg bg-card hover:shadow-md transition-all cursor-pointer group"
+                                    onClick={() => {
+                                        setSelectedTraining(training);
+                                        setIsDetailOpen(true);
+                                    }}
+                                >
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <h3 className="font-semibold text-lg">{training.title}</h3>
+                                                <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">{training.title}</h3>
                                                 {completed && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                                             </div>
                                             <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
                                                 {training.content}
                                             </p>
                                         </div>
-                                        <div className="flex flex-col gap-2 shrink-0">
-                                            {training.videoUrl && (
-                                                <Button variant="outline" size="sm" asChild>
-                                                    <a href={training.videoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
-                                                        <Video className="h-4 w-4" /> Watch
-                                                    </a>
+                                        <div className="flex flex-col gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8"
+                                                    onClick={() => {
+                                                        setSelectedTraining(training);
+                                                        setIsDetailOpen(true);
+                                                    }}
+                                                >
+                                                    <Eye className="h-4 w-4" />
                                                 </Button>
-                                            )}
+                                                {training.videoUrl && (
+                                                    <Button variant="outline" size="sm" asChild className="h-8">
+                                                        <a href={training.videoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+                                                            <Video className="h-4 w-4" /> Watch
+                                                        </a>
+                                                    </Button>
+                                                )}
+                                            </div>
                                             {!completed ? (
-                                                <Button size="sm" onClick={() => handleMarkTrainingComplete(training.id)}>
+                                                <Button size="sm" onClick={() => handleMarkTrainingComplete(training.id)} className="h-8">
                                                     Mark Complete
                                                 </Button>
                                             ) : (
-                                                <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1">
+                                                <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1 bg-green-50 py-1 rounded">
                                                     <CheckCircle2 className="h-3 w-3" /> Completed
                                                 </div>
                                             )}
@@ -406,6 +430,12 @@ export default function SalesDashboardPage() {
                 open={isAddLeadOpen}
                 onOpenChange={setIsAddLeadOpen}
                 users={usersList || []}
+            />
+
+            <TrainingDetailDialog
+                training={selectedTraining}
+                open={isDetailOpen}
+                onOpenChange={setIsDetailOpen}
             />
         </div>
     );

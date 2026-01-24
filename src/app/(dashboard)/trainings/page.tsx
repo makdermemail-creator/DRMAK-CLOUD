@@ -7,11 +7,15 @@ import { collection, query, orderBy, where, doc, setDoc } from 'firebase/firesto
 import { Loader2, Video, GraduationCap, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
+import { Eye } from 'lucide-react';
 
 export default function TrainingsPage() {
     const firestore = useFirestore();
     const { user, isUserLoading } = useUser();
     const { toast } = useToast();
+    const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
     const trainingsQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -74,11 +78,18 @@ export default function TrainingsPage() {
                 {trainings?.map(training => {
                     const completed = isTrainingCompleted(training.id);
                     return (
-                        <Card key={training.id} className={`overflow-hidden border-l-4 ${completed ? 'border-l-green-500' : 'border-l-primary'} hover:shadow-lg transition-all`}>
+                        <Card
+                            key={training.id}
+                            className={`overflow-hidden border-l-4 ${completed ? 'border-l-green-500' : 'border-l-primary'} hover:shadow-lg transition-all cursor-pointer group`}
+                            onClick={() => {
+                                setSelectedTraining(training);
+                                setIsDetailOpen(true);
+                            }}
+                        >
                             <CardHeader className="pb-3 bg-slate-50/50">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <CardTitle className="text-xl">{training.title}</CardTitle>
+                                        <CardTitle className="text-xl group-hover:text-primary transition-colors">{training.title}</CardTitle>
                                         {completed && <CheckCircle2 className="h-5 w-5 text-green-500" />}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
@@ -87,15 +98,26 @@ export default function TrainingsPage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-4">
-                                <div className="prose prose-sm max-w-none text-slate-600 whitespace-pre-wrap">
+                                <div className="prose prose-sm max-w-none text-slate-600 line-clamp-3">
                                     {training.content}
                                 </div>
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2">
-                                    <div>
+                                <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                                setSelectedTraining(training);
+                                                setIsDetailOpen(true);
+                                            }}
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </Button>
                                         {training.videoUrl && (
                                             <Button variant="outline" size="sm" asChild className="gap-2">
                                                 <a href={training.videoUrl} target="_blank" rel="noopener noreferrer">
-                                                    <Video className="h-4 w-4" /> Watch Video Tutorial
+                                                    <Video className="h-4 w-4" /> Watch Video
                                                 </a>
                                             </Button>
                                         )}
@@ -125,6 +147,12 @@ export default function TrainingsPage() {
                     </div>
                 )}
             </div>
+
+            <TrainingDetailDialog
+                training={selectedTraining}
+                open={isDetailOpen}
+                onOpenChange={setIsDetailOpen}
+            />
         </div>
     );
 }

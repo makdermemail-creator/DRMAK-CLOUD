@@ -24,6 +24,8 @@ import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { SalesTraining } from '@/lib/types';
+import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
+import { Eye } from 'lucide-react';
 
 export default function AdminTrainingsPage() {
     const firestore = useFirestore();
@@ -37,6 +39,8 @@ export default function AdminTrainingsPage() {
     const [content, setContent] = React.useState('');
     const [videoUrl, setVideoUrl] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
     const trainingsQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -161,7 +165,17 @@ export default function AdminTrainingsPage() {
                                     <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="animate-spin inline" /></TableCell></TableRow>
                                 ) : trainings?.map(t => (
                                     <TableRow key={t.id}>
-                                        <TableCell className="font-medium">{t.title}</TableCell>
+                                        <TableCell className="font-medium">
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedTraining(t);
+                                                    setIsDetailOpen(true);
+                                                }}
+                                                className="hover:text-primary hover:underline underline-offset-4 transition-colors text-left"
+                                            >
+                                                {t.title}
+                                            </button>
+                                        </TableCell>
                                         <TableCell>
                                             {t.videoUrl ? (
                                                 <a href={t.videoUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
@@ -174,7 +188,18 @@ export default function AdminTrainingsPage() {
                                         <TableCell className="text-sm text-muted-foreground">
                                             {format(new Date(t.createdAt), 'MMM dd, yyyy')}
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right flex items-center justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => {
+                                                    setSelectedTraining(t);
+                                                    setIsDetailOpen(true);
+                                                }}
+                                                title="View Details"
+                                            >
+                                                <Eye className="h-4 w-4 text-slate-500 hover:text-primary" />
+                                            </Button>
                                             <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>
@@ -189,6 +214,12 @@ export default function AdminTrainingsPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <TrainingDetailDialog
+                training={selectedTraining}
+                open={isDetailOpen}
+                onOpenChange={setIsDetailOpen}
+            />
         </div>
     );
 }

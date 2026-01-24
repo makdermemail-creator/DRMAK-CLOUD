@@ -114,7 +114,7 @@ const allMenuItems = [
     { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
     { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: FileBarChart },
     { id: 'taskManagement', href: '/admin/manage-tasks', label: 'Manage Tasks', icon: ListTodo },
-    { id: 'trainings', href: '/admin/trainings', label: 'Manage Trainings', icon: GraduationCap },
+    { id: 'admin_trainings', href: '/admin/trainings', label: 'Manage Trainings', icon: GraduationCap },
 
     // Sales Specific
     { id: 'salesDashboard', href: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -193,7 +193,10 @@ const NavContent = () => {
                 if (userProfile.featureAccess?.[item.id]) return true;
 
                 // Special handling for unified Training feature
-                if (item.id === 'trainings_hub' && userProfile.featureAccess?.['trainings']) return true;
+                if (userProfile.featureAccess?.['trainings']) {
+                    if (item.id === 'admin_trainings' && userProfile.role === 'Admin') return true;
+                    if (item.id === 'trainings_hub' && userProfile.role !== 'Admin') return true;
+                }
 
                 // For menus, check if any sub-item is allowed (or if the menu itself is enabled)
                 if (item.subItems) {
