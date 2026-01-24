@@ -270,6 +270,7 @@ export default function UserManagementPage() {
   }
 
   const isMainAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin;
+  const hasUserManagementAccess = isMainAdmin || userProfile?.featureAccess?.['userManagement'];
 
   if (isProfileLoading || isLoading) {
     return (
@@ -279,11 +280,11 @@ export default function UserManagementPage() {
     )
   }
 
-  if (!isMainAdmin) {
+  if (!hasUserManagementAccess) {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
         <h1 className="text-2xl font-bold text-destructive">Unauthorized Access</h1>
-        <p>Only the Main Admin can manage user accounts.</p>
+        <p>You do not have permission to manage user accounts.</p>
       </div>
     )
   }
