@@ -77,11 +77,15 @@ import {
     Palette,
     ExternalLink
 } from 'lucide-react';
-import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork } from '@/lib/types';
+import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { addDocumentNonBlocking } from '@/firebase';
-import { orderBy } from 'firebase/firestore';
+import Link from 'next/link';
+import {
+    orderBy,
+    or
+} from 'firebase/firestore';
 
 export default function SocialDashboardPage() {
     const firestore = useFirestore();
@@ -102,12 +106,26 @@ export default function SocialDashboardPage() {
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
-        return query(collection(firestore, 'adminTaskTemplates'), where('category', '==', 'Social Media'), limit(5));
+        return query(
+            collection(firestore, 'adminTaskTemplates'),
+            where('category', '==', 'Social Media'),
+            or(
+                where('assignedTo', '==', user.id),
+                where('assignedTo', '==', 'all')
+            ),
+            limit(10)
+        );
     }, [firestore, user]);
+
+    const designersQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'users'), where('role', '==', 'Designer'));
+    }, [firestore]);
 
     const { data: todayPosts, isLoading: postsLoading } = useCollection<DailyPosting>(postQuery);
     const { data: todayReports, isLoading: reportsLoading } = useCollection<SocialReport>(reportQuery);
     const { data: adminTasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksQuery);
+    const { data: designersList } = useCollection<User>(designersQuery);
 
     // Design Requests Query
     const requestsQuery = useMemoFirebase(() => {
@@ -125,6 +143,7 @@ export default function SocialDashboardPage() {
     const [requestDesc, setRequestDesc] = React.useState('');
     const [requestType, setRequestType] = React.useState('Post Graphic');
     const [requestDeadline, setRequestDeadline] = React.useState('');
+    const [assignedTo, setAssignedTo] = React.useState('');
     const [isRequesting, setIsRequesting] = React.useState(false);
 
     const handleRequestDesign = async () => {
@@ -142,7 +161,8 @@ export default function SocialDashboardPage() {
                 assetType: requestType as any,
                 status: 'Pending',
                 createdAt: new Date().toISOString(),
-                deadline: requestDeadline || undefined
+                deadline: requestDeadline || undefined,
+                assignedTo: assignedTo || undefined
             };
 
             await addDocumentNonBlocking(collection(firestore, 'designRequests'), newRequest);
@@ -150,6 +170,7 @@ export default function SocialDashboardPage() {
             setIsRequestModalOpen(false);
             setRequestTitle('');
             setRequestDesc('');
+            setAssignedTo('');
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to send request.' });
         } finally {
@@ -205,21 +226,37 @@ export default function SocialDashboardPage() {
                                         onChange={e => setRequestTitle(e.target.value)}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-bold uppercase text-slate-500">Asset Type</Label>
-                                    <Select value={requestType} onValueChange={setRequestType}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Post Graphic">Post Graphic</SelectItem>
-                                            <SelectItem value="Story Design">Story Design</SelectItem>
-                                            <SelectItem value="Youtube Thumbnail">Youtube Thumbnail</SelectItem>
-                                            <SelectItem value="Reel Edit">Reel Edit</SelectItem>
-                                            <SelectItem value="Banner">Banner</SelectItem>
-                                            <SelectItem value="Other">Other</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-bold uppercase text-slate-500">Asset Type</Label>
+                                        <Select value={requestType} onValueChange={setRequestType}>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Post Graphic">Post Graphic</SelectItem>
+                                                <SelectItem value="Story Design">Story Design</SelectItem>
+                                                <SelectItem value="Youtube Thumbnail">Youtube Thumbnail</SelectItem>
+                                                <SelectItem value="Reel Edit">Reel Edit</SelectItem>
+                                                <SelectItem value="Banner">Banner</SelectItem>
+                                                <SelectItem value="Other">Other</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-bold uppercase text-slate-500">Assign To</Label>
+                                        <Select value={assignedTo} onValueChange={setAssignedTo}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select Designer" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {designersList?.map(d => (
+                                                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                                ))}
+                                                {designersList?.length === 0 && <SelectItem value="none" disabled>No designers active</SelectItem>}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-xs font-bold uppercase text-slate-500">Brief / Requirements</Label>
@@ -249,16 +286,16 @@ export default function SocialDashboardPage() {
                         </DialogContent>
                     </Dialog>
                     <Button variant="outline" className="border-indigo-100 text-indigo-700 font-bold" asChild>
-                        <a href="/content-planner">
+                        <Link href="/content-planner">
                             <CalendarCheck className="mr-2 h-4 w-4" />
                             Planner
-                        </a>
+                        </Link>
                     </Button>
                     <Button className="bg-indigo-600 hover:bg-indigo-700 font-bold" asChild>
-                        <a href="/daily-posting">
+                        <Link href="/daily-posting">
                             <Share2 className="mr-2 h-4 w-4" />
                             New Post Log
-                        </a>
+                        </Link>
                     </Button>
                 </div>
             </div>
@@ -387,7 +424,7 @@ export default function SocialDashboardPage() {
                                         </div>
                                     </div>
                                     <Button variant="outline" size="sm" className="border-indigo-100 text-indigo-600 font-black text-[10px] h-8 px-4 rounded-lg bg-indigo-50/50" asChild>
-                                        <a href="/daily-tasks">REVIEW</a>
+                                        <Link href="/daily-tasks">REVIEW</Link>
                                     </Button>
                                 </div>
                             ))}
@@ -441,10 +478,10 @@ export default function SocialDashboardPage() {
                         </CardContent>
                         <div className="p-4 bg-slate-50/50 border-t">
                             <Button variant="ghost" className="w-full text-[10px] font-black uppercase text-indigo-600 tracking-widest hover:bg-indigo-50" asChild>
-                                <a href="/daily-posting" className="flex items-center justify-center gap-2">
+                                <Link href="/daily-posting" className="flex items-center justify-center gap-2">
                                     View Full History
                                     <ArrowUpRight className="h-3 w-3" />
-                                </a>
+                                </Link>
                             </Button>
                         </div>
                     </Card>
@@ -458,10 +495,10 @@ export default function SocialDashboardPage() {
                             <h3 className="text-xl font-black mb-2 tracking-tight">Reach Insights</h3>
                             <p className="text-sm text-indigo-100/80 mb-8 max-w-[200px] leading-relaxed font-bold">Check how your content is performing across platforms.</p>
                             <Button className="w-full bg-white text-indigo-700 hover:bg-slate-50 font-black text-xs h-12 rounded-xl shadow-lg border-none" variant="secondary" asChild>
-                                <a href="/analytics/reach" className="flex items-center justify-center gap-2">
+                                <Link href="/analytics/reach" className="flex items-center justify-center gap-2">
                                     OPEN ANALYTICS
                                     <ArrowUpRight className="h-4 w-4" />
-                                </a>
+                                </Link>
                             </Button>
                         </CardContent>
                     </Card>

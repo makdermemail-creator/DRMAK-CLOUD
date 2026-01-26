@@ -363,6 +363,7 @@ export type DesignRequest = {
   submissionUrl?: string; // Image, Video link or URL
   deadline?: string; // ISO string
   createdAt: string; // ISO string
+  assignedTo?: string; // Designer ID
 };
 
 export type SalesTraining = {
