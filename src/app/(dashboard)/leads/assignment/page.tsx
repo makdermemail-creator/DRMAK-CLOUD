@@ -13,9 +13,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { collection, query, where, doc, setDoc } from 'firebase/firestore';
-import { LinkIcon, Users, Loader2, ExternalLink } from 'lucide-react';
+import { LinkIcon, Users, Loader2, ExternalLink, BarChart3, ChevronRight } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import type { User, SocialSettings, AdminTaskTemplate } from '@/lib/types';
+import type { User, SocialSettings, AdminTaskTemplate, Lead } from '@/lib/types';
+import Link from 'next/link';
 
 export default function LeadAssignmentPage() {
     const firestore = useFirestore();
@@ -36,6 +39,27 @@ export default function LeadAssignmentPage() {
             return doc(firestore, 'settings', 'socialMedia');
         }, [firestore])
     );
+
+    const { data: allLeads } = useCollection<Lead>(
+        useMemoFirebase(() => {
+            if (!firestore) return null;
+            return collection(firestore, 'leads');
+        }, [firestore])
+    );
+
+    // Distribution Logic
+    const salesStats = React.useMemo(() => {
+        if (!salesUsers || !allLeads) return [];
+        return salesUsers.map(s => {
+            const userLeads = allLeads.filter(l => l.assignedTo === s.id);
+            return {
+                ...s,
+                total: userLeads.length,
+                new: userLeads.filter(l => l.status === 'New Lead').length,
+                inProgress: userLeads.filter(l => l.status === 'In Progress').length,
+            };
+        });
+    }, [salesUsers, allLeads]);
 
     const [sheetLink, setSheetLink] = React.useState('');
     const [selectedSales, setSelectedSales] = React.useState('');
@@ -146,6 +170,59 @@ export default function LeadAssignmentPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-indigo-600" />
+                        Lead Distribution Summary
+                    </CardTitle>
+                    <CardDescription>Current workload across your sales team.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Sales Executive</TableHead>
+                                <TableHead className="text-center">Total Leads</TableHead>
+                                <TableHead className="text-center">New</TableHead>
+                                <TableHead className="text-center">In Progress</TableHead>
+                                <TableHead className="text-right">Action</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {salesStats.map((s) => (
+                                <TableRow key={s.id}>
+                                    <TableCell className="font-medium">{s.name || s.email}</TableCell>
+                                    <TableCell className="text-center">
+                                        <Badge variant="outline" className="font-bold">{s.total}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none">{s.new}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none">{s.inProgress}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="sm" asChild>
+                                            <Link href="/leads">
+                                                Manage <ChevronRight className="ml-1 h-3 w-3" />
+                                            </Link>
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {salesStats.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground italic">
+                                        No sales executives found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
     );
 }

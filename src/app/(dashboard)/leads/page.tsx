@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Lead, User } from '@/lib/types';
-import { collection, doc, getDoc, setDoc, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where, getFirestore } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -183,12 +183,14 @@ const LiveSheetPreview = ({
   sheetUrl,
   onlineLeads,
   existingLeads = [],
-  onStatusChange
+  onStatusChange,
+  users
 }: {
   sheetUrl: string,
   onlineLeads: Lead[],
   existingLeads?: Lead[],
-  onStatusChange: (lead: Lead, status: string) => void
+  onStatusChange: (lead: Lead, status: string) => void,
+  users: User[]
 }) => {
   const [data, setData] = React.useState<string[][]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -254,6 +256,7 @@ const LiveSheetPreview = ({
             {headers.map((h, i) => (
               <TableHead key={i} className="whitespace-nowrap font-bold text-primary">{h}</TableHead>
             ))}
+            <TableHead className="whitespace-nowrap font-bold text-primary w-[150px]">Assigned To</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -295,6 +298,34 @@ const LiveSheetPreview = ({
                 {row.map((cell, cellIndex) => (
                   <TableCell key={cellIndex} className="whitespace-nowrap">{cell}</TableCell>
                 ))}
+                <TableCell>
+                  <Select
+                    onValueChange={(val) => {
+                      if (leadToUpdate) {
+                        const docRef = doc(getFirestore(), 'leads', leadToUpdate.id);
+                        if ((leadToUpdate as any).isOnlineOnly) {
+                          // For online only, we just update the local object so when status changes it saves with this user
+                          leadToUpdate.assignedTo = val;
+                          toast({ title: "User Selected", description: "Target executive set for this lead." });
+                        } else {
+                          updateDocumentNonBlocking(docRef, { assignedTo: val });
+                          toast({ title: "Reassigned", description: "Lead assigned successfully." });
+                        }
+                      }
+                    }}
+                    value={leadToUpdate?.assignedTo || ''}
+                  >
+                    <SelectTrigger className="h-8 w-[130px]">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {users.filter((u: User) => u.role === 'Sales').map((u: User) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
               </TableRow>
             );
           })}
@@ -653,6 +684,7 @@ export default function LeadsPage() {
               onlineLeads={onlineLeads}
               existingLeads={leads || []}
               onStatusChange={handleStatusChange}
+              users={users || []}
             />
           ) : isLoading ? (
             <div className="flex justify-center items-center h-48">
