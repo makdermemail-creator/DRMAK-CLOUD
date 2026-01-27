@@ -1,5 +1,5 @@
-'use client';
-import * as React from 'react';
+import { useAnalyticsData } from '@/hooks/use-analytics-data';
+import { Loader2, AlertCircle, LineChart as LucideLineChart, Users, Eye, TrendingUp, Download } from 'lucide-react';
 import {
     Card,
     CardContent,
@@ -18,28 +18,50 @@ import {
     LineChart,
     Line,
 } from 'recharts';
-import { LineChart as LucideLineChart, Users, Eye, TrendingUp, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const performanceData = [
-    { name: 'Mon', reach: 4000, engagement: 2400 },
-    { name: 'Tue', reach: 3000, engagement: 1398 },
-    { name: 'Wed', reach: 2000, engagement: 9800 },
-    { name: 'Thu', reach: 2780, engagement: 3908 },
-    { name: 'Fri', reach: 1890, engagement: 4800 },
-    { name: 'Sat', reach: 2390, engagement: 3800 },
-    { name: 'Sun', reach: 3490, engagement: 4300 },
-];
-
-const followerGrowthData = [
-    { name: 'Week 1', followers: 1200 },
-    { name: 'Week 2', followers: 1560 },
-    { name: 'Week 3', followers: 1400 },
-    { name: 'Week 4', followers: 2100 },
-    { name: 'Week 5', followers: 2400 },
-];
-
 export default function AnalyticsPage() {
+    const {
+        isLoading,
+        error,
+        performanceData,
+        followerGrowthData,
+        summaryMetrics
+    } = useAnalyticsData();
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[400px] gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse">Fetching real-time analytics...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[400px] gap-4 text-center px-4">
+                <AlertCircle className="h-12 w-12 text-destructive" />
+                <div className="space-y-2">
+                    <h3 className="text-xl font-bold">Failed to load analytics</h3>
+                    <p className="text-muted-foreground max-w-md">{error}</p>
+                    <p className="text-sm text-muted-foreground">Please check your Google Sheet configuration in Settings.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (performanceData.length === 0 && followerGrowthData.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[400px] gap-4 text-center px-4">
+                <AlertCircle className="h-12 w-12 text-muted-foreground" />
+                <div className="space-y-2">
+                    <h3 className="text-xl font-bold">No data found</h3>
+                    <p className="text-muted-foreground">Configure your Google Sheet link in Settings to see real analytics.</p>
+                </div>
+            </div>
+        );
+    }
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -60,8 +82,10 @@ export default function AnalyticsPage() {
                         <Eye className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">45,231</div>
-                        <p className="text-xs text-green-500">+20.1% from last month</p>
+                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className={`text-xs ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% from last month
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -70,8 +94,10 @@ export default function AnalyticsPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">+2,350</div>
-                        <p className="text-xs text-green-500">+180.1% from last month</p>
+                        <div className="text-2xl font-bold">+{summaryMetrics.newFollowers.toLocaleString()}</div>
+                        <p className={`text-xs ${summaryMetrics.followerChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.followerChange >= 0 ? '+' : ''}{summaryMetrics.followerChange}% from last month
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -80,8 +106,10 @@ export default function AnalyticsPage() {
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">4.2%</div>
-                        <p className="text-xs text-red-500">-2% from last month</p>
+                        <div className="text-2xl font-bold">{summaryMetrics.engagementRate}%</div>
+                        <p className={`text-xs ${summaryMetrics.engagementChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.engagementChange >= 0 ? '+' : ''}{summaryMetrics.engagementChange}% from last month
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -90,8 +118,8 @@ export default function AnalyticsPage() {
                         <LucideLineChart className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">12</div>
-                        <p className="text-xs text-muted-foreground">4 ending this week</p>
+                        <div className="text-2xl font-bold">{summaryMetrics.activeCampaigns}</div>
+                        <p className="text-xs text-muted-foreground">Updated in real-time</p>
                     </CardContent>
                 </Card>
             </div>

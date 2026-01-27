@@ -8,25 +8,55 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUser, useAuth } from '@/firebase';
 import { updatePassword, updateProfile, getAuth, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, User, Lock, Save, ShieldCheck } from 'lucide-react';
+import { Loader2, User, Lock, Save, ShieldCheck, Link } from 'lucide-react';
+import { useFirestore, useMemoFirebase } from '@/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function SettingsPage() {
     const { user: userProfile, isUserLoading } = useUser();
     const auth = useAuth();
+    const firestore = useFirestore();
     const { toast } = useToast();
 
     const [displayName, setDisplayName] = React.useState('');
     const [currentPassword, setCurrentPassword] = React.useState('');
     const [newPassword, setNewPassword] = React.useState('');
     const [confirmPassword, setConfirmPassword] = React.useState('');
+    const [sheetLink, setSheetLink] = React.useState('');
     const [isUpdatingProfile, setIsUpdatingProfile] = React.useState(false);
     const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
+    const [isUpdatingSocial, setIsUpdatingSocial] = React.useState(false);
 
     React.useEffect(() => {
         if (userProfile?.name) {
             setDisplayName(userProfile.name);
         }
     }, [userProfile]);
+
+    React.useEffect(() => {
+        if (!firestore) return;
+        const fetchSocialSettings = async () => {
+            const docRef = doc(firestore, 'settings', 'socialMedia');
+            const snap = await getDoc(docRef);
+            if (snap.exists() && snap.data().googleSheetLink) {
+                setSheetLink(snap.data().googleSheetLink);
+            }
+        };
+        fetchSocialSettings();
+    }, [firestore]);
+
+    const handleUpdateSocial = async () => {
+        if (!firestore) return;
+        setIsUpdatingSocial(true);
+        try {
+            await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
+            toast({ title: 'Settings Saved', description: 'Social Media configuration updated.' });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
+        } finally {
+            setIsUpdatingSocial(false);
+        }
+    };
 
     const handleUpdateProfile = async () => {
         if (!auth?.currentUser) return;
@@ -95,12 +125,15 @@ export default function SettingsPage() {
             </div>
 
             <Tabs defaultValue="profile" className="w-full">
-                <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsList className="grid w-full max-w-lg grid-cols-3">
                     <TabsTrigger value="profile" className="gap-2">
                         <User className="h-4 w-4" /> Profile
                     </TabsTrigger>
                     <TabsTrigger value="security" className="gap-2">
                         <ShieldCheck className="h-4 w-4" /> Security
+                    </TabsTrigger>
+                    <TabsTrigger value="social" className="gap-2">
+                        <Link className="h-4 w-4" /> Social Media
                     </TabsTrigger>
                 </TabsList>
 
@@ -183,6 +216,32 @@ export default function SettingsPage() {
                                     Update Password
                                 </Button>
                             </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="social" className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Social Media Settings</CardTitle>
+                            <CardDescription>Configure links for real-time analytics data.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="sheet-link">Google Sheet Link (Analytics Data)</Label>
+                                <Input
+                                    id="sheet-link"
+                                    value={sheetLink}
+                                    onChange={(e) => setSheetLink(e.target.value)}
+                                    placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                                />
+                                <p className="text-[11px] text-muted-foreground italic">
+                                    Make sure the sheet is shared so the system can access it (export to CSV).
+                                </p>
+                            </div>
+                            <Button onClick={handleUpdateSocial} disabled={isUpdatingSocial} className="gap-2">
+                                {isUpdatingSocial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Save Social Settings
+                            </Button>
                         </CardContent>
                     </Card>
                 </TabsContent>

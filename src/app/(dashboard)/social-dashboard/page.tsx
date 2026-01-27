@@ -75,12 +75,14 @@ import {
     LineChart,
     Plus,
     Palette,
-    ExternalLink
+    ExternalLink,
+    Users
 } from 'lucide-react';
 import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { addDocumentNonBlocking } from '@/firebase';
+import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import Link from 'next/link';
 import {
     orderBy,
@@ -132,6 +134,7 @@ export default function SocialDashboardPage() {
     }, [firestore, user]);
 
     const { data: designRequests, isLoading: requestsLoading } = useCollection<DesignRequest>(requestsQuery);
+    const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
     const { toast } = useToast();
 
@@ -184,7 +187,7 @@ export default function SocialDashboardPage() {
     const currentDone = Math.min(postsDone, dailyGoals.posts) + Math.min(reportsDone, dailyGoals.report);
     const completionPercentage = (currentDone / totalGoal) * 100;
 
-    if (isUserLoading || postsLoading || reportsLoading || tasksLoading) {
+    if (isUserLoading || postsLoading || reportsLoading || tasksLoading || analyticsLoading) {
         return (
             <div className="flex h-[600px] items-center justify-center">
                 <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
@@ -296,6 +299,51 @@ export default function SocialDashboardPage() {
                         </Link>
                     </Button>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="bg-white border-indigo-100 shadow-sm rounded-2xl overflow-hidden relative">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <Share2 className="h-3 w-3 text-indigo-500" />
+                            Total Reach
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-indigo-700">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className={`text-[10px] font-bold mt-1 ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.reachChange >= 0 ? '↑' : '↓'} {Math.abs(summaryMetrics.reachChange)}% vs last month
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-white border-purple-100 shadow-sm rounded-2xl overflow-hidden relative">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <Users className="h-3 w-3 text-purple-500" />
+                            New Followers
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-purple-700">+{summaryMetrics.newFollowers.toLocaleString()}</div>
+                        <p className={`text-[10px] font-bold mt-1 ${summaryMetrics.followerChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.followerChange >= 0 ? '↑' : '↓'} {Math.abs(summaryMetrics.followerChange)}% growth
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-white border-emerald-100 shadow-sm rounded-2xl overflow-hidden relative">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <Activity className="h-3 w-3 text-emerald-500" />
+                            Engagement Rate
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-emerald-700">{summaryMetrics.engagementRate}%</div>
+                        <p className={`text-[10px] font-bold mt-1 ${summaryMetrics.engagementChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.engagementChange >= 0 ? '↑' : '↓'} {Math.abs(summaryMetrics.engagementChange)}% change
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Header with Progress */}

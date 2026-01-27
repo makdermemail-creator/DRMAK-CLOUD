@@ -83,6 +83,7 @@ import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
+import { useAnalyticsData } from '@/hooks/use-analytics-data';
 
 type AppointmentStatus = 'Waiting' | 'In Consultation' | 'Completed' | 'Cancelled';
 
@@ -333,7 +334,9 @@ const AdminDashboard = () => {
     const appointmentStats = { completed: 0, total: 0 };
     const activeConsultations = 0;
 
-    if (isLoading) {
+    const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
+
+    if (isLoading || analyticsLoading) {
         return (
             <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -380,12 +383,14 @@ const AdminDashboard = () => {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Now</CardTitle>
-                        <Activity className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Social Reach</CardTitle>
+                        <Share2 className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">+{activeConsultations}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className={`text-xs ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% from last month
+                        </p>
                     </CardContent>
                 </Card>
             </div>
@@ -406,6 +411,7 @@ const AdminDashboard = () => {
 
 const SalesDashboard = () => {
     const { data: leads, isLoading } = useCollection<Lead>(null);
+    const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
     const stats = { total: 0, new: 0, converted: 0, rate: '0.0' };
     const leadsBySource: { name: string, count: number }[] = [];
@@ -417,7 +423,7 @@ const SalesDashboard = () => {
         },
     } satisfies React.ComponentProps<typeof ChartContainer>["config"]
 
-    if (isLoading) {
+    if (isLoading || analyticsLoading) {
         return (
             <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -427,7 +433,7 @@ const SalesDashboard = () => {
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
@@ -460,12 +466,14 @@ const SalesDashboard = () => {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Social Reach</CardTitle>
+                        <Share2 className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats.rate}%</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className={`text-xs ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% from last month
+                        </p>
                     </CardContent>
                 </Card>
             </div>
