@@ -58,7 +58,7 @@ export default function EPrescriptionPage() {
           <CardDescription>Generate and print a prescription for a patient.</CardDescription>
         </CardHeader>
       </Card>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-1">
         <div className="lg:col-span-2 space-y-6">
           <Card>
@@ -105,7 +105,7 @@ export default function EPrescriptionPage() {
                   <div className="space-y-1 sm:col-span-2">
                     <Label>Frequency</Label>
                     <Select value={med.frequency} onValueChange={val => handleMedicineChange(med.id, 'frequency', val)}>
-                      <SelectTrigger><SelectValue/></SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="OD">OD (Once a day)</SelectItem>
                         <SelectItem value="BD">BD (Twice a day)</SelectItem>
@@ -117,7 +117,7 @@ export default function EPrescriptionPage() {
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <Label>Duration</Label>
-                    <Input placeholder="e.g., 7 days" value={med.duration} onChange={e => handleMedicineChange(med.id, 'duration', e.target.value)}/>
+                    <Input placeholder="e.g., 7 days" value={med.duration} onChange={e => handleMedicineChange(med.id, 'duration', e.target.value)} />
                   </div>
                   <div className="sm:col-span-1">
                     <Button variant="ghost" size="icon" onClick={() => handleRemoveMedicine(med.id)} className="text-destructive">
@@ -129,53 +129,53 @@ export default function EPrescriptionPage() {
               <Button variant="outline" onClick={handleAddMedicine}><PlusCircle className="mr-2 h-4 w-4" /> Add Medicine</Button>
             </CardContent>
           </Card>
-           <Card>
-                <CardHeader>
-                    <CardTitle>Notes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                     <Textarea placeholder="Add any additional notes or instructions for the patient..." value={notes} onChange={e => setNotes(e.target.value)} rows={4}/>
-                </CardContent>
-           </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea placeholder="Add any additional notes or instructions for the patient..." value={notes} onChange={e => setNotes(e.target.value)} rows={4} />
+            </CardContent>
+          </Card>
         </div>
-        
+
         <div className="lg:col-span-1 space-y-6">
           <Card className="print:shadow-none print:border-none">
             <CardHeader className="text-center space-y-0">
               <h2 className="text-xl font-bold">Dr. {user?.name || 'Your Name'}</h2>
-              <p className="text-sm text-muted-foreground">{user?.specialization || 'Dermatologist'}</p>
+              <p className="text-sm text-muted-foreground">{(user as any)?.specialization || 'Dermatologist'}</p>
               <p className="text-xs text-muted-foreground">PMDC: 12345-P</p>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-                <div className="border-t pt-4">
-                    <p><span className="font-semibold">Patient:</span> {patient || '___________________'}</p>
-                    <p><span className="font-semibold">Date:</span> {new Date().toLocaleDateString()}</p>
-                </div>
-                <div className="border-t pt-4">
-                     <p className="font-semibold">Diagnosis:</p>
-                     <p>{diagnosis || 'N/A'}</p>
-                </div>
+              <div className="border-t pt-4">
+                <p><span className="font-semibold">Patient:</span> {patient || '___________________'}</p>
+                <p><span className="font-semibold">Date:</span> {new Date().toLocaleDateString()}</p>
+              </div>
+              <div className="border-t pt-4">
+                <p className="font-semibold">Diagnosis:</p>
+                <p>{diagnosis || 'N/A'}</p>
+              </div>
 
-                <div className="border-t pt-4 space-y-2">
-                    <h3 className="font-semibold text-center mb-2">Rx</h3>
-                    {medicines.filter(m => m.name).map(med => (
-                        <div key={med.id}>
-                            <p className="font-bold">{med.name}</p>
-                            <p className="pl-4 text-muted-foreground">{med.dosage} - {med.frequency} - for {med.duration}</p>
-                        </div>
-                    ))}
-                </div>
+              <div className="border-t pt-4 space-y-2">
+                <h3 className="font-semibold text-center mb-2">Rx</h3>
+                {medicines.filter(m => m.name).map(med => (
+                  <div key={med.id}>
+                    <p className="font-bold">{med.name}</p>
+                    <p className="pl-4 text-muted-foreground">{med.dosage} - {med.frequency} - for {med.duration}</p>
+                  </div>
+                ))}
+              </div>
 
-                {notes && (
-                     <div className="border-t pt-4">
-                        <p className="font-semibold">Notes:</p>
-                        <p className="whitespace-pre-wrap">{notes}</p>
-                    </div>
-                )}
+              {notes && (
+                <div className="border-t pt-4">
+                  <p className="font-semibold">Notes:</p>
+                  <p className="whitespace-pre-wrap">{notes}</p>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex-col items-stretch gap-2 print:hidden">
-                <Button onClick={handlePrint}><Printer className="mr-2 h-4 w-4"/> Print Prescription</Button>
-                <Button variant="outline">Save as Template</Button>
+              <Button onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Print Prescription</Button>
+              <Button variant="outline">Save as Template</Button>
             </CardFooter>
           </Card>
         </div>

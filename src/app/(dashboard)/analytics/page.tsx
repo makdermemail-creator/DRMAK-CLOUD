@@ -110,7 +110,7 @@ export default function AnalyticsPage() {
                                     <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
                                     <Tooltip />
                                     <Bar dataKey="reach" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="engagement" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} alpha={0.5} />
+                                    <Bar dataKey="engagement" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>

@@ -32,11 +32,11 @@ const Breadcrumbs = () => {
 
   // Don't show breadcrumbs on the root dashboard page
   if (segments.length === 0) {
-      return (
-           <div className="hidden items-center gap-2 text-sm font-medium md:flex">
-                <span className="text-foreground">Dashboard</span>
-           </div>
-      );
+    return (
+      <div className="hidden items-center gap-2 text-sm font-medium md:flex">
+        <span className="text-foreground">Dashboard</span>
+      </div>
+    );
   }
 
   return (
@@ -69,8 +69,8 @@ export default function Header() {
   const auth = useAuth();
   const router = useRouter();
   const { searchTerm, setSearchTerm } = useSearch();
-  
-  const displayName = user?.displayName || user?.email || 'User';
+
+  const displayName = user?.name || user?.email || 'User';
   const displayInitial = displayName?.charAt(0).toUpperCase() || 'U';
 
   const handleLogout = () => {
@@ -99,7 +99,7 @@ export default function Header() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">
             <Avatar className="h-9 w-9">
-              <AvatarImage src={user?.photoURL || undefined} alt={displayName} />
+              <AvatarImage src={user?.avatarUrl || undefined} alt={displayName} />
               <AvatarFallback>{displayInitial}</AvatarFallback>
             </Avatar>
           </Button>
