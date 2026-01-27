@@ -1,3 +1,4 @@
+'use client';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { Loader2, AlertCircle, LineChart as LucideLineChart, Users, Eye, TrendingUp, Download } from 'lucide-react';
 import {
