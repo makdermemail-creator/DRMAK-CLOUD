@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Lead, User } from '@/lib/types';
-import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -312,7 +312,15 @@ export default function LeadsPage() {
   const { toast } = useToast();
   const { searchTerm } = useSearch();
 
-  const leadsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'leads') : null, [firestore]);
+  const leadsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const baseQuery = collection(firestore, 'leads');
+    if (user.role === 'Sales') {
+      return query(baseQuery, where('assignedTo', '==', user.id));
+    }
+    return baseQuery;
+  }, [firestore, user]);
+
   const usersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
 
   const { data: leads, isLoading: leadsLoading, forceRerender } = useCollection<Lead>(leadsQuery);
@@ -327,6 +335,7 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
   const [onlineLeads, setOnlineLeads] = React.useState<Lead[]>([]);
   const [isSheetLoading, setIsSheetLoading] = React.useState(false);
+  const [isCleaningUp, setIsCleaningUp] = React.useState(false);
 
   // Fetch settings
   React.useEffect(() => {
@@ -545,7 +554,7 @@ export default function LeadsPage() {
         product: lead.product || '',
         status: newStatus as Lead['status'],
         source: 'Google Sheet (Imported)',
-        assignedTo: user?.id || '',
+        assignedTo: lead.assignedTo || user?.id || '',
         createdAt: new Date().toISOString(),
       };
       await addDocumentNonBlocking(collection(firestore, 'leads'), newLead);
@@ -570,6 +579,22 @@ export default function LeadsPage() {
     })
   }
 
+  const handleClearAll = async () => {
+    if (!firestore || !leads || leads.length === 0) return;
+    setIsCleaningUp(true);
+    try {
+      for (const lead of leads) {
+        const docRef = doc(firestore, 'leads', lead.id);
+        deleteDocumentNonBlocking(docRef);
+      }
+      toast({ title: "Cleanup Complete", description: `Queued deletion for ${leads.length} leads.` });
+    } catch (e) {
+      toast({ variant: 'destructive', title: "Cleanup Failed", description: "An error occurred during cleanup." });
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   return (
     <>
       <Card>
@@ -593,6 +618,10 @@ export default function LeadsPage() {
               <Button size="sm" variant="outline" className="gap-1" onClick={() => setIsImportOpen(true)}>
                 <Upload className="h-4 w-4" />
                 Import from Sheet
+              </Button>
+              <Button size="sm" variant="destructive" className="gap-1" onClick={handleClearAll} disabled={isCleaningUp || !leads?.length}>
+                {isCleaningUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Clear All Leads
               </Button>
               <Button size="sm" className="gap-1" onClick={handleAdd}>
                 <PlusCircle className="h-4 w-4" />

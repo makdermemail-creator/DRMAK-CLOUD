@@ -410,7 +410,14 @@ const AdminDashboard = () => {
 }
 
 const SalesDashboard = () => {
-    const { data: leads, isLoading } = useCollection<Lead>(null);
+    const firestore = useFirestore();
+    const { user } = useUser();
+    const leadsQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return query(collection(firestore, 'leads'), where('assignedTo', '==', user.id));
+    }, [firestore, user]);
+
+    const { data: leads, isLoading } = useCollection<Lead>(leadsQuery);
     const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
     const stats = { total: 0, new: 0, converted: 0, rate: '0.0' };
