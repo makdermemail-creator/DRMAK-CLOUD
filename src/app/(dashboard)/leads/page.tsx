@@ -38,6 +38,7 @@ import { useSearch } from '@/context/SearchProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/firebase/auth/use-user';
 import { LeadFormDialog } from '@/components/leads/LeadFormDialog';
+import { useSheetLeads } from '@/hooks/use-sheet-leads';
 
 
 
@@ -300,14 +301,28 @@ const LiveSheetPreview = ({
                 ))}
                 <TableCell>
                   <Select
-                    onValueChange={(val) => {
+                    onValueChange={async (val) => {
                       if (leadToUpdate) {
-                        const docRef = doc(getFirestore(), 'leads', leadToUpdate.id);
                         if ((leadToUpdate as any).isOnlineOnly) {
-                          // For online only, we just update the local object so when status changes it saves with this user
-                          leadToUpdate.assignedTo = val;
-                          toast({ title: "User Selected", description: "Target executive set for this lead." });
+                          // Automatically import to Firestore when assigned
+                          const newLead: Omit<Lead, 'id'> = {
+                            name: leadToUpdate.name,
+                            email: leadToUpdate.email,
+                            phone: leadToUpdate.phone,
+                            product: leadToUpdate.product || '',
+                            status: leadToUpdate.status,
+                            source: 'Google Sheet (Imported)',
+                            assignedTo: val,
+                            createdAt: new Date().toISOString(),
+                          };
+                          await addDocumentNonBlocking(collection(getFirestore(), 'leads'), newLead);
+
+                          // Update local object to reflect it's no longer just online-only (visually)
+                          // Though re-render will likely handle this if we trigger one.
+                          toast({ title: "Lead Imported & Assigned", description: `Lead assigned to selected user.` });
+                          // Force a re-fetch of leads if possible, or let the real-time listener handle it
                         } else {
+                          const docRef = doc(getFirestore(), 'leads', leadToUpdate.id);
                           updateDocumentNonBlocking(docRef, { assignedTo: val });
                           toast({ title: "Reassigned", description: "Lead assigned successfully." });
                         }
@@ -364,8 +379,9 @@ export default function LeadsPage() {
   const [sheetUrl, setSheetUrl] = React.useState<string>('');
 
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
-  const [onlineLeads, setOnlineLeads] = React.useState<Lead[]>([]);
-  const [isSheetLoading, setIsSheetLoading] = React.useState(false);
+
+  // Use the new hook
+  const { leads: onlineLeads, isLoading: isSheetLoading } = useSheetLeads(sheetUrl, statusFilter === 'all' || statusFilter === 'online');
   const [isCleaningUp, setIsCleaningUp] = React.useState(false);
 
   // Fetch settings
@@ -381,147 +397,7 @@ export default function LeadsPage() {
     fetchSettings();
   }, [firestore]);
 
-  // Fetch Sheet Data
-  React.useEffect(() => {
-    const fetchSheetLeads = async () => {
-      // Validate URL before fetching
-      if (!sheetUrl || !sheetUrl.includes('docs.google.com/spreadsheets')) return;
-
-      if (statusFilter === 'online') return;
-
-      setIsSheetLoading(true);
-      try {
-        // Use server-side proxy to avoid CORS issues
-        const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(sheetUrl)}`;
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error("Failed to fetch sheet data");
-        const text = await response.text();
-
-        const rows = text.split('\n').filter(line => line.trim()).map(row => {
-          const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^",]*))/g;
-          const cells = [];
-          let match;
-          while ((match = regex.exec(row)) !== null) {
-            cells.push(match[1] ? match[1].replace(/""/g, '"') : match[2]);
-          }
-          return cells.map(cell => cell?.trim() || '');
-        });
-
-        if (rows.length < 2) {
-          setOnlineLeads([]);
-          return;
-        }
-
-        const headers = rows[0].map(h => h.toLowerCase().trim());
-
-        // Helper to score columns based on content
-        const scoreColumn = (rows: string[][], checkFn: (cell: string) => boolean): number => {
-          const sampleRows = rows.slice(0, 10); // Check first 10 rows
-          let bestCol = -1;
-          let maxScore = 0;
-
-          if (sampleRows.length === 0) return -1;
-
-          const numCols = sampleRows[0].length;
-          for (let col = 0; col < numCols; col++) {
-            let score = 0;
-            let validCount = 0;
-            for (const row of sampleRows) {
-              if (row[col] && checkFn(row[col])) {
-                score++;
-              }
-              if (row[col]) validCount++;
-            }
-            // Require at least a few matches to consider it valid
-            if (score > maxScore && score >= 1) {
-              maxScore = score;
-              bestCol = col;
-            }
-          }
-          return bestCol;
-        };
-
-        const isEmail = (text: string) => /\S+@\S+\.\S+/.test(text);
-
-        const isPhone = (text: string) => {
-          const cleaned = text.replace(/\D/g, ''); // Remove non-digits
-          // Look for at least 7 digits, or starts with 'p:'
-          return (cleaned.length > 6) || text.trim().toLowerCase().startsWith('p:');
-        };
-
-        const isProduct = (text: string) => {
-          const lower = text.toLowerCase();
-          return lower.startsWith('c:') || lower.startsWith('f:') || lower.includes('exosome') || lower.includes('hair') || lower.includes('skin') || lower.includes('lead');
-        };
-
-        // Content-based Detection
-        const emailIdx = scoreColumn(rows.slice(1), isEmail);
-        const contactIdx = scoreColumn(rows.slice(1), isPhone);
-
-        // For Product, if header exists, use it, otherwise try to guess.
-        // Priority: Header with 'form_name'/'product' -> Content guess -> Header with 'campaign'
-        let productIdx = headers.findIndex(h => h.includes('form_name') || h.includes('form_id') || h.includes('product') || h.includes('service'));
-        if (productIdx === -1) {
-          // Try content based if no clear header
-          productIdx = scoreColumn(rows.slice(1), isProduct);
-        }
-        // Fallback to campaign header
-        if (productIdx === -1) {
-          productIdx = headers.findIndex(h => h.includes('campaign') || h.includes('ad set'));
-        }
-
-        // For Name: complicated because "phone_number" header had names.
-        // Strategy: Exclude detected Email, Phone, Product columns.
-        // Then prefer header "name", then "phone_number" (if it has no digits), then valid string column.
-        let nameIdx = headers.findIndex(h => (h.includes('name') || h.includes('full name')) && !h.includes('campaign') && !h.includes('ad'));
-
-        // If the 'name' header points to a column that is actually email or phone, ignore it.
-        if (nameIdx === emailIdx || nameIdx === contactIdx) nameIdx = -1;
-
-        // If we can't find a clean 'Name' header, look for the "phone_number" header IF it's not the actual phone column
-        if (nameIdx === -1) {
-          const ambiguousHeaderIdx = headers.findIndex(h => h.includes('phone') || h.includes('number'));
-          if (ambiguousHeaderIdx !== -1 && ambiguousHeaderIdx !== contactIdx && ambiguousHeaderIdx !== emailIdx) {
-            nameIdx = ambiguousHeaderIdx;
-          }
-        }
-
-        // Final Fallback for Name: First text column that isn't others
-        if (nameIdx === -1) {
-          // Find a column that has text but isn't the others
-          nameIdx = 0; // simplistic fallback
-        }
-
-        const finalNameIdx = nameIdx;
-        const finalContactIdx = contactIdx;
-        const finalEmailIdx = emailIdx;
-        const finalProductIdx = productIdx;
-
-        const sheetLeads: Lead[] = rows.slice(1)
-          .filter(r => r[finalNameIdx] && r[finalNameIdx].trim())
-          .map((r, i) => ({
-            id: `sheet-${i}-${Date.now()}`,
-            name: r[finalNameIdx],
-            email: finalEmailIdx !== -1 ? r[finalEmailIdx] : '',
-            phone: r[finalContactIdx] || '',
-            product: finalProductIdx !== -1 ? r[finalProductIdx] : '',
-            status: 'New Lead',
-            source: 'Google Sheet',
-            assignedTo: '',
-            createdAt: new Date().toISOString(),
-            isOnlineOnly: true
-          }));
-
-        setOnlineLeads(sheetLeads);
-      } catch (error) {
-        console.error("Sheet fetch error:", error);
-      } finally {
-        setIsSheetLoading(false);
-      }
-    };
-
-    fetchSheetLeads();
-  }, [sheetUrl, statusFilter]);
+  // Fetch Sheet Data removed - handled by hook
 
   const isLoading = leadsLoading || usersLoading;
 

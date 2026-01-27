@@ -11,16 +11,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { collection, query, where, doc, setDoc } from 'firebase/firestore';
 import { LinkIcon, Users, Loader2, ExternalLink, BarChart3, ChevronRight } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import type { User, SocialSettings, AdminTaskTemplate, Lead } from '@/lib/types';
 import Link from 'next/link';
+import type { User, SocialSettings, AdminTaskTemplate, Lead } from '@/lib/types';
 import { ManageUserLeadsDialog } from '@/components/leads/ManageUserLeadsDialog';
-import { updateDocumentNonBlocking } from '@/firebase';
+import { useSheetLeads } from '@/hooks/use-sheet-leads';
 
 export default function LeadAssignmentPage() {
     const firestore = useFirestore();
@@ -49,6 +49,19 @@ export default function LeadAssignmentPage() {
         }, [firestore])
     );
 
+    // Fetch Sheet Leads
+    const [sheetLink, setSheetLink] = React.useState('');
+    const { leads: sheetLeads, isLoading: isSheetLoading } = useSheetLeads(sheetLink, true);
+
+    // Merge Leads for Dialog (Firestore + Sheet)
+    // We only want sheet leads that are NOT already in firestore (based on some unique key? typically sheet leads have temp IDs)
+    // Actually, simple concatenation is fine as long as we handle the 'assignment' correctly (import vs update)
+    const combinedLeads = React.useMemo(() => {
+        const firestoreLeads = allLeads || [];
+        // Optional: Dedup logic if needed, but for now just append sheet leads
+        return [...firestoreLeads, ...sheetLeads];
+    }, [allLeads, sheetLeads]);
+
     // Distribution Logic
     const salesStats = React.useMemo(() => {
         if (!salesUsers || !allLeads) return [];
@@ -63,7 +76,7 @@ export default function LeadAssignmentPage() {
         });
     }, [salesUsers, allLeads]);
 
-    const [sheetLink, setSheetLink] = React.useState('');
+    // const [sheetLink, setSheetLink] = React.useState(''); // Moved up
     const [selectedSales, setSelectedSales] = React.useState('');
     const [isSavingLink, setIsSavingLink] = React.useState(false);
     const [isAssigning, setIsAssigning] = React.useState(false);
@@ -271,7 +284,7 @@ export default function LeadAssignmentPage() {
                 open={manageDialogOpen}
                 onOpenChange={setManageDialogOpen}
                 user={managingUser}
-                allLeads={allLeads || []}
+                allLeads={combinedLeads}
                 onAssign={handleBulkAssign}
                 onUnassign={handleBulkUnassign}
             />
