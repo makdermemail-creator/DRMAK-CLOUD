@@ -19,6 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import type { User, SocialSettings, AdminTaskTemplate, Lead } from '@/lib/types';
 import Link from 'next/link';
+import { ManageUserLeadsDialog } from '@/components/leads/ManageUserLeadsDialog';
+import { updateDocumentNonBlocking } from '@/firebase';
 
 export default function LeadAssignmentPage() {
     const firestore = useFirestore();
@@ -65,6 +67,49 @@ export default function LeadAssignmentPage() {
     const [selectedSales, setSelectedSales] = React.useState('');
     const [isSavingLink, setIsSavingLink] = React.useState(false);
     const [isAssigning, setIsAssigning] = React.useState(false);
+
+    // Manage Dialog State
+    const [manageDialogOpen, setManageDialogOpen] = React.useState(false);
+    const [managingUser, setManagingUser] = React.useState<User | null>(null);
+
+    const handleManageUser = (user: User) => {
+        setManagingUser(user);
+        setManageDialogOpen(true);
+    };
+
+    const handleBulkAssign = async (leadIds: string[]) => {
+        if (!managingUser || !firestore) return;
+        try {
+            await Promise.all(leadIds.map(id => {
+                // Handle potential "online-only" leads that need to be created first? 
+                // For now, assume leads in 'allLeads' are valid Firestore docs or handle robustly.
+                // Check if lead exists in 'allLeads' list
+                const lead = allLeads?.find(l => l.id === id);
+                if (lead && (lead as any).isOnlineOnly) {
+                    // Create it first then assign
+                    const newLeadRef = doc(collection(firestore, 'leads'));
+                    return setDoc(newLeadRef, { ...lead, assignedTo: managingUser.id, id: newLeadRef.id, isOnlineOnly: false });
+                } else {
+                    return updateDocumentNonBlocking(doc(firestore, 'leads', id), { assignedTo: managingUser.id });
+                }
+            }));
+            toast({ title: "Leads Assigned", description: `Successfully assigned ${leadIds.length} leads.` });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error", description: "Failed to assign leads." });
+        }
+    };
+
+    const handleBulkUnassign = async (leadIds: string[]) => {
+        if (!firestore) return;
+        try {
+            await Promise.all(leadIds.map(id =>
+                updateDocumentNonBlocking(doc(firestore, 'leads', id), { assignedTo: 'unassigned' })
+            ));
+            toast({ title: "Leads Unassigned", description: `Successfully unassigned ${leadIds.length} leads.` });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Error", description: "Failed to unassign leads." });
+        }
+    };
 
     React.useEffect(() => {
         if (socialSettings?.googleSheetLink) setSheetLink(socialSettings.googleSheetLink);
@@ -204,10 +249,8 @@ export default function LeadAssignmentPage() {
                                         <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none">{s.inProgress}</Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" asChild>
-                                            <Link href="/leads">
-                                                Manage <ChevronRight className="ml-1 h-3 w-3" />
-                                            </Link>
+                                        <Button variant="ghost" size="sm" onClick={() => handleManageUser(s)}>
+                                            Manage <ChevronRight className="ml-1 h-3 w-3" />
                                         </Button>
                                     </TableCell>
                                 </TableRow>
@@ -223,6 +266,15 @@ export default function LeadAssignmentPage() {
                     </Table>
                 </CardContent>
             </Card>
+
+            <ManageUserLeadsDialog
+                open={manageDialogOpen}
+                onOpenChange={setManageDialogOpen}
+                user={managingUser}
+                allLeads={allLeads || []}
+                onAssign={handleBulkAssign}
+                onUnassign={handleBulkUnassign}
+            />
         </div>
     );
 }
