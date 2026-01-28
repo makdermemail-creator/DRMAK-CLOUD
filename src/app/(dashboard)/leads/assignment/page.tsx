@@ -143,8 +143,12 @@ export default function LeadAssignmentPage() {
 
         setIsProcessing(true);
         try {
-            // 1. Save settings
-            await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
+            // 1. Save settings - No, save to the USER now.
+            // await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
+
+            // Update the selected sales user with this sheet link
+            const userRef = doc(firestore, 'users', selectedSales);
+            await updateDocumentNonBlocking(userRef, { assignedSheet: sheetLink });
 
             // 2. Fetch leads from sheet (Manual fetch to ensure we get fresh data immediately)
             const proxyUrl = `/api/sheet-proxy?url=${encodeURIComponent(sheetLink)}`;
@@ -193,14 +197,21 @@ export default function LeadAssignmentPage() {
 
             await Promise.all(leadsToImport.map(l => {
                 if (!l) return;
+                if (!l) return null;
                 const newLead: any = {
                     ...l,
                     source: 'Google Sheet (Bulk)',
                     assignedTo: selectedSales,
                     createdAt: new Date().toISOString(),
                 };
-                return addDocumentNonBlocking(collection(firestore, 'leads'), newLead);
-            }));
+                return newLead; // Just return the object for now
+            })).then(async (leads) => {
+                const validLeads = leads.filter(l => l !== null);
+                // We need to actually add them to firestore
+                for (const lead of validLeads) {
+                    await addDocumentNonBlocking(collection(firestore, 'leads'), lead);
+                }
+            });
 
             // 4. Create Notification Task
             const assignmentTask: Omit<AdminTaskTemplate, 'id'> = {
@@ -263,13 +274,19 @@ export default function LeadAssignmentPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Assign To</Label>
-                                <Select value={selectedSales} onValueChange={setSelectedSales}>
+                                <Select value={selectedSales} onValueChange={(val) => {
+                                    setSelectedSales(val);
+                                    // Auto-fill the link if this user already has one?
+                                    const user = salesUsers?.find(u => u.id === val);
+                                    if ((user as any)?.assignedSheet) setSheetLink((user as any).assignedSheet);
+                                    else setSheetLink('');
+                                }}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select Sales Executive" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {salesUsers?.map(s => (
-                                            <SelectItem key={s.id} value={s.id}>{s.name || s.email}</SelectItem>
+                                            <SelectItem key={s.id} value={s.id}>{s.name || s.email} {(s as any).assignedSheet ? '(Has Sheet)' : ''}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>

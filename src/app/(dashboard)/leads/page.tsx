@@ -385,8 +385,17 @@ export default function LeadsPage() {
   const [isCleaningUp, setIsCleaningUp] = React.useState(false);
 
   // Fetch settings
+  // Fetch settings
   React.useEffect(() => {
-    if (!firestore) return;
+    if (!firestore || !user) return;
+
+    // 1. Priority: User's assigned sheet
+    if ((user as any).assignedSheet) {
+      setSheetUrl((user as any).assignedSheet);
+      return;
+    }
+
+    // 2. Fallback: Global settings
     const fetchSettings = async () => {
       const settingsRef = doc(firestore, 'settings', 'sales');
       const snap = await getDoc(settingsRef);
@@ -395,7 +404,7 @@ export default function LeadsPage() {
       }
     };
     fetchSettings();
-  }, [firestore]);
+  }, [firestore, user]);
 
   // Fetch Sheet Data removed - handled by hook
 
