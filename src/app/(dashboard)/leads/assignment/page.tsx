@@ -370,6 +370,7 @@ export default function LeadAssignmentPage() {
                 onAssign={handleBulkAssign}
                 onUnassign={handleBulkUnassign}
                 sheetUrl={sheetLink}
+                allUsers={salesUsers || []}
             />
         </div>
     );

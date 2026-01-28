@@ -163,19 +163,27 @@ export default function SalesDashboardPage() {
         updateDocumentNonBlocking(taskRef, { status: isCompleted ? 'Completed' : 'Pending' });
     };
 
-    const handleMarkTrainingComplete = async (trainingId: string) => {
+    const handleToggleTrainingComplete = async (trainingId: string, currentlyCompleted: boolean) => {
         if (!firestore || !user) return;
         const completionId = `${user.id}_${trainingId}`;
         const completionRef = doc(firestore, 'salesTrainingCompletions', completionId);
 
         try {
-            await setDoc(completionRef, {
-                id: completionId,
-                userId: user.id,
-                trainingId,
-                completedAt: new Date().toISOString()
-            });
-            toast({ title: 'Training Completed', description: 'Great job! Training marked as complete.' });
+            if (currentlyCompleted) {
+                // Delete the completion record to mark as incomplete
+                const { deleteDoc } = await import('firebase/firestore');
+                await deleteDoc(completionRef);
+                toast({ title: 'Training Unmarked', description: 'Training marked as incomplete.' });
+            } else {
+                // Create completion record
+                await setDoc(completionRef, {
+                    id: completionId,
+                    userId: user.id,
+                    trainingId,
+                    completedAt: new Date().toISOString()
+                });
+                toast({ title: 'Training Completed', description: 'Great job! Training marked as complete.' });
+            }
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to update completion status.' });
         }
@@ -335,74 +343,135 @@ export default function SalesDashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <CardHeader>
+                <Card className="overflow-hidden border-2">
+                    <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950 dark:to-purple-950">
                         <CardTitle className="flex items-center gap-2">
-                            <GraduationCap className="h-5 w-5 text-primary" />
+                            <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
+                                <GraduationCap className="h-5 w-5 text-white" />
+                            </div>
                             Sales Training Materials
                         </CardTitle>
-                        <CardDescription>Enhance your skills with these training modules.</CardDescription>
+                        <CardDescription>Enhance your skills with these interactive training modules.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-3 pt-6">
                         {trainings?.map(training => {
                             const completed = isTrainingCompleted(training.id);
                             return (
                                 <div
                                     key={training.id}
-                                    className="flex flex-col p-4 border rounded-lg bg-card hover:shadow-md transition-all cursor-pointer group"
-                                    onClick={() => {
-                                        setSelectedTraining(training);
-                                        setIsDetailOpen(true);
-                                    }}
+                                    className={`group relative overflow-hidden rounded-xl border-2 transition-all duration-300 ${completed
+                                        ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200 dark:from-emerald-950 dark:to-teal-950 dark:border-emerald-800'
+                                        : 'bg-gradient-to-br from-slate-50 to-gray-50 border-slate-200 hover:border-violet-300 hover:shadow-lg dark:from-slate-900 dark:to-gray-900 dark:border-slate-700'
+                                        }`}
                                 >
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">{training.title}</h3>
-                                                {completed && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                    {/* Completion Badge Ribbon */}
+                                    {completed && (
+                                        <div className="absolute top-0 right-0 w-24 h-24 overflow-hidden">
+                                            <div className="absolute top-4 right-[-32px] w-32 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold py-1 text-center rotate-45 shadow-lg">
+                                                ✓ Done
                                             </div>
-                                            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                                                {training.content}
-                                            </p>
                                         </div>
-                                        <div className="flex flex-col gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8"
-                                                    onClick={() => {
-                                                        setSelectedTraining(training);
-                                                        setIsDetailOpen(true);
-                                                    }}
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </Button>
-                                                {training.videoUrl && (
-                                                    <Button variant="outline" size="sm" asChild className="h-8">
-                                                        <a href={training.videoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
-                                                            <Video className="h-4 w-4" /> Watch
-                                                        </a>
-                                                    </Button>
-                                                )}
-                                            </div>
-                                            {!completed ? (
-                                                <Button size="sm" onClick={() => handleMarkTrainingComplete(training.id)} className="h-8">
-                                                    Mark Complete
-                                                </Button>
-                                            ) : (
-                                                <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1 bg-green-50 py-1 rounded">
-                                                    <CheckCircle2 className="h-3 w-3" /> Completed
+                                    )}
+
+                                    <div className="p-5">
+                                        {/* Header */}
+                                        <div className="flex items-start justify-between gap-4 mb-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <h3 className={`font-bold text-lg transition-colors ${completed ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200 group-hover:text-violet-600'
+                                                        }`}>
+                                                        {training.title}
+                                                    </h3>
+                                                    {completed && (
+                                                        <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 dark:bg-emerald-900 rounded-full">
+                                                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Completed</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
+                                                <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                                                    {training.content}
+                                                </p>
+                                            </div>
                                         </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-2 hover:bg-violet-50 hover:border-violet-300 dark:hover:bg-violet-950"
+                                                onClick={() => {
+                                                    setSelectedTraining(training);
+                                                    setIsDetailOpen(true);
+                                                }}
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                                View Details
+                                            </Button>
+
+                                            {training.videoUrl && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    asChild
+                                                    className="gap-2 hover:bg-blue-50 hover:border-blue-300 dark:hover:bg-blue-950"
+                                                >
+                                                    <a href={training.videoUrl} target="_blank" rel="noopener noreferrer">
+                                                        <Video className="h-4 w-4" />
+                                                        Watch Video
+                                                    </a>
+                                                </Button>
+                                            )}
+
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleToggleTrainingComplete(training.id, !!completed)}
+                                                className={`ml-auto gap-2 transition-all duration-300 ${completed
+                                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
+                                                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600'
+                                                    }`}
+                                            >
+                                                {completed ? (
+                                                    <>
+                                                        <RefreshCw className="h-4 w-4" />
+                                                        Mark Incomplete
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <CheckCircle2 className="h-4 w-4" />
+                                                        Mark Complete
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+
+                                        {/* Progress Indicator */}
+                                        {!completed && (
+                                            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                        <div className="h-full w-0 bg-gradient-to-r from-violet-500 to-purple-600 rounded-full group-hover:w-1/3 transition-all duration-1000"></div>
+                                                    </div>
+                                                    <span className="font-medium">Not Started</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             );
                         })}
                         {trainings?.length === 0 && (
-                            <div className="text-center py-8 text-muted-foreground italic">
-                                No training materials available at the moment.
+                            <div className="text-center py-12 px-4">
+                                <div className="inline-flex p-4 bg-slate-100 dark:bg-slate-800 rounded-full mb-4">
+                                    <GraduationCap className="h-8 w-8 text-slate-400" />
+                                </div>
+                                <p className="text-muted-foreground italic">
+                                    No training materials available at the moment.
+                                </p>
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Check back later for new learning opportunities!
+                                </p>
                             </div>
                         )}
                     </CardContent>
