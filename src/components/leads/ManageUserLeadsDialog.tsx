@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface ManageUserLeadsDialogProps {
@@ -18,6 +18,7 @@ interface ManageUserLeadsDialogProps {
     allLeads: Lead[];
     onAssign: (leadIds: string[]) => Promise<void>;
     onUnassign: (leadIds: string[]) => Promise<void>;
+    sheetUrl?: string;
 }
 
 export const ManageUserLeadsDialog = ({
@@ -26,7 +27,8 @@ export const ManageUserLeadsDialog = ({
     user,
     allLeads,
     onAssign,
-    onUnassign
+    onUnassign,
+    sheetUrl
 }: ManageUserLeadsDialogProps) => {
     const [selectedLeads, setSelectedLeads] = React.useState<Set<string>>(new Set());
     const [isProcessing, setIsProcessing] = React.useState(false);
@@ -101,6 +103,15 @@ export const ManageUserLeadsDialog = ({
                         Assign new leads or remove existing assignments for this sales executive.
                     </DialogDescription>
                 </DialogHeader>
+
+                {sheetUrl && (
+                    <div className="flex items-center gap-2 px-6 py-2 bg-slate-50 text-xs text-muted-foreground border-y">
+                        <span className="font-semibold">Active Sheet:</span>
+                        <a href={sheetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center hover:underline text-teal-600 truncate max-w-[400px]">
+                            {sheetUrl} <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                    </div>
+                )}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex items-center justify-between mb-4">
