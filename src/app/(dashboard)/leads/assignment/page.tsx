@@ -136,6 +136,11 @@ export default function LeadAssignmentPage() {
     }, [socialSettings]);
 
     const handleSaveAndAssign = async () => {
+        if (!firestore) {
+            toast({ variant: "destructive", title: "Error", description: "Database not initialized. Please refresh the page." });
+            return;
+        }
+
         if (!sheetLink.trim() || !selectedSales) {
             toast({ variant: "destructive", title: "Missing Information", description: "Please enter a Sheet URL and select a Sales Executive." });
             return;
@@ -143,9 +148,6 @@ export default function LeadAssignmentPage() {
 
         setIsProcessing(true);
         try {
-            // 1. Save settings - No, save to the USER now.
-            // await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
-
             // Update the selected sales user with this sheet link
             const userRef = doc(firestore, 'users', selectedSales);
             await updateDocumentNonBlocking(userRef, { assignedSheet: sheetLink });
@@ -196,7 +198,6 @@ export default function LeadAssignmentPage() {
             const leadsToImport = parsedLeads.slice(1, 51); // Skip header, max 50 for now?
 
             await Promise.all(leadsToImport.map(l => {
-                if (!l) return;
                 if (!l) return null;
                 const newLead: any = {
                     ...l,
@@ -208,6 +209,7 @@ export default function LeadAssignmentPage() {
             })).then(async (leads) => {
                 const validLeads = leads.filter(l => l !== null);
                 // We need to actually add them to firestore
+                if (!firestore) return;
                 for (const lead of validLeads) {
                     await addDocumentNonBlocking(collection(firestore, 'leads'), lead);
                 }
@@ -235,6 +237,15 @@ export default function LeadAssignmentPage() {
             setIsProcessing(false);
         }
     };
+
+    // Add loading state to prevent crashes
+    if (!firestore) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -278,8 +289,10 @@ export default function LeadAssignmentPage() {
                                     setSelectedSales(val);
                                     // Auto-fill the link if this user already has one?
                                     const user = salesUsers?.find(u => u.id === val);
-                                    if ((user as any)?.assignedSheet) setSheetLink((user as any).assignedSheet);
-                                    else setSheetLink('');
+                                    if ((user as any)?.assignedSheet) {
+                                        setSheetLink((user as any).assignedSheet);
+                                    }
+                                    // Don't clear the sheet link if user doesn't have one - preserve manual input
                                 }}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select Sales Executive" />
