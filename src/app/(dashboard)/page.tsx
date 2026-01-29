@@ -509,12 +509,18 @@ const OrganizationDashboard = () => {
 
 const AdminDashboard = () => {
     const { searchTerm } = useSearch();
+    const firestore = useFirestore();
     const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
 
-    const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(null);
-    const { data: doctors, isLoading: doctorsLoading } = useCollection<Doctor>(null);
-    const { data: patients, isLoading: patientsLoading } = useCollection<Patient>(null);
-    const { data: billingRecords, isLoading: billingLoading } = useCollection<BillingRecord>(null);
+    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+    const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+    const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
+    const billingRecordsRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
+
+    const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
+    const { data: doctors, isLoading: doctorsLoading } = useCollection<Doctor>(doctorsRef);
+    const { data: patients, isLoading: patientsLoading } = useCollection<Patient>(patientsRef);
+    const { data: billingRecords, isLoading: billingLoading } = useCollection<BillingRecord>(billingRecordsRef);
 
     const isLoading = appointmentsLoading || doctorsLoading || patientsLoading || billingLoading;
 
@@ -550,10 +556,48 @@ const AdminDashboard = () => {
         });
     }, [enrichedAppointments, selectedDate]);
 
-    const dailyRevenue = 0;
-    const todaysPatients = 0;
-    const appointmentStats = { completed: 0, total: 0 };
-    const activeConsultations = 0;
+    const { dailyRevenue, todaysPatients, appointmentStats } = React.useMemo(() => {
+        if (!selectedDate || !appointments) {
+            return { dailyRevenue: 0, todaysPatients: 0, appointmentStats: { completed: 0, total: 0 } };
+        }
+
+        const selectedDayStart = startOfDay(selectedDate);
+        const dayAppointments = appointments.filter(apt => {
+            const aptDate = startOfDay(new Date(apt.appointmentDateTime));
+            return aptDate.getTime() === selectedDayStart.getTime();
+        });
+
+        const total = dayAppointments.length;
+        const completed = dayAppointments.filter(apt => apt.status === 'Completed').length;
+
+        // Revenue calculation using BillingRecord fields
+        let revenue = 0;
+        if (billingRecords) {
+            billingRecords.forEach(record => {
+                const recordDate = startOfDay(new Date(record.billingDate));
+                if (recordDate.getTime() === selectedDayStart.getTime()) {
+                    revenue += (record.consultationCharges || 0) + (record.procedureCharges || 0) + (record.medicineCharges || 0);
+                }
+            });
+        }
+
+        const uniquePatients = new Set(dayAppointments.map(a => a.patientMobileNumber)).size;
+
+        return {
+            dailyRevenue: revenue,
+            todaysPatients: uniquePatients,
+            appointmentStats: { completed, total }
+        };
+    }, [appointments, billingRecords, selectedDate]);
+
+    const activeConsultations = React.useMemo(() => {
+        if (!appointments || !selectedDate) return 0;
+        const selectedDayStart = startOfDay(selectedDate);
+        return appointments.filter(apt => {
+            const aptDate = startOfDay(new Date(apt.appointmentDateTime));
+            return aptDate.getTime() === selectedDayStart.getTime() && apt.status === 'In Consultation';
+        }).length;
+    }, [appointments, selectedDate]);
 
     const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
@@ -579,7 +623,7 @@ const AdminDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">Rs{dailyRevenue.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <p className="text-xs text-muted-foreground">Total collected today</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -589,7 +633,7 @@ const AdminDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">+{todaysPatients}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <p className="text-xs text-muted-foreground">Unique patient visits</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -621,8 +665,29 @@ const AdminDashboard = () => {
                     <CardHeader>
                         <CardTitle>Recent Patient Activity</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid gap-8">
-                        <p className="text-sm text-muted-foreground">Backend disconnected</p>
+                    <CardContent className="grid gap-4">
+                        {enrichedAppointments.slice(0, 5).map((apt, i) => (
+                            <div key={apt.id || i} className="flex items-center gap-4">
+                                <Avatar className="h-9 w-9">
+                                    <AvatarImage src={apt.patient?.avatarUrl || ""} alt="Avatar" />
+                                    <AvatarFallback>{apt.patient?.name?.charAt(0) || "P"}</AvatarFallback>
+                                </Avatar>
+                                <div className="grid gap-1">
+                                    <p className="text-sm font-medium leading-none">
+                                        {apt.patient?.name || "Anonymous Patient"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {apt.status} - {apt.doctor?.fullName || "No Doctor"}
+                                    </p>
+                                </div>
+                                <div className="ml-auto font-medium text-xs">
+                                    {format(new Date(apt.appointmentDateTime), 'h:mm a')}
+                                </div>
+                            </div>
+                        ))}
+                        {enrichedAppointments.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-4">No recent activity.</p>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -641,8 +706,25 @@ const SalesDashboard = () => {
     const { data: leads, isLoading } = useCollection<Lead>(leadsQuery);
     const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
-    const stats = { total: 0, new: 0, converted: 0, rate: '0.0' };
-    const leadsBySource: { name: string, count: number }[] = [];
+    const stats = React.useMemo(() => {
+        if (!leads) return { total: 0, new: 0, converted: 0, rate: '0.0' };
+        const total = leads.length;
+        const newLeads = leads.filter(l => l.status === 'New Lead').length;
+        const converted = leads.filter(l => l.status === 'Converted').length;
+        const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0';
+        return { total, new: newLeads, converted, rate };
+    }, [leads]);
+
+    const leadsBySource = React.useMemo(() => {
+        if (!leads) return [];
+        const sources: Record<string, number> = {};
+        leads.forEach(l => {
+            sources[l.source] = (sources[l.source] || 0) + 1;
+        });
+        return Object.entries(sources)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
+    }, [leads]);
 
     const chartConfig = {
         count: {
@@ -669,7 +751,7 @@ const SalesDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{stats.total}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <p className="text-xs text-muted-foreground">Total records</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -679,7 +761,7 @@ const SalesDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">+{stats.new}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <p className="text-xs text-muted-foreground">New leads this period</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -689,7 +771,7 @@ const SalesDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{stats.converted}</div>
-                        <p className="text-xs text-muted-foreground">Backend disconnected</p>
+                        <p className="text-xs text-muted-foreground">Successfully closed</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -722,9 +804,30 @@ const SalesDashboard = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">Backend disconnected. No leads to show.</TableCell>
-                                </TableRow>
+                                {leads?.slice(0, 5).map((lead) => (
+                                    <TableRow key={lead.id}>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{lead.name}</span>
+                                                <span className="text-xs text-muted-foreground">{lead.email || lead.phone}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={lead.status === 'Converted' ? 'default' : 'secondary'}>
+                                                {lead.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>{lead.source}</TableCell>
+                                        <TableCell className="text-right text-xs">
+                                            {lead.createdAt ? format(new Date(lead.createdAt), 'MMM dd') : 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {(!leads || leads.length === 0) && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">No leads to show.</TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -758,22 +861,59 @@ const SalesDashboard = () => {
 }
 
 const DoctorDashboard = () => {
-    // MOCKED DATA FOR PROTOTYPE
-    const stats = {
-        totalAppointments: 12,
-        completed: 5,
-        waiting: 3,
-    };
+    const firestore = useFirestore();
+    const { user } = useUser();
+    const router = useRouter();
 
-    const appointments = [
-        { id: '1', patient: { name: 'Alex Johnson' }, time: '09:30 AM', status: 'Completed' },
-        { id: '2', patient: { name: 'Maria Garcia' }, time: '10:00 AM', status: 'Completed' },
-        { id: '3', patient: { name: 'Chen Wei' }, time: '11:00 AM', status: 'In Consultation' },
-        { id: '4', patient: { name: 'Fatima Al-Fassi' }, time: '11:30 AM', status: 'Waiting' },
-        { id: '5', patient: { name: 'James Smith' }, time: '12:00 PM', status: 'Waiting' },
-    ];
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
 
-    const patientQueue = appointments.filter(a => a.status === 'Waiting');
+    const appointmentsQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return query(
+            collection(firestore, 'appointments'),
+            where('doctorId', '==', user.id)
+        );
+    }, [firestore, user]);
+
+    const { data: rawAppointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsQuery);
+
+    const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
+    const { data: patients, isLoading: patientsLoading } = useCollection<Patient>(patientsRef);
+
+    const enrichedAppointments = React.useMemo(() => {
+        if (!rawAppointments || !patients) return [];
+        const today = startOfDay(new Date());
+
+        return rawAppointments
+            .filter(apt => {
+                const aptDate = startOfDay(new Date(apt.appointmentDateTime));
+                return aptDate.getTime() === today.getTime();
+            })
+            .map(apt => ({
+                ...apt,
+                patient: patients.find(p => p.mobileNumber === apt.patientMobileNumber)
+            }))
+            .sort((a, b) => new Date(a.appointmentDateTime).getTime() - new Date(b.appointmentDateTime).getTime());
+    }, [rawAppointments, patients]);
+
+    const stats = React.useMemo(() => {
+        const total = enrichedAppointments.length;
+        const completed = enrichedAppointments.filter(apt => apt.status === 'Completed').length;
+        const waiting = enrichedAppointments.filter(apt => apt.status === 'Waiting').length;
+        return { totalAppointments: total, completed, waiting };
+    }, [enrichedAppointments]);
+
+    const patientQueue = React.useMemo(() =>
+        enrichedAppointments.filter(a => a.status === 'Waiting' || a.status === 'Checked In'),
+        [enrichedAppointments]);
+
+    if (appointmentsLoading || patientsLoading) {
+        return (
+            <div className="flex min-h-[400px] items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
@@ -826,16 +966,23 @@ const DoctorDashboard = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {appointments.map((apt) => (
+                                {enrichedAppointments.map((apt) => (
                                     <TableRow key={apt.id}>
-                                        <TableCell className="font-medium">{apt.time}</TableCell>
-                                        <TableCell>{apt.patient.name}</TableCell>
+                                        <TableCell className="font-medium">
+                                            {format(new Date(apt.appointmentDateTime), 'hh:mm a')}
+                                        </TableCell>
+                                        <TableCell>{apt.patient?.name || 'Unknown Patient'}</TableCell>
                                         <TableCell><Badge variant={apt.status === 'Completed' ? 'secondary' : 'default'}>{apt.status}</Badge></TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm">View Record</Button>
+                                            <Button variant="outline" size="sm" onClick={() => router.push(`/patients`)}>View Record</Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
+                                {enrichedAppointments.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">No appointments for today.</TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -849,8 +996,10 @@ const DoctorDashboard = () => {
                         {patientQueue.length > 0 ? patientQueue.map(apt => (
                             <div key={apt.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <div>
-                                    <p className="font-semibold">{apt.patient.name}</p>
-                                    <p className="text-sm text-muted-foreground">Waiting since {apt.time}</p>
+                                    <p className="font-semibold">{apt.patient?.name || 'Unknown'}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Waiting since {format(new Date(apt.appointmentDateTime), 'hh:mm a')}
+                                    </p>
                                 </div>
                                 <Button size="sm">Start Consultation</Button>
                             </div>

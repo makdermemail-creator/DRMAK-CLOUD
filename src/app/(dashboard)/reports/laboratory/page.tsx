@@ -92,18 +92,18 @@ export default function LaboratoryReportPage() {
   const enrichedTransactions = React.useMemo(() => {
     if (!billingRecords || !patients || !doctors) return [];
     const patientsMap = new Map(patients.map(p => [p.mobileNumber, p]));
-    // Assuming billing records might have a doctorId to enrich doctor's name
-    // This is a placeholder as BillingRecord type doesn't have doctorId
-    return billingRecords.map(record => ({
-      ...record,
-      patient: patientsMap.get(record.patientMobileNumber)
-    }));
-  }, [billingRecords, patients, doctors]);
+    return billingRecords
+      .filter(record => record.procedureCharges > 0)
+      .map(record => ({
+        ...record,
+        patient: patientsMap.get(record.patientMobileNumber)
+      }));
+  }, [billingRecords, patients]);
 
 
   const transactionData = enrichedTransactions.map(t => ({
     invoice: t.id.slice(0, 6).toUpperCase(),
-    mrn: t.patient?.id.slice(0,8) || 'N/A',
+    mrn: t.patient?.id.slice(0, 8) || 'N/A',
     patientName: t.patient?.name || 'N/A',
     referredBy: '-',
     description: 'Lab Tests', // Placeholder
@@ -146,240 +146,240 @@ export default function LaboratoryReportPage() {
         <CardContent>
           <Tabs defaultValue="transaction" className="w-full">
             <div className="overflow-x-auto">
-                <TabsList>
-                    {tabs.map((tab) => (
-                        <TabsTrigger key={tab.value} value={tab.value}>
-                            <tab.icon className="mr-2 h-4 w-4" />
-                            {tab.label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
+              <TabsList>
+                {tabs.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    <tab.icon className="mr-2 h-4 w-4" />
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
             </div>
             <TabsContent value="transaction" className="pt-4">
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Test Name, Patient Name, MR#" className="pl-8" />
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Test Name, Patient Name, MR#" className="pl-8" />
                   </div>
                   <Input placeholder="Referred By" />
                   <DatePickerWithRange />
                   <Select><SelectTrigger><SelectValue placeholder="Select Report Type" /></SelectTrigger><SelectContent /></Select>
                   <Select><SelectTrigger><SelectValue placeholder="Select Referral" /></SelectTrigger><SelectContent /></Select>
                   <Select><SelectTrigger><SelectValue placeholder="Select Laboratory" /></SelectTrigger><SelectContent /></Select>
-                   <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search by Invoice#" className="pl-8" />
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search by Invoice#" className="pl-8" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Card>
-                        <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                        <CardContent><p className="text-2xl font-bold">{totalRevenue.toFixed(2)}</p></CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle className="text-sm font-medium">Outsource Lab Share</CardTitle></CardHeader>
-                        <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle className="text-sm font-medium">Referral Share</CardTitle></CardHeader>
-                        <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                    </Card>
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
+                    <CardContent><p className="text-2xl font-bold">{totalRevenue.toFixed(2)}</p></CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm font-medium">Outsource Lab Share</CardTitle></CardHeader>
+                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm font-medium">Referral Share</CardTitle></CardHeader>
+                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
+                  </Card>
                 </div>
-                
-                 <div className="flex justify-end gap-2">
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                    <Button variant="outline">Excel</Button>
-                    <Button variant="outline">Customize</Button>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline">Customize</Button>
                 </div>
 
                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>NAME</TableHead>
-                            <TableHead>PRICE</TableHead>
-                            <TableHead>CREATED AT</TableHead>
-                            <TableHead>REFERRED BY</TableHead>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>NAME</TableHead>
+                      <TableHead>PRICE</TableHead>
+                      <TableHead>CREATED AT</TableHead>
+                      <TableHead>REFERRED BY</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-48 text-center">Loading...</TableCell>
+                      </TableRow>
+                    ) : transactionData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-48 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                            <p className="font-semibold">There is no laboratory reports to show.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      transactionData.map((t, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{t.patientName}</TableCell>
+                          <TableCell>{t.total.toFixed(2)}</TableCell>
+                          <TableCell>{t.paymentDate}</TableCell>
+                          <TableCell>{t.referredBy}</TableCell>
                         </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow>
-                                <TableCell colSpan={4} className="h-48 text-center">Loading...</TableCell>
-                            </TableRow>
-                        ) : transactionData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={4} className="h-48 text-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                        <p className="font-semibold">There is no laboratory reports to show.</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            transactionData.map((t, i) => (
-                                <TableRow key={i}>
-                                    <TableCell>{t.patientName}</TableCell>
-                                    <TableCell>{t.total.toFixed(2)}</TableCell>
-                                    <TableCell>{t.paymentDate}</TableCell>
-                                    <TableCell>{t.referredBy}</TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
+                      ))
+                    )}
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
             <TabsContent value="staff" className="pt-4">
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-                    <Select>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Staff" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <DatePickerWithRange />
-                    <Select>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Shift" />
-                        </SelectTrigger>
-                        <SelectContent />
-                    </Select>
-                    <Select>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Doctor" />
-                        </SelectTrigger>
-                         <SelectContent>
-                            {doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Staff" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <DatePickerWithRange />
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Shift" />
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Card className="w-full max-w-xs">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Total Collection</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">{totalRevenue.toFixed(2)}</p>
-                    </CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Total Collection</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">{totalRevenue.toFixed(2)}</p>
+                  </CardContent>
                 </Card>
 
                 <div className="flex justify-end gap-2">
-                    <Button>Collect All</Button>
-                    <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                  <Button>Collect All</Button>
+                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
                 </div>
 
                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>INVOICE#</TableHead>
-                            <TableHead>MR#</TableHead>
-                            <TableHead>PATIENT NAME</TableHead>
-                            <TableHead>DESCRIPTION</TableHead>
-                            <TableHead>TOTAL</TableHead>
-                            <TableHead>PAID</TableHead>
-                            <TableHead>DUES</TableHead>
-                            <TableHead>DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                            <TableHead>TAX DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                            <TableHead>INSURANCE CLAIMS</TableHead>
-                            <TableHead>ADVANCE</TableHead>
-                            <TableHead>DOCTOR REVENUE</TableHead>
-                            <TableHead>USER INCOME TAX</TableHead>
-                            <TableHead>EXPENSES</TableHead>
-                            <TableHead>PAYMENT DATE</TableHead>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>INVOICE#</TableHead>
+                      <TableHead>MR#</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>DESCRIPTION</TableHead>
+                      <TableHead>TOTAL</TableHead>
+                      <TableHead>PAID</TableHead>
+                      <TableHead>DUES</TableHead>
+                      <TableHead>DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
+                      <TableHead>TAX DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
+                      <TableHead>INSURANCE CLAIMS</TableHead>
+                      <TableHead>ADVANCE</TableHead>
+                      <TableHead>DOCTOR REVENUE</TableHead>
+                      <TableHead>USER INCOME TAX</TableHead>
+                      <TableHead>EXPENSES</TableHead>
+                      <TableHead>PAYMENT DATE</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={15} className="h-48 text-center">Loading...</TableCell>
+                      </TableRow>
+                    ) : transactionData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={15} className="h-48 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                            <p className="font-semibold">There are no records to show.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      transactionData.map((t, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{t.invoice}</TableCell>
+                          <TableCell>{t.mrn}</TableCell>
+                          <TableCell>{t.patientName}</TableCell>
+                          <TableCell>{t.description}</TableCell>
+                          <TableCell>{t.total.toFixed(2)}</TableCell>
+                          <TableCell>{t.paid.toFixed(2)}</TableCell>
+                          <TableCell>{t.dues.toFixed(2)}</TableCell>
+                          <TableCell>{t.deductionsInsurance.toFixed(2)}</TableCell>
+                          <TableCell>{t.taxDeductions.toFixed(2)}</TableCell>
+                          <TableCell>{t.insuranceClaims.toFixed(2)}</TableCell>
+                          <TableCell>{t.advance.toFixed(2)}</TableCell>
+                          <TableCell>{t.doctorRevenue}</TableCell>
+                          <TableCell>0.00</TableCell>
+                          <TableCell>0.00</TableCell>
+                          <TableCell>{t.paymentDate}</TableCell>
                         </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                             <TableRow>
-                                <TableCell colSpan={15} className="h-48 text-center">Loading...</TableCell>
-                            </TableRow>
-                        ) : transactionData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={15} className="h-48 text-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                        <p className="font-semibold">There are no records to show.</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                           transactionData.map((t, i) => (
-                               <TableRow key={i}>
-                                    <TableCell>{t.invoice}</TableCell>
-                                    <TableCell>{t.mrn}</TableCell>
-                                    <TableCell>{t.patientName}</TableCell>
-                                    <TableCell>{t.description}</TableCell>
-                                    <TableCell>{t.total.toFixed(2)}</TableCell>
-                                    <TableCell>{t.paid.toFixed(2)}</TableCell>
-                                    <TableCell>{t.dues.toFixed(2)}</TableCell>
-                                    <TableCell>{t.deductionsInsurance.toFixed(2)}</TableCell>
-                                    <TableCell>{t.taxDeductions.toFixed(2)}</TableCell>
-                                    <TableCell>{t.insuranceClaims.toFixed(2)}</TableCell>
-                                    <TableCell>{t.advance.toFixed(2)}</TableCell>
-                                    <TableCell>{t.doctorRevenue}</TableCell>
-                                    <TableCell>0.00</TableCell>
-                                    <TableCell>0.00</TableCell>
-                                    <TableCell>{t.paymentDate}</TableCell>
-                               </TableRow>
-                           ))
-                        )}
-                    </TableBody>
+                      ))
+                    )}
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
             <TabsContent value="referrals" className="pt-4">
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <DatePickerWithRange />
-                        <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Referral" /></SelectTrigger><SelectContent/></Select>
-                        <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Department" /></SelectTrigger><SelectContent/></Select>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <Checkbox id="show-dues" />
-                        <Label htmlFor="show-dues">Only Show Entries With Dues</Label>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <DatePickerWithRange />
+                    <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Referral" /></SelectTrigger><SelectContent /></Select>
+                    <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Department" /></SelectTrigger><SelectContent /></Select>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="show-dues" />
+                    <Label htmlFor="show-dues">Only Show Entries With Dues</Label>
+                  </div>
                 </div>
 
                 <div className="text-center py-10">
-                    <h3 className="font-semibold">Referral Report</h3>
-                    <p className="text-muted-foreground mt-4">No data</p>
+                  <h3 className="font-semibold">Referral Report</h3>
+                  <p className="text-muted-foreground mt-4">No data</p>
                 </div>
 
                 <div className="flex justify-end gap-2">
-                    <Button variant="outline">Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
                 </div>
 
                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead><Checkbox/></TableHead>
-                            <TableHead>INVOICE#</TableHead>
-                            <TableHead>PATIENT NAME</TableHead>
-                            <TableHead>MR#</TableHead>
-                            <TableHead>TESTS</TableHead>
-                            <TableHead>TOTAL</TableHead>
-                            <TableHead>DISCOUNT</TableHead>
-                            <TableHead>PAID</TableHead>
-                            <TableHead>REFERRAL SHARE</TableHead>
-                            <TableHead>PENDING SHARE</TableHead>
-                            <TableHead>PAY FIELD</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell colSpan={11} className="h-48 text-center">
-                                <p className="text-muted-foreground">There are no records to show.</p>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead><Checkbox /></TableHead>
+                      <TableHead>INVOICE#</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>MR#</TableHead>
+                      <TableHead>TESTS</TableHead>
+                      <TableHead>TOTAL</TableHead>
+                      <TableHead>DISCOUNT</TableHead>
+                      <TableHead>PAID</TableHead>
+                      <TableHead>REFERRAL SHARE</TableHead>
+                      <TableHead>PENDING SHARE</TableHead>
+                      <TableHead>PAY FIELD</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={11} className="h-48 text-center">
+                        <p className="text-muted-foreground">There are no records to show.</p>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
@@ -468,104 +468,104 @@ export default function LaboratoryReportPage() {
               </div>
             </TabsContent>
             <TabsContent value="outsourced" className="pt-4">
-                <div className="space-y-6">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="flex flex-wrap items-center gap-4">
-                            <DatePickerWithRange />
-                            <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Laboratory" /></SelectTrigger><SelectContent/></Select>
-                            <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Status" /></SelectTrigger><SelectContent/></Select>
-                            <Input placeholder="Search by Invoice Ref" className="w-[180px]" />
-                        </div>
-                    </div>
-
-                    <div className="text-center py-10">
-                        <h3 className="font-semibold">Outsourced Tests</h3>
-                        <p className="text-muted-foreground mt-4">No data</p>
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                        <Button variant="outline">Excel</Button>
-                        <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
-                    </div>
-
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead><Checkbox/> SELECT ALL</TableHead>
-                                <TableHead>INVOICE REF</TableHead>
-                                <TableHead>PATIENT NAME</TableHead>
-                                <TableHead>TEST NAME</TableHead>
-                                <TableHead>QUANTITY</TableHead>
-                                <TableHead>RETURN QUANTITY</TableHead>
-                                <TableHead>LABORATORY NAME</TableHead>
-                                <TableHead>TEST PRICE</TableHead>
-                                <TableHead>LABORATORY SHARE</TableHead>
-                                <TableHead>PROCESSED SHARE</TableHead>
-                                <TableHead>PENDING SHARE</TableHead>
-                                <TableHead>INVOICE CREATED AT</TableHead>
-                                <TableHead>PAY FIELD</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow>
-                                <TableCell colSpan={13} className="h-48 text-center">
-                                    <p className="text-muted-foreground">There are no records to show.</p>
-                                </TableCell>
-                            </TableRow>
-                        </TableBody>
-                    </Table>
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <DatePickerWithRange />
+                    <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Laboratory" /></SelectTrigger><SelectContent /></Select>
+                    <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Status" /></SelectTrigger><SelectContent /></Select>
+                    <Input placeholder="Search by Invoice Ref" className="w-[180px]" />
+                  </div>
                 </div>
+
+                <div className="text-center py-10">
+                  <h3 className="font-semibold">Outsourced Tests</h3>
+                  <p className="text-muted-foreground mt-4">No data</p>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead><Checkbox /> SELECT ALL</TableHead>
+                      <TableHead>INVOICE REF</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>TEST NAME</TableHead>
+                      <TableHead>QUANTITY</TableHead>
+                      <TableHead>RETURN QUANTITY</TableHead>
+                      <TableHead>LABORATORY NAME</TableHead>
+                      <TableHead>TEST PRICE</TableHead>
+                      <TableHead>LABORATORY SHARE</TableHead>
+                      <TableHead>PROCESSED SHARE</TableHead>
+                      <TableHead>PENDING SHARE</TableHead>
+                      <TableHead>INVOICE CREATED AT</TableHead>
+                      <TableHead>PAY FIELD</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={13} className="h-48 text-center">
+                        <p className="text-muted-foreground">There are no records to show.</p>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             </TabsContent>
             <TabsContent value="quality-control" className="pt-4">
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <DatePickerWithRange />
-                        <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Doctor" /></SelectTrigger><SelectContent/></Select>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <DatePickerWithRange />
+                    <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Doctor" /></SelectTrigger><SelectContent /></Select>
+                  </div>
                 </div>
 
                 <Card className="w-full max-w-sm">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Time Period Accuracy</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                       <p className="text-2xl font-bold">N/A</p>
-                    </CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Time Period Accuracy</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">N/A</p>
+                  </CardContent>
                 </Card>
 
                 <div className="flex justify-end gap-2">
-                    <Button variant="outline">Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
-                    <Button variant="outline">Customize</Button>
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                  <Button variant="outline">Customize</Button>
                 </div>
 
                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>LAB#</TableHead>
-                            <TableHead>DOCTOR NAME</TableHead>
-                            <TableHead>PATIENT MR#</TableHead>
-                            <TableHead>PATIENT NAME</TableHead>
-                            <TableHead>TEST NAME</TableHead>
-                            <TableHead>ORDER DATE</TableHead>
-                            <TableHead>SAMPLE COLLECTED BY</TableHead>
-                            <TableHead>RESULTS ENTERED BY</TableHead>
-                            <TableHead>TEST VALIDATED BY</TableHead>
-                            <TableHead>TURN AROUND TIME (DAYS/HOURS/MINUTES)</TableHead>
-                            <TableHead>STATUS</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell colSpan={11} className="h-48 text-center">
-                                <div className="flex flex-col items-center gap-2">
-                                    <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                    <p className="font-semibold">There are no records to show.</p>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>LAB#</TableHead>
+                      <TableHead>DOCTOR NAME</TableHead>
+                      <TableHead>PATIENT MR#</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>TEST NAME</TableHead>
+                      <TableHead>ORDER DATE</TableHead>
+                      <TableHead>SAMPLE COLLECTED BY</TableHead>
+                      <TableHead>RESULTS ENTERED BY</TableHead>
+                      <TableHead>TEST VALIDATED BY</TableHead>
+                      <TableHead>TURN AROUND TIME (DAYS/HOURS/MINUTES)</TableHead>
+                      <TableHead>STATUS</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={11} className="h-48 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                          <p className="font-semibold">There are no records to show.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
@@ -576,42 +576,42 @@ export default function LaboratoryReportPage() {
                     <SelectTrigger className="w-[280px]">
                       <SelectValue placeholder="Select Collection Center" />
                     </SelectTrigger>
-                    <SelectContent/>
+                    <SelectContent />
                   </Select>
                   <DatePickerWithRange />
                 </div>
-                 <Card className="w-full max-w-xs">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Total Collection Center Revenue</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">0.0</p>
-                    </CardContent>
+                <Card className="w-full max-w-xs">
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Total Collection Center Revenue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">0.0</p>
+                  </CardContent>
                 </Card>
-                 <div className="flex justify-end gap-2">
-                    <Button variant="outline">Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
                 </div>
-                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>COLLECTION CENTER</TableHead>
-                            <TableHead>TOTAL TESTS</TableHead>
-                            <TableHead>TOTAL REVENUE</TableHead>
-                            <TableHead>COLLECTION CENTER SHARE</TableHead>
-                            <TableHead>LAB SHARE</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell colSpan={5} className="h-48 text-center">
-                                <div className="flex flex-col items-center gap-2">
-                                    <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                    <p className="font-semibold">There are no records to show.</p>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>COLLECTION CENTER</TableHead>
+                      <TableHead>TOTAL TESTS</TableHead>
+                      <TableHead>TOTAL REVENUE</TableHead>
+                      <TableHead>COLLECTION CENTER SHARE</TableHead>
+                      <TableHead>LAB SHARE</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-48 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                          <p className="font-semibold">There are no records to show.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
@@ -628,91 +628,91 @@ export default function LaboratoryReportPage() {
                 </div>
 
                 <Card className="w-full max-w-xs">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Total Dues</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">0.0</p>
-                    </CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Total Dues</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">0.0</p>
+                  </CardContent>
                 </Card>
-                
-                 <div className="flex justify-end gap-2">
-                    <Button variant="outline">Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline">Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
                 </div>
 
                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead><Checkbox/> SELECT ALL</TableHead>
-                            <TableHead>MR#</TableHead>
-                            <TableHead>PATIENT NAME</TableHead>
-                            <TableHead>INVOICE NUMBER</TableHead>
-                            <TableHead>TESTS</TableHead>
-                            <TableHead>TOTAL</TableHead>
-                            <TableHead>PAID</TableHead>
-                            <TableHead>DUE</TableHead>
-                            <TableHead>PAY FIELD</TableHead>
-                            <TableHead>CREDITOR</TableHead>
-                            <TableHead>DEPARTMENT</TableHead>
-                            <TableHead>REFERRAL</TableHead>
-                            <TableHead>CREATED AT</TableHead>
-                            <TableHead>ACTION</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell colSpan={14} className="h-48 text-center">
-                                <div className="flex flex-col items-center gap-2">
-                                    <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                    <p className="font-semibold">There are no records to show.</p>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead><Checkbox /> SELECT ALL</TableHead>
+                      <TableHead>MR#</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>INVOICE NUMBER</TableHead>
+                      <TableHead>TESTS</TableHead>
+                      <TableHead>TOTAL</TableHead>
+                      <TableHead>PAID</TableHead>
+                      <TableHead>DUE</TableHead>
+                      <TableHead>PAY FIELD</TableHead>
+                      <TableHead>CREDITOR</TableHead>
+                      <TableHead>DEPARTMENT</TableHead>
+                      <TableHead>REFERRAL</TableHead>
+                      <TableHead>CREATED AT</TableHead>
+                      <TableHead>ACTION</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={14} className="h-48 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                          <p className="font-semibold">There are no records to show.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>
             <TabsContent value="refund-report" className="pt-4">
               <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-4">
-                      <div className="flex items-center space-x-2">
-                          <Checkbox id="refund-cost-per-patient" />
-                          <Label htmlFor="refund-cost-per-patient">Cost Per Patient</Label>
-                      </div>
-                      <DatePickerWithRange />
-                      <Input placeholder="Search by Patient MRN" />
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="refund-cost-per-patient" />
+                    <Label htmlFor="refund-cost-per-patient">Cost Per Patient</Label>
                   </div>
-                  <div className="flex justify-end gap-2">
-                      <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                      <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                  </div>
-                  <Table>
-                      <TableHeader>
-                          <TableRow>
-                              <TableHead>INVOICE#</TableHead>
-                              <TableHead>MR#</TableHead>
-                              <TableHead>PATIENT NAME</TableHead>
-                              <TableHead>DESCRIPTION</TableHead>
-                              <TableHead>TOTAL</TableHead>
-                              <TableHead>REFUND</TableHead>
-                              <TableHead>REASON FOR REFUND</TableHead>
-                              <TableHead>REFUNDED BY</TableHead>
-                              <TableHead>PAYMENT DATE</TableHead>
-                              <TableHead>ACTION</TableHead>
-                          </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                          <TableRow>
-                              <TableCell colSpan={10} className="h-96 text-center">
-                                  <div className="flex flex-col items-center gap-2">
-                                      <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                      <p className="mt-4 text-lg font-medium text-muted-foreground">There are no refund reports to show.</p>
-                                  </div>
-                              </TableCell>
-                          </TableRow>
-                      </TableBody>
-                  </Table>
+                  <DatePickerWithRange />
+                  <Input placeholder="Search by Patient MRN" />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
+                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>INVOICE#</TableHead>
+                      <TableHead>MR#</TableHead>
+                      <TableHead>PATIENT NAME</TableHead>
+                      <TableHead>DESCRIPTION</TableHead>
+                      <TableHead>TOTAL</TableHead>
+                      <TableHead>REFUND</TableHead>
+                      <TableHead>REASON FOR REFUND</TableHead>
+                      <TableHead>REFUNDED BY</TableHead>
+                      <TableHead>PAYMENT DATE</TableHead>
+                      <TableHead>ACTION</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={10} className="h-96 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                          <p className="mt-4 text-lg font-medium text-muted-foreground">There are no refund reports to show.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
             </TabsContent>
             <TabsContent value="income-statement" className="pt-4">

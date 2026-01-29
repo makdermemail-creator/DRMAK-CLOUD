@@ -8,9 +8,21 @@ import { initializeFirebase } from './index';
  * @returns Promise resolving to the download URL
  */
 export async function uploadFile(file: File, path: string): Promise<string> {
-    const { storage } = initializeFirebase();
-    const storageRef = ref(storage, path);
+    try {
+        console.log('storage.ts: Initializing Firebase SDKs...');
+        const { storage } = initializeFirebase();
+        const storageRef = ref(storage, path);
 
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
+        console.log('storage.ts: Starting uploadBytes loop/call for path:', path);
+        const result = await uploadBytes(storageRef, file);
+        console.log('storage.ts: uploadBytes finished. Metadata:', result.metadata);
+
+        console.log('storage.ts: Fetching download URL...');
+        const url = await getDownloadURL(storageRef);
+        console.log('storage.ts: Download URL fetched successfully.');
+        return url;
+    } catch (error) {
+        console.error('storage.ts: Error during upload/getURL:', error);
+        throw error;
+    }
 }

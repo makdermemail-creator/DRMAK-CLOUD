@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Upload, User, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, User } from 'lucide-react';
 import { uploadFile } from '@/firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 
@@ -45,10 +45,17 @@ export function AvatarUpload({ uid, currentPhotoURL, onUploadSuccess }: AvatarUp
         }
 
         setIsUploading(true);
+        console.log('AvatarUpload: Starting upload for user:', uid);
         try {
+            if (!uid) {
+                throw new Error('User ID is missing. Please try again.');
+            }
             const fileName = `profile_${uid}_${Date.now()}`;
             const path = `profiles/${uid}/${fileName}`;
+            console.log('AvatarUpload: Upload path:', path);
+
             const downloadUrl = await uploadFile(file, path);
+            console.log('AvatarUpload: Upload successful, URL:', downloadUrl);
 
             setPreviewUrl(downloadUrl);
             onUploadSuccess(downloadUrl);
@@ -58,13 +65,14 @@ export function AvatarUpload({ uid, currentPhotoURL, onUploadSuccess }: AvatarUp
                 description: 'Profile picture uploaded successfully.',
             });
         } catch (error: any) {
-            console.error('Upload error:', error);
+            console.error('AvatarUpload error:', error);
             toast({
                 variant: 'destructive',
                 title: 'Upload failed',
                 description: error.message || 'Failed to upload image.',
             });
         } finally {
+            console.log('AvatarUpload: Upload process finished.');
             setIsUploading(false);
         }
     };

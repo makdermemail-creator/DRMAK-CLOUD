@@ -19,6 +19,7 @@ import { doc, collection } from 'firebase/firestore';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
+import { AvatarUpload } from '@/components/profile/AvatarUpload';
 
 export default function PatientEditPage() {
   const router = useRouter();
@@ -205,12 +206,13 @@ export default function PatientEditPage() {
             <div className="flex items-center space-x-2 pt-6">
               <Label htmlFor="deceased">Deceased</Label>
             </div>
-            <div className="space-y-2">
-              <Label>Add photo</Label>
-              <div className="flex items-center gap-2">
-                <Button variant="outline">Take photo</Button>
-                <Input type="file" className="flex-1" />
-              </div>
+            <div className="space-y-4">
+              <Label>Profile photo</Label>
+              <AvatarUpload
+                uid={patient.id}
+                currentPhotoURL={formData.avatarUrl}
+                onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+              />
             </div>
           </div>
           <div className="flex justify-end mt-8">

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MoreHorizontal, PlusCircle, Search, Loader2, Upload } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AvatarUpload } from '@/components/profile/AvatarUpload';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,16 +63,7 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
     setFormData(prev => ({ ...prev, gender: value }));
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+
 
   const handleSubmit = () => {
     if (!firestore) return;
@@ -135,14 +127,13 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
             <Input id="address" value={formData.address || ''} onChange={handleChange} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="avatarUrl" className="text-right">Image</Label>
-            <div className="col-span-3 flex items-center gap-2">
-              {formData.avatarUrl && <Avatar><AvatarImage src={formData.avatarUrl} /></Avatar>}
-              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="mr-2 h-4 w-4" />
-                Upload
-              </Button>
-              <Input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+            <Label className="text-right">Photo</Label>
+            <div className="col-span-3">
+              <AvatarUpload
+                uid={patient?.id || formData.mobileNumber || 'new-patient'}
+                currentPhotoURL={formData.avatarUrl}
+                onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+              />
             </div>
           </div>
         </div>

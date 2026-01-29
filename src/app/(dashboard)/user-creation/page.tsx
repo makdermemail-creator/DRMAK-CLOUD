@@ -41,6 +41,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { Checkbox } from '@/components/ui/checkbox';
 import { availableFeatures } from '@/lib/features';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { AvatarUpload } from '@/components/profile/AvatarUpload';
 
 const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenChange: (open: boolean) => void, user?: User }) => {
   const firestore = useFirestore();
@@ -89,6 +90,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
         name: formData.name,
         role: formData.role,
         isAdmin: isNowAdmin,
+        avatarUrl: formData.avatarUrl,
         featureAccess: formData.featureAccess
       });
       toast({ title: "User Updated", description: "The user's details and permissions have been updated." });
@@ -114,7 +116,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
           email: formData.email,
           role: formData.role,
           isAdmin: isNowAdmin,
-          avatarUrl: formData.avatarUrl || `https://i.pravatar.cc/150?u=${newUserId}`, // Placeholder avatar
+          avatarUrl: formData.avatarUrl || '',
           featureAccess: formData.featureAccess,
         };
 
@@ -149,6 +151,16 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right">Photo</Label>
+            <div className="col-span-3">
+              <AvatarUpload
+                uid={user?.id || 'new-user'}
+                currentPhotoURL={formData.avatarUrl}
+                onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-right">Full Name</Label>
             <Input id="name" value={formData.name || ''} onChange={handleChange} className="col-span-3" />

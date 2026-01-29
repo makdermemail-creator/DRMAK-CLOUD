@@ -1,6 +1,7 @@
 export const availableFeatures = [
     // General & Admin
-    { id: 'trainings', label: 'Training', href: '/trainings' },
+    { id: 'trainings_hub', label: 'Training', href: '/trainings' },
+    { id: 'leadAssignment', label: 'Lead Assignment', href: '/leads/assignment' },
     { id: 'dashboard', label: 'Dashboard Access', href: '/' },
     { id: 'appointments', label: 'Appointments Management', href: '/appointments' },
     { id: 'patients', label: 'Patient Management', href: '/patients' },
@@ -35,9 +36,15 @@ export const availableFeatures = [
     { id: 'socialReporting', label: 'Social Media Reporting', href: '/social-reporting' },
     { id: 'contentPlanner', label: 'Content Planner', href: '/content-planner' },
     { id: 'analytics', label: 'Social Analytics', href: '/analytics' },
+    { id: 'reachTracker', label: 'Social Reach Tracker', href: '/analytics/reach' },
     { id: 'socialInbox', label: 'Social Inbox', href: '/social-inbox' },
+
+    // Designer Specific
+    { id: 'designerWork', label: 'Designer Workstation', href: '/designer-dashboard' },
+    { id: 'creativeBriefs', label: 'Creative Briefs', href: '/daily-tasks' },
 
     // Admin Specific Overrides/New
     { id: 'employeeReports', label: 'Employee Reports (Admin)', href: '/employee-reports' },
     { id: 'taskManagement', label: 'Manage Tasks (Admin)', href: '/admin/manage-tasks' },
+    { id: 'admin_trainings', label: 'Manage Trainings (Admin)', href: '/admin/trainings' },
 ];
