@@ -47,7 +47,7 @@ export default function SignupPage() {
         id: user.uid,
         email: user.email!,
         name: email.split('@')[0],
-        avatarUrl: `https://i.pravatar.cc/150?u=${user.uid}`,
+        avatarUrl: '',
         role: isMainAdmin ? 'Admin' : 'Receptionist',
         isAdmin: isMainAdmin,
         isMainAdmin: isMainAdmin

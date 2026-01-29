@@ -32,23 +32,15 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!isAuthLoading) {
-      if (user) {
-        setIsSuccess(true);
-        setTimeout(() => {
-          router.push('/');
-        }, 1000);
-      } else if (authUser) {
-        // Logged in but no profile found in Firestore
-        setIsLoading(false);
-        toast({
-          variant: 'destructive',
-          title: 'Profile Missing',
-          description: 'Access denied. No user profile found for this account.',
-        });
-      }
+    if (!isAuthLoading && authUser) {
+      // Allow login if authenticated, even without Firestore profile
+      // The useUser hook provides fallback data
+      setIsSuccess(true);
+      setTimeout(() => {
+        router.push('/');
+      }, 1000);
     }
-  }, [user, authUser, isAuthLoading, router, toast]);
+  }, [authUser, isAuthLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

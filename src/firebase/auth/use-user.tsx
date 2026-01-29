@@ -30,7 +30,7 @@ export function useUser() {
         id: authUser.uid,
         name: 'Main Admin (Recovered)',
         email: authUser.email!,
-        avatarUrl: `https://i.pravatar.cc/150?u=${authUser.uid}`,
+        avatarUrl: '',
         role: 'Admin',
         isAdmin: true,
         isMainAdmin: true,
@@ -40,18 +40,25 @@ export function useUser() {
   const user = React.useMemo(() => {
     if (!authUser) return null;
 
-    // Base object from either the firestore profile or the admin fallback
+    // Use current profile if it exists, otherwise use fallback
     const baseUser = userProfile || adminFallback;
 
-    // Always ensure critical fields from auth are present
-    return baseUser ? {
+    if (!baseUser) return null;
+
+    // Determine avatar URL: 
+    // 1. Firestore avatarUrl (highest priority)
+    // 2. Auth photoURL
+    // 3. Fallback initials if needed (handled by UI components)
+    let avatarUrl = userProfile ? userProfile.avatarUrl : (authUser.photoURL || '');
+
+    return {
       ...baseUser,
       id: baseUser.id || authUser.uid,
       email: baseUser.email || authUser.email || '',
       name: baseUser.name || authUser.displayName || authUser.email?.split('@')[0] || 'User',
-      avatarUrl: baseUser.avatarUrl || authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.uid}`,
+      avatarUrl: avatarUrl,
       role: baseUser.role || 'Guest',
-    } : null;
+    };
   }, [userProfile, adminFallback, authUser]);
 
   return React.useMemo(() => ({

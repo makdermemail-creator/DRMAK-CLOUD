@@ -29,29 +29,22 @@ export default function SettingsPage() {
     const [isUpdatingProfile, setIsUpdatingProfile] = React.useState(false);
     const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
 
+    const [isInitialized, setIsInitialized] = React.useState(false);
+
     React.useEffect(() => {
-        if (userProfile?.name) {
-            setDisplayName(userProfile.name);
+        if (!isUserLoading && userProfile && !isInitialized) {
+            if (userProfile.name) setDisplayName(userProfile.name);
+            if (userProfile.avatarUrl) setPhotoURL(userProfile.avatarUrl);
+            if (userProfile.icon) setSelectedIcon(userProfile.icon);
+            setIsInitialized(true);
         }
-        if (userProfile?.avatarUrl) {
-            setPhotoURL(userProfile.avatarUrl);
-        }
-        if (userProfile?.icon) {
-            setSelectedIcon(userProfile.icon);
-        }
-    }, [userProfile]);
+    }, [userProfile, isUserLoading, isInitialized]);
 
     const handleUpdateProfile = async () => {
         if (!auth?.currentUser || !firestore) return;
         setIsUpdatingProfile(true);
         try {
-            // Update Firebase Auth profile
-            await updateProfile(auth.currentUser, {
-                displayName,
-                photoURL: photoURL || undefined
-            });
-
-            // Update Firestore user document
+            // 1. Update Firestore user document (Primary source of truth for the app)
             const userRef = doc(firestore, 'users', auth.currentUser.uid);
             await setDoc(userRef, {
                 name: displayName,
@@ -59,6 +52,17 @@ export default function SettingsPage() {
                 icon: selectedIcon || null,
                 updatedAt: new Date().toISOString()
             }, { merge: true });
+
+            // 2. Update Firebase Auth profile (Secondary/Fallback)
+            try {
+                await updateProfile(auth.currentUser, {
+                    displayName,
+                    photoURL: photoURL || undefined
+                });
+            } catch (authError) {
+                console.warn('Firebase Auth profile update failed (non-critical):', authError);
+                // We proceed since Firestore is updated
+            }
 
             toast({ title: 'Profile Updated', description: 'Your profile has been updated successfully.' });
         } catch (error: any) {
@@ -143,6 +147,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <AvatarUpload
                                         uid={auth?.currentUser?.uid || ''}
+                                        firestore={firestore}
                                         currentPhotoURL={photoURL}
                                         onUploadSuccess={(url) => setPhotoURL(url)}
                                     />

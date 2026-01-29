@@ -6,23 +6,34 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Upload, User } from 'lucide-react';
+import { doc, setDoc, Firestore } from 'firebase/firestore';
 import { uploadFile } from '@/firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 
 interface AvatarUploadProps {
     uid: string;
+    firestore: Firestore | null;
     currentPhotoURL?: string;
     onUploadSuccess: (url: string) => void;
 }
 
-export function AvatarUpload({ uid, currentPhotoURL, onUploadSuccess }: AvatarUploadProps) {
+export function AvatarUpload({ uid, firestore, currentPhotoURL, onUploadSuccess }: AvatarUploadProps) {
     const [isUploading, setIsUploading] = React.useState(false);
     const [previewUrl, setPreviewUrl] = React.useState(currentPhotoURL);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
+    // Synchronize preview URL when currentPhotoURL changes (e.g., after loading from Firestore)
+    React.useEffect(() => {
+        if (currentPhotoURL) {
+            console.log('AvatarUpload: Syncing preview with currentPhotoURL:', currentPhotoURL);
+            setPreviewUrl(currentPhotoURL);
+        }
+    }, [currentPhotoURL]);
+
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        console.log('AvatarUpload: File selected:', file?.name, file?.size);
         if (!file) return;
 
         // Basic validation
@@ -46,6 +57,7 @@ export function AvatarUpload({ uid, currentPhotoURL, onUploadSuccess }: AvatarUp
 
         setIsUploading(true);
         console.log('AvatarUpload: Starting upload for user:', uid);
+        console.log('AvatarUpload: Firestore available:', !!firestore);
         try {
             if (!uid) {
                 throw new Error('User ID is missing. Please try again.');
@@ -53,26 +65,49 @@ export function AvatarUpload({ uid, currentPhotoURL, onUploadSuccess }: AvatarUp
             const fileName = `profile_${uid}_${Date.now()}`;
             const path = `profiles/${uid}/${fileName}`;
             console.log('AvatarUpload: Upload path:', path);
+            console.log('AvatarUpload: About to call uploadFile...');
 
             const downloadUrl = await uploadFile(file, path);
             console.log('AvatarUpload: Upload successful, URL:', downloadUrl);
 
+            // Auto-save to Firestore for better UX
+            if (firestore && uid) {
+                console.log('AvatarUpload: Attempting Firestore save...');
+                try {
+                    const userRef = doc(firestore, 'users', uid);
+                    console.log('AvatarUpload: Created doc ref:', userRef.path);
+                    await setDoc(userRef, {
+                        avatarUrl: downloadUrl,
+                        updatedAt: new Date().toISOString()
+                    }, { merge: true });
+                    console.log('AvatarUpload: Auto-saved to Firestore successfully');
+                } catch (fsError) {
+                    console.error('AvatarUpload: Failed to auto-save to Firestore:', fsError);
+                }
+            } else {
+                console.warn('AvatarUpload: Skipping Firestore save - firestore or uid missing');
+            }
+
+            console.log('AvatarUpload: Setting preview URL...');
             setPreviewUrl(downloadUrl);
+            console.log('AvatarUpload: Calling onUploadSuccess...');
             onUploadSuccess(downloadUrl);
 
+            console.log('AvatarUpload: Showing success toast...');
             toast({
                 title: 'Success',
-                description: 'Profile picture uploaded successfully.',
+                description: 'Profile picture updated successfully.',
             });
         } catch (error: any) {
             console.error('AvatarUpload error:', error);
+            const errorMessage = error.code ? `${error.code}: ${error.message}` : error.message;
             toast({
                 variant: 'destructive',
                 title: 'Upload failed',
-                description: error.message || 'Failed to upload image.',
+                description: errorMessage || 'Failed to upload image.',
             });
         } finally {
-            console.log('AvatarUpload: Upload process finished.');
+            console.log('AvatarUpload: Upload process finished, setting isUploading to false');
             setIsUploading(false);
         }
     };
