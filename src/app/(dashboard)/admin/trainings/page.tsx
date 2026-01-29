@@ -18,8 +18,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Trash2, GraduationCap, Link as LinkIcon } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
+import { Loader2, PlusCircle, Trash2, GraduationCap, Link as LinkIcon, Pencil, X } from 'lucide-react';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -39,6 +39,7 @@ export default function AdminTrainingsPage() {
     const [content, setContent] = React.useState('');
     const [videoUrl, setVideoUrl] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [editingId, setEditingId] = React.useState<string | null>(null);
     const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
     const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
@@ -49,7 +50,7 @@ export default function AdminTrainingsPage() {
 
     const { data: trainings, isLoading, forceRerender } = useCollection<SalesTraining>(trainingsQuery);
 
-    const handleAddTraining = async () => {
+    const handleSubmit = async () => {
         if (!title.trim() || !content.trim()) {
             toast({
                 variant: 'destructive',
@@ -62,23 +63,47 @@ export default function AdminTrainingsPage() {
 
         setIsSubmitting(true);
         try {
-            await addDocumentNonBlocking(collection(firestore, 'salesTrainings'), {
-                title,
-                content,
-                videoUrl,
-                createdAt: new Date().toISOString(),
-                createdBy: user.id
-            });
-            setTitle('');
-            setContent('');
-            setVideoUrl('');
-            toast({ title: 'Training Added', description: 'Sales training material created successfully.' });
+            if (editingId) {
+                await updateDocumentNonBlocking(doc(firestore, 'salesTrainings', editingId), {
+                    title,
+                    content,
+                    videoUrl,
+                    updatedAt: new Date().toISOString()
+                });
+                toast({ title: 'Training Updated', description: 'Sales training material updated successfully.' });
+            } else {
+                await addDocumentNonBlocking(collection(firestore, 'salesTrainings'), {
+                    title,
+                    content,
+                    videoUrl,
+                    createdAt: new Date().toISOString(),
+                    createdBy: user.id
+                });
+                toast({ title: 'Training Added', description: 'Sales training material created successfully.' });
+            }
+            resetForm();
             forceRerender();
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to add training material.' });
+            toast({ variant: 'destructive', title: 'Error', description: editingId ? 'Failed to update training material.' : 'Failed to add training material.' });
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleEdit = (training: SalesTraining) => {
+        setEditingId(training.id);
+        setTitle(training.title);
+        setContent(training.content);
+        setVideoUrl(training.videoUrl || '');
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const resetForm = () => {
+        setEditingId(null);
+        setTitle('');
+        setContent('');
+        setVideoUrl('');
     };
 
     const handleDelete = async (id: string) => {
@@ -137,10 +162,24 @@ export default function AdminTrainingsPage() {
                             onChange={(e) => setVideoUrl(e.target.value)}
                         />
                     </div>
-                    <Button onClick={handleAddTraining} className="w-full md:w-auto" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                        Publish Training
-                    </Button>
+                    <div className="flex flex-wrap gap-3">
+                        <Button onClick={handleSubmit} className="w-full md:w-auto" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : editingId ? (
+                                <Pencil className="mr-2 h-4 w-4" />
+                            ) : (
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                            )}
+                            {editingId ? 'Update Training' : 'Publish Training'}
+                        </Button>
+                        {editingId && (
+                            <Button variant="outline" onClick={resetForm} disabled={isSubmitting}>
+                                <X className="mr-2 h-4 w-4" />
+                                Cancel Edit
+                            </Button>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
 
@@ -200,7 +239,15 @@ export default function AdminTrainingsPage() {
                                             >
                                                 <Eye className="h-4 w-4 text-slate-500 hover:text-primary" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleEdit(t)}
+                                                title="Edit Training"
+                                            >
+                                                <Pencil className="h-4 w-4 text-slate-500 hover:text-primary" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)} title="Delete Training">
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>
                                         </TableCell>
