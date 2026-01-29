@@ -17,6 +17,7 @@ export type User = {
   isAdmin?: boolean;
   isMainAdmin?: boolean;
   featureAccess?: { [key: string]: boolean };
+  icon?: string;
 };
 
 export type Doctor = {

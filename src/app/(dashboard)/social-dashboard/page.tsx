@@ -81,8 +81,10 @@ import {
 import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { addDocumentNonBlocking } from '@/firebase';
+import { addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
+import { Trash2, Settings, Save } from 'lucide-react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import {
     orderBy,
@@ -108,7 +110,7 @@ export default function SocialDashboardPage() {
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
-        query(
+        return query(
             collection(firestore, 'adminTaskTemplates'),
             where('category', '==', 'Social Media'),
             limit(10)
@@ -133,12 +135,58 @@ export default function SocialDashboardPage() {
         return query(collection(firestore, 'designRequests'), where('requesterId', '==', user.id), orderBy('createdAt', 'desc'), limit(10));
     }, [firestore, user]);
 
-    const { data: designRequests, isLoading: requestsLoading } = useCollection<DesignRequest>(requestsQuery);
+    const { data: designRequests, isLoading: requestsLoading, error: requestsError } = useCollection<DesignRequest>(requestsQuery);
     const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
 
     const { toast } = useToast();
 
+    // Error handling
+    React.useEffect(() => {
+        if (requestsError) {
+            console.error("Design Requests Error:", requestsError);
+            toast({
+                variant: 'destructive',
+                title: 'Column Missing / Index Error',
+                description: 'The designer tasks list requires a Firestore index. Check console for link.',
+            });
+        }
+    }, [requestsError, toast]);
+
     // Design Request Form State
+    // Social Settings State
+    const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+    const [sheetLink, setSheetLink] = React.useState('');
+    const [isSavingSettings, setIsSavingSettings] = React.useState(false);
+
+    // Fetch Social Settings
+    React.useEffect(() => {
+        if (!firestore) return;
+        const fetchSettings = async () => {
+            const docRef = doc(firestore, 'settings', 'socialMedia');
+            const snap = await getDoc(docRef);
+            if (snap.exists() && snap.data().googleSheetLink) {
+                setSheetLink(snap.data().googleSheetLink);
+            }
+        };
+        fetchSettings();
+    }, [firestore]);
+
+    const handleSaveSocialSettings = async () => {
+        if (!firestore) return;
+        setIsSavingSettings(true);
+        try {
+            await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
+            toast({ title: 'Settings Saved', description: 'Social Media configuration updated.' });
+            setIsSettingsOpen(false);
+            // Refresh analytics
+            window.location.reload(); // Simplest way to re-trigger global hook if needed, or we could expose refresh
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
     const [isRequestModalOpen, setIsRequestModalOpen] = React.useState(false);
     const [requestTitle, setRequestTitle] = React.useState('');
     const [requestDesc, setRequestDesc] = React.useState('');
@@ -176,6 +224,27 @@ export default function SocialDashboardPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to send request.' });
         } finally {
             setIsRequesting(false);
+        }
+    };
+
+    const handleDeleteRequest = async (requestId: string) => {
+        if (!firestore) return;
+
+        if (!confirm('Are you sure you want to delete this design request?')) return;
+
+        try {
+            const docRef = doc(firestore, 'designRequests', requestId);
+            deleteDocumentNonBlocking(docRef);
+            toast({
+                title: 'Request Deleted',
+                description: 'The creative request has been removed.',
+            });
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Failed to delete the request.',
+            });
         }
     };
 
@@ -286,6 +355,47 @@ export default function SocialDashboardPage() {
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
+                    <Button variant="outline" className="border-slate-200 text-slate-600 font-bold" onClick={() => setIsSettingsOpen(true)}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                    </Button>
+
+                    <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Settings className="h-5 w-5 text-indigo-600" />
+                                    Analytics Configuration
+                                </DialogTitle>
+                                <DialogDescription>Configure the data source for your social media dashboard.</DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold uppercase text-slate-500">Google Sheet Link (CSV Export)</Label>
+                                    <Input
+                                        placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                                        value={sheetLink}
+                                        onChange={e => setSheetLink(e.target.value)}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground italic">
+                                        Ensure the sheet is shared so the system can proxy the data.
+                                    </p>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsSettingsOpen(false)}>Cancel</Button>
+                                <Button
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                                    onClick={handleSaveSocialSettings}
+                                    disabled={isSavingSettings}
+                                >
+                                    {isSavingSettings ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                                    Save Configuration
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
                     <Button variant="outline" className="border-indigo-100 text-indigo-700 font-bold" asChild>
                         <Link href="/content-planner">
                             <CalendarCheck className="mr-2 h-4 w-4" />
@@ -397,6 +507,7 @@ export default function SocialDashboardPage() {
                             <TableHeader>
                                 <TableRow className="bg-slate-50/30">
                                     <TableHead className="font-bold text-slate-500 py-4 h-11">Asset</TableHead>
+                                    <TableHead className="font-bold text-slate-500 h-11">Assigned To</TableHead>
                                     <TableHead className="font-bold text-slate-500 h-11">Status</TableHead>
                                     <TableHead className="font-bold text-slate-500 h-11 text-right">Action</TableHead>
                                 </TableRow>
@@ -409,6 +520,16 @@ export default function SocialDashboardPage() {
                                             <p className="text-[10px] text-slate-400 font-bold uppercase">{req.assetType}</p>
                                         </TableCell>
                                         <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-indigo-50 flex items-center justify-center text-[10px] font-bold text-indigo-600 border border-indigo-100 uppercase">
+                                                    {designersList?.find(d => d.id === req.assignedTo)?.name?.[0] || 'D'}
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-600">
+                                                    {designersList?.find(d => d.id === req.assignedTo)?.name || 'Design Team'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
                                             <Badge className={`
                                                 ${req.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
                                                     req.status === 'Submitted' ? 'bg-blue-100 text-blue-700 animate-pulse' :
@@ -418,15 +539,25 @@ export default function SocialDashboardPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {req.submissionUrl ? (
-                                                <Button size="sm" variant="outline" className="h-7 text-[10px] font-black border-blue-200 text-blue-700 hover:bg-blue-50" asChild>
-                                                    <a href={req.submissionUrl} target="_blank" rel="noopener noreferrer">
-                                                        VIEW ASSET
-                                                    </a>
+                                            <div className="flex items-center justify-end gap-2">
+                                                {req.submissionUrl ? (
+                                                    <Button size="sm" variant="outline" className="h-7 text-[10px] font-black border-blue-200 text-blue-700 hover:bg-blue-50" asChild>
+                                                        <a href={req.submissionUrl} target="_blank" rel="noopener noreferrer">
+                                                            VIEW ASSET
+                                                        </a>
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-slate-300 italic">Designing...</span>
+                                                )}
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                                    onClick={() => handleDeleteRequest(req.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
-                                            ) : (
-                                                <span className="text-[10px] font-bold text-slate-300 italic">Designing...</span>
-                                            )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
+import { ViewModeProvider } from '@/context/ViewModeContext';
 
 export const metadata: Metadata = {
   title: 'SkinSmith Clinic Manager',
@@ -25,7 +26,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <FirebaseClientProvider>
-          {children}
+          <ViewModeProvider>
+            {children}
+          </ViewModeProvider>
         </FirebaseClientProvider>
         <Toaster />
       </body>

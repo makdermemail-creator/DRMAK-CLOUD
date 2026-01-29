@@ -23,6 +23,10 @@ import {
     ListTodo,
     Link as LinkIcon,
     Sparkles,
+    Building2,
+    Hospital,
+    ArrowRight,
+    ShieldAlert,
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -84,6 +88,7 @@ import { add, format, startOfDay } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
+import { useViewMode } from '@/context/ViewModeContext';
 
 type AppointmentStatus = 'Waiting' | 'In Consultation' | 'Completed' | 'Cancelled';
 
@@ -285,6 +290,222 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
     );
 };
 
+
+const OrganizationDashboard = () => {
+    const { searchTerm } = useSearch();
+    const firestore = useFirestore();
+    const { summaryMetrics, isLoading: analyticsLoading } = useAnalyticsData();
+
+    // Fetch aggregated data for Organization
+    const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
+    const leadsRef = useMemoFirebase(() => firestore ? collection(firestore, 'leads') : null, [firestore]);
+    const tasksRef = useMemoFirebase(() => firestore ? collection(firestore, 'adminTaskTemplates') : null, [firestore]);
+
+    const { data: users, isLoading: usersLoading } = useCollection<User>(usersRef);
+    const { data: leads, isLoading: leadsLoading } = useCollection<Lead>(leadsRef);
+    const { data: tasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksRef);
+
+    const isLoading = analyticsLoading || usersLoading || leadsLoading || tasksLoading;
+
+    const leadStats = React.useMemo(() => {
+        if (!leads) return { total: 0, new: 0, converted: 0, inProgress: 0 };
+        return {
+            total: leads.length,
+            new: leads.filter(l => l.status === 'New Lead').length,
+            converted: leads.filter(l => l.status === 'Converted').length,
+            inProgress: leads.filter(l => l.status === 'In Progress').length,
+        };
+    }, [leads]);
+
+    const usersByRole = React.useMemo(() => {
+        if (!users) return [];
+        const counts: Record<string, number> = {};
+        users.forEach(u => {
+            counts[u.role] = (counts[u.role] || 0) + 1;
+        });
+        return Object.entries(counts).map(([name, count]) => ({ name, count }));
+    }, [users]);
+
+    if (isLoading) {
+        return (
+            <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
+            {/* Top Metrics */}
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <Card className="bg-gradient-to-br from-white to-slate-50 border-primary/20">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Team</CardTitle>
+                        <Users className="h-4 w-4 text-primary" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{users?.length || 0}</div>
+                        <p className="text-xs text-muted-foreground">Active Employees</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-white to-blue-50 border-blue-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Sales Pipeline</CardTitle>
+                        <Target className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{leadStats.total}</div>
+                        <p className="text-xs text-blue-600/80">{leadStats.converted} Converted</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-white to-indigo-50 border-indigo-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Reach</CardTitle>
+                        <Share2 className="h-4 w-4 text-indigo-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className="text-xs text-green-600">+{summaryMetrics.reachChange}% Month-over-Month</p>
+                    </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Admin Tasks</CardTitle>
+                        <ListTodo className="h-4 w-4 text-orange-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{tasks?.length || 0}</div>
+                        <p className="text-xs text-muted-foreground">Active Templates</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Detailed Analytics */}
+            <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
+                {/* Sales Funnel Chart */}
+                <Card className="xl:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Organization Sales Funnel</CardTitle>
+                        <CardDescription>Visualizing lead conversion status across the team.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ChartContainer config={{
+                            count: { label: "Leads", color: "hsl(var(--primary))" }
+                        }} className="h-full w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RechartsBarChart data={[
+                                    { name: 'New Leads', count: leadStats.new },
+                                    { name: 'In Progress', count: leadStats.inProgress },
+                                    { name: 'Converted', count: leadStats.converted },
+                                ]}>
+                                    <XAxis dataKey="name" />
+                                    <YAxis />
+                                    <RechartsTooltip content={<ChartTooltipContent />} />
+                                    <RechartsBar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                </RechartsBarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+
+                {/* Team Composition */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Team Composition</CardTitle>
+                        <CardDescription>Breakdown by Department</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {usersByRole.map((role) => (
+                                <div key={role.name} className="flex items-center gap-4">
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex items-center justify-between text-sm font-medium leading-none">
+                                            <span>{role.name}</span>
+                                            <span>{role.count}</span>
+                                        </div>
+                                        <Progress value={(role.count / (users?.length || 1)) * 100} className="h-2" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Recent Leads Activity */}
+                <Card className="xl:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Top Leads Activity</CardTitle>
+                        <CardDescription>Critical leads needing attention.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Channel</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {leads?.slice(0, 5).map((lead) => (
+                                    <TableRow key={lead.id}>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{lead.name}</span>
+                                                <span className="text-xs text-muted-foreground">{lead.source}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={lead.status === 'Converted' ? 'default' : 'secondary'}>
+                                                {lead.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="sm" asChild>
+                                                <Link href="/leads">View Details</Link>
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {(!leads || leads.length === 0) && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                                            No recent leads activity.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
+                {/* Social Highlights */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Social Reach Trends</CardTitle>
+                        <CardDescription>Monthly Growth</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[250px] flex items-center justify-center">
+                        <div className="text-center space-y-4">
+                            <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                                <TrendingUp className="h-8 w-8 text-primary" />
+                            </div>
+                            <div className="text-3xl font-bold text-primary">
+                                +{summaryMetrics.reachChange}%
+                            </div>
+                            <p className="text-sm text-muted-foreground px-4">
+                                Our social reach has grown significantly this month compared to the previous period.
+                            </p>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/analytics">Full Social Report</Link>
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
+};
 
 const AdminDashboard = () => {
     const { searchTerm } = useSearch();
@@ -652,9 +873,95 @@ const ReceptionistDashboard = () => {
 }
 
 
+const ViewModeSelection = ({ onSelect }: { onSelect: (mode: 'clinic' | 'organization') => void }) => {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)] space-y-8 animate-in fade-in duration-500">
+            <div className="text-center space-y-2">
+                <h2 className="text-3xl font-bold tracking-tight">Welcome, Administrator</h2>
+                <p className="text-muted-foreground text-lg">Please select a workstation to continue</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4">
+                {/* Organization Selection */}
+                <Card
+                    className="group relative overflow-hidden border-2 transition-all hover:border-primary cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
+                    onClick={() => onSelect('organization')}
+                >
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Building2 className="h-32 w-32" />
+                    </div>
+                    <CardHeader className="space-y-4">
+                        <div className="p-3 bg-primary/10 rounded-2xl w-fit group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                            <Building2 className="h-8 w-8" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-2xl">Organization</CardTitle>
+                            <CardDescription className="text-base mt-2">
+                                Manage employees, reports, revenues, and overall organizational growth.
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Employee Progress Reports</li>
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Sales & Lead Dashboards</li>
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Task & Training Management</li>
+                        </ul>
+                    </CardContent>
+                    <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-primary group-hover:translate-x-1 transition-transform">
+                        Enter Workspace <ArrowRight className="h-4 w-4" />
+                    </div>
+                </Card>
+
+                {/* Clinic Selection */}
+                <Card
+                    className="group relative overflow-hidden border-2 transition-all hover:border-indigo-500 cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
+                    onClick={() => onSelect('clinic')}
+                >
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Hospital className="h-32 w-32" />
+                    </div>
+                    <CardHeader className="space-y-4">
+                        <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                            <Hospital className="h-8 w-8" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-2xl">Manage Skin Smith</CardTitle>
+                            <CardDescription className="text-base mt-2">
+                                Oversee daily clinic operations, appointments, patients, and medical records.
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Core Clinic Operations</li>
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Patient & Doctor Schedules</li>
+                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Pharmacy & Records</li>
+                        </ul>
+                    </CardContent>
+                    <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform">
+                        Enter Clinic <ArrowRight className="h-4 w-4" />
+                    </div>
+                </Card>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full border">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                <span>You are currently in Administrative Entry Mode</span>
+            </div>
+        </div>
+    );
+};
+
+
 export default function Dashboard() {
     const { user, isUserLoading } = useUser();
+    const { viewMode, setViewMode } = useViewMode();
     const router = useRouter();
+
+    const isMainAdmin = React.useMemo(() =>
+        user?.email === 'admin1@skinsmith.com' || user?.isMainAdmin || user?.role === 'Admin' || user?.isAdmin || user?.role === 'Operations Manager',
+        [user]);
 
     React.useEffect(() => {
         if (!isUserLoading && user?.role === 'Sales') {
@@ -676,24 +983,58 @@ export default function Dashboard() {
         )
     }
 
-    if (user?.role === 'Sales') {
-        return <SalesDashboard />;
-    }
-
-    if (user?.role === 'Doctor') {
-        return <DoctorDashboard />;
-    }
+    // Role-based redirection for non-admins remains the same
+    if (user?.role === 'Sales') return <SalesDashboard />;
+    if (user?.role === 'Doctor') return <DoctorDashboard />;
+    if (user?.role === 'Receptionist') return <ReceptionistDashboard />;
 
     if (user?.role === 'Social Media Manager') {
-        return <div className="p-8 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>;
+        return <div className="p-8 text-center flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin h-8 w-8" />
+            <p className="text-muted-foreground">Redirecting to Social Dashboard...</p>
+        </div>;
     }
 
-
-    if (user?.role === 'Receptionist') {
-        return <ReceptionistDashboard />;
+    if (user?.role === 'Designer') {
+        return <div className="p-8 text-center flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin h-8 w-8" />
+            <p className="text-muted-foreground">Redirecting to Designer Dashboard...</p>
+        </div>;
     }
 
-    // Default to AdminDashboard for 'Admin' or any other roles
-    return <AdminDashboard />;
+    if (user?.role === 'Operations Manager') {
+        // Fall through to Main Admin Logic for workspace selection
+    }
+
+    // Main Admin Logic
+    if (isMainAdmin) {
+        if (viewMode === 'none') {
+            return <ViewModeSelection onSelect={setViewMode} />;
+        }
+
+        if (viewMode === 'organization') {
+            return <OrganizationDashboard />;
+        }
+
+        if (viewMode === 'clinic') {
+            return <AdminDashboard />;
+        }
+    }
+
+    // Default Fallback for Admins who haven't selected a mode or failed profile
+    if (isMainAdmin) return <ViewModeSelection onSelect={setViewMode} />;
+
+    // Default Fallback for regular accounts with no role or unhandled role
+    return (
+        <div className="p-12 text-center flex flex-col items-center gap-4">
+            <ShieldAlert className="h-12 w-12 text-amber-500" />
+            <h2 className="text-2xl font-bold">Access Denied or Role Not Configured</h2>
+            <p className="text-muted-foreground max-w-md">
+                Your account ({user?.email || 'Unauthorized User'}) does not have a dashboard assigned to the role "{user?.role || 'Guest'}".
+                Please contact the administrator to set up your profile.
+            </p>
+            <Button onClick={() => router.push('/settings')} variant="outline">Go to Settings</Button>
+        </div>
+    );
 }
 

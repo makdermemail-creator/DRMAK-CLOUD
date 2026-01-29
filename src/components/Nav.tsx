@@ -38,8 +38,20 @@ import {
     Video,
     CalendarCheck,
     GraduationCap,
+    Hospital,
+    Building2,
+    Briefcase,
+    Shield,
+    Users2,
+    Gamepad2,
+    PieChart,
+    BarChart3,
+    Compass,
+    Mail,
+    Network
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
+import { useViewMode } from '@/context/ViewModeContext';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -139,6 +151,48 @@ const allMenuItems = [
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
 ];
 
+const clinicGroups = [
+    {
+        label: "Main",
+        ids: ["dashboard"]
+    },
+    {
+        label: "Core Operations",
+        ids: ["appointments", "patients", "doctors"]
+    },
+    {
+        label: "Medical & Pharmacy",
+        ids: ["pharmacy.full", "healthRecords", "ePrescription"]
+    },
+    {
+        label: "Intelligence & Reports",
+        ids: ["reports.full", "aiTools"]
+    }
+];
+
+const organizationGroups = [
+    {
+        label: "Main",
+        ids: ["dashboard"]
+    },
+    {
+        label: "Administrative",
+        ids: ["userManagement", "featureControl"]
+    },
+    {
+        label: "Team Management",
+        ids: ["employeeReports", "taskManagement", "admin_trainings", "designerWork", "creativeBriefs"]
+    },
+    {
+        label: "Sales & Leads",
+        ids: ["salesDashboard", "leads", "leadAssignment", "dailyReporting"]
+    },
+    {
+        label: "Social & Growth",
+        ids: ["dailyPosting", "dailyTasks", "dailyProgress", "trainings_hub", "socialReporting", "contentPlanner", "analytics", "socialInbox", "reachTracker"]
+    }
+];
+
 const SidebarMenuSkeleton = ({ showIcon }: { showIcon?: boolean }) => {
     // Random width between 50 to 90%.
     const width = React.useMemo(() => {
@@ -174,42 +228,38 @@ const NavContent = () => {
     const pathname = usePathname();
     const { state } = useSidebar();
     const { user: userProfile, isUserLoading } = useUser();
+    const { viewMode, setViewMode } = useViewMode();
+
+    const isMainAdmin = React.useMemo(() =>
+        userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin || userProfile?.role === 'Admin' || userProfile?.isAdmin || userProfile?.role === 'Operations Manager',
+        [userProfile]);
 
     const filteredNavItems = React.useMemo(() => {
-        if (isUserLoading) {
-            return [];
-        }
-
-        const isMainAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin;
+        if (isUserLoading) return [];
 
         if (isMainAdmin) {
+            // Main admin sees everything, but we filter based on viewMode if requested
+            // In this specific task, we want to group them.
             return allMenuItems;
         }
 
         // 1. Check for per-user Feature Access Overrides
         if (userProfile?.featureAccess) {
             return allMenuItems.filter(item => {
-                // Check direct feature match
                 if (userProfile.featureAccess?.[item.id]) return true;
-
-                // Special handling for unified Training feature
                 if (userProfile.featureAccess?.['trainings']) {
                     if (item.id === 'admin_trainings' && userProfile.role === 'Admin') return true;
                     if (item.id === 'trainings_hub' && userProfile.role !== 'Admin') return true;
                 }
-
-                // For menus, check if any sub-item is allowed (or if the menu itself is enabled)
                 if (item.subItems) {
                     return item.subItems.some(sub => userProfile.featureAccess?.[sub.id]);
                 }
-
                 return false;
             });
         }
 
-        // 2. Fallback to Role-based defaults (Existing Logic)
+        // 2. Fallback to Role-based defaults
         if (userProfile?.role === 'Admin') {
-            // Regular Admins see everything EXCEPT User Management and Feature Control
             return allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl');
         }
 
@@ -229,16 +279,14 @@ const NavContent = () => {
         }
 
         if (userProfile) {
-
-            // For any other user without specific feature access, show a default minimal set.
-            const defaultAccess = ['dashboard', 'appointments', 'patients', 'socialInbox'];
+            // Default restricted access for users with no assigned role
+            const defaultAccess = ['dashboard', 'settings'];
             return allMenuItems.filter(item => defaultAccess.includes(item.id));
         }
 
         return [];
-    }, [userProfile, isUserLoading]);
+    }, [userProfile, isUserLoading, isMainAdmin]);
 
-    // While the user's profile and role are loading, show a skeleton UI.
     if (isUserLoading) {
         return (
             <div className="p-2 space-y-2">
@@ -247,6 +295,80 @@ const NavContent = () => {
         )
     }
 
+    // Hide sidebar completely for Main Admin if no viewMode is selected
+    if (isMainAdmin && viewMode === 'none') {
+        return null;
+    }
+
+    // Main Admin View Logic
+    if (isMainAdmin) {
+        const activeGroups = viewMode === 'clinic' ? clinicGroups : organizationGroups;
+
+        return (
+            <div className="space-y-4">
+                {activeGroups.map((group) => {
+                    const groupItems = allMenuItems.filter(item => group.ids.includes(item.id));
+                    if (groupItems.length === 0) return null;
+
+                    return (
+                        <SidebarGroup key={group.label} className="px-0">
+                            <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-4 mb-1">
+                                {group.label}
+                            </SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {groupItems.map((item) => (
+                                        item.isMenu ? (
+                                            <DropdownMenu key={item.id}>
+                                                <SidebarMenuItem>
+                                                    <Link href={item.href}>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <SidebarMenuButton
+                                                                isActive={pathname.startsWith(item.href)}
+                                                                tooltip={item.label}
+                                                                className="w-full justify-between"
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    {item.icon && <item.icon />}
+                                                                    <span>{item.label}</span>
+                                                                </div>
+                                                                {state === 'expanded' && <ChevronDown className="h-4 w-4" />}
+                                                            </SidebarMenuButton>
+                                                        </DropdownMenuTrigger>
+                                                    </Link>
+                                                </SidebarMenuItem>
+                                                <DropdownMenuContent side="right" align="start" className={cn(state === 'collapsed' ? "ml-1" : "ml-8")}>
+                                                    {item.subItems?.map(subItem => (
+                                                        <DropdownMenuItem key={subItem.href} asChild>
+                                                            <Link href={subItem.href} className={cn(pathname === subItem.href && 'bg-accent')}>{subItem.label}</Link>
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        ) : (
+                                            <SidebarMenuItem key={item.id}>
+                                                <Link href={item.href}>
+                                                    <SidebarMenuButton
+                                                        isActive={pathname === item.href}
+                                                        tooltip={item.label}
+                                                    >
+                                                        {item.icon && <item.icon />}
+                                                        <span>{item.label}</span>
+                                                    </SidebarMenuButton>
+                                                </Link>
+                                            </SidebarMenuItem>
+                                        )
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    // Role-based rendering for non-admins (preserving Social Media Manager custom layout if any)
     const moreMenuItems = filteredNavItems.filter(item => item.isMore);
     const mainMenuItems = filteredNavItems.filter(item => !item.isMore);
 

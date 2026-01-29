@@ -98,9 +98,11 @@ export default function Header() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-            <Avatar className="h-9 w-9">
+            <Avatar className="h-9 w-9 border border-primary/10">
               <AvatarImage src={user?.avatarUrl || undefined} alt={displayName} />
-              <AvatarFallback>{displayInitial}</AvatarFallback>
+              <AvatarFallback className="bg-primary/5 text-primary text-sm font-bold">
+                {user?.icon || displayInitial}
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
@@ -114,9 +116,11 @@ export default function Header() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <User className="mr-2 h-4 w-4" />
-            <span>Profile</span>
+          <DropdownMenuItem asChild>
+            <Link href="/settings" className="flex w-full items-center cursor-pointer">
+              <User className="mr-2 h-4 w-4" />
+              <span>Profile</span>
+            </Link>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
             <LogOut className="mr-2 h-4 w-4" />

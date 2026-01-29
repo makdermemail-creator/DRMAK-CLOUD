@@ -8,6 +8,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useUser } from '@/firebase';
 import { Loader2 } from 'lucide-react';
 import { SearchProvider } from '@/context/SearchProvider';
+import { cn } from '@/lib/utils';
+import { useViewMode } from '@/context/ViewModeContext';
 
 export default function DashboardLayout({
   children,
@@ -17,6 +19,7 @@ export default function DashboardLayout({
   const [open, setOpen] = React.useState(true);
   const isMobile = useIsMobile();
   const { user, isUserLoading } = useUser();
+  const { viewMode } = useViewMode();
   const router = useRouter();
 
   React.useEffect(() => {
@@ -26,7 +29,7 @@ export default function DashboardLayout({
       setOpen(true);
     }
   }, [isMobile]);
-  
+
   React.useEffect(() => {
     if (!isUserLoading && !user) {
       router.replace('/login');
@@ -35,24 +38,29 @@ export default function DashboardLayout({
 
 
   if (isUserLoading || !user) {
-      return (
-        <div className="flex min-h-screen items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      );
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
   }
 
+
+  const isMainAdmin = user?.email === 'admin1@skinsmith.com' || user?.isMainAdmin || user?.role === 'Admin' || user?.isAdmin || user?.role === 'Operations Manager';
+  const showSidebar = !isMainAdmin || viewMode !== 'none';
 
   return (
     <SearchProvider>
       <SidebarProvider open={open} onOpenChange={setOpen}>
-        <Sidebar>
-          <Nav />
-        </Sidebar>
+        {showSidebar && (
+          <Sidebar>
+            <Nav />
+          </Sidebar>
+        )}
         <SidebarInset className="flex flex-col">
-          <Header />
-          <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-              {children}
+          {showSidebar && <Header />}
+          <main className={cn("flex-1 overflow-y-auto p-4 md:p-6 lg:p-8", !showSidebar && "p-0")}>
+            {children}
           </main>
         </SidebarInset>
       </SidebarProvider>

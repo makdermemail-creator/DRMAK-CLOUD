@@ -10,7 +10,9 @@ import { updatePassword, updateProfile, getAuth, EmailAuthProvider, reauthentica
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User, Lock, Save, ShieldCheck, Link } from 'lucide-react';
 import { useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { AvatarUpload } from '@/components/profile/AvatarUpload';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function SettingsPage() {
     const { user: userProfile, isUserLoading } = useUser();
@@ -22,49 +24,45 @@ export default function SettingsPage() {
     const [currentPassword, setCurrentPassword] = React.useState('');
     const [newPassword, setNewPassword] = React.useState('');
     const [confirmPassword, setConfirmPassword] = React.useState('');
-    const [sheetLink, setSheetLink] = React.useState('');
+    const [photoURL, setPhotoURL] = React.useState('');
+    const [selectedIcon, setSelectedIcon] = React.useState('');
     const [isUpdatingProfile, setIsUpdatingProfile] = React.useState(false);
     const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
-    const [isUpdatingSocial, setIsUpdatingSocial] = React.useState(false);
 
     React.useEffect(() => {
         if (userProfile?.name) {
             setDisplayName(userProfile.name);
         }
+        if (userProfile?.avatarUrl) {
+            setPhotoURL(userProfile.avatarUrl);
+        }
+        if (userProfile?.icon) {
+            setSelectedIcon(userProfile.icon);
+        }
     }, [userProfile]);
 
-    React.useEffect(() => {
-        if (!firestore) return;
-        const fetchSocialSettings = async () => {
-            const docRef = doc(firestore, 'settings', 'socialMedia');
-            const snap = await getDoc(docRef);
-            if (snap.exists() && snap.data().googleSheetLink) {
-                setSheetLink(snap.data().googleSheetLink);
-            }
-        };
-        fetchSocialSettings();
-    }, [firestore]);
-
-    const handleUpdateSocial = async () => {
-        if (!firestore) return;
-        setIsUpdatingSocial(true);
-        try {
-            await setDoc(doc(firestore, 'settings', 'socialMedia'), { googleSheetLink: sheetLink }, { merge: true });
-            toast({ title: 'Settings Saved', description: 'Social Media configuration updated.' });
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
-        } finally {
-            setIsUpdatingSocial(false);
-        }
-    };
-
     const handleUpdateProfile = async () => {
-        if (!auth?.currentUser) return;
+        if (!auth?.currentUser || !firestore) return;
         setIsUpdatingProfile(true);
         try {
-            await updateProfile(auth.currentUser, { displayName });
-            toast({ title: 'Profile Updated', description: 'Your display name has been updated.' });
+            // Update Firebase Auth profile
+            await updateProfile(auth.currentUser, {
+                displayName,
+                photoURL: photoURL || undefined
+            });
+
+            // Update Firestore user document
+            const userRef = doc(firestore, 'users', auth.currentUser.uid);
+            await setDoc(userRef, {
+                name: displayName,
+                avatarUrl: photoURL || null,
+                icon: selectedIcon || null,
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            toast({ title: 'Profile Updated', description: 'Your profile has been updated successfully.' });
         } catch (error: any) {
+            console.error('Profile update error:', error);
             toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
         } finally {
             setIsUpdatingProfile(false);
@@ -125,50 +123,86 @@ export default function SettingsPage() {
             </div>
 
             <Tabs defaultValue="profile" className="w-full">
-                <TabsList className="grid w-full max-w-lg grid-cols-3">
+                <TabsList className="grid w-full max-w-sm grid-cols-2">
                     <TabsTrigger value="profile" className="gap-2">
                         <User className="h-4 w-4" /> Profile
                     </TabsTrigger>
                     <TabsTrigger value="security" className="gap-2">
                         <ShieldCheck className="h-4 w-4" /> Security
                     </TabsTrigger>
-                    <TabsTrigger value="social" className="gap-2">
-                        <Link className="h-4 w-4" /> Social Media
-                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="profile" className="mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Profile Information</CardTitle>
-                            <CardDescription>Update your public profile details.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Display Name</Label>
-                                <Input
-                                    id="name"
-                                    value={displayName}
-                                    onChange={(e) => setDisplayName(e.target.value)}
-                                    placeholder="Your Name"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email Address</Label>
-                                <Input
-                                    id="email"
-                                    value={userProfile?.email || ''}
-                                    disabled
-                                    className="bg-muted text-muted-foreground"
-                                />
-                                <p className="text-[10px] text-muted-foreground italic">Email changes are managed by administrators.</p>
-                            </div>
-                            <Button onClick={handleUpdateProfile} disabled={isUpdatingProfile} className="gap-2">
-                                {isUpdatingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Save Changes
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1 space-y-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Profile Picture</CardTitle>
+                                    <CardDescription>Manage your avatar</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <AvatarUpload
+                                        uid={auth?.currentUser?.uid || ''}
+                                        currentPhotoURL={photoURL}
+                                        onUploadSuccess={(url) => setPhotoURL(url)}
+                                    />
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Profile Icon</CardTitle>
+                                    <CardDescription>Choose a workspace icon</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {['⚡', '🔥', '💎', '🚀', '🌟', '🎯', '🌈', '🎨'].map((icon) => (
+                                            <button
+                                                key={icon}
+                                                onClick={() => setSelectedIcon(icon)}
+                                                className={`text-2xl p-2 rounded-md transition-all hover:bg-accent ${selectedIcon === icon ? 'bg-accent ring-2 ring-primary' : ''
+                                                    }`}
+                                            >
+                                                {icon}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <Card className="md:col-span-2">
+                            <CardHeader>
+                                <CardTitle>Profile Information</CardTitle>
+                                <CardDescription>Update your public profile details.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="name">Display Name</Label>
+                                    <Input
+                                        id="name"
+                                        value={displayName}
+                                        onChange={(e) => setDisplayName(e.target.value)}
+                                        placeholder="Your Name"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email Address</Label>
+                                    <Input
+                                        id="email"
+                                        value={userProfile?.email || ''}
+                                        disabled
+                                        className="bg-muted text-muted-foreground"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground italic">Email changes are managed by administrators.</p>
+                                </div>
+                                <Button onClick={handleUpdateProfile} disabled={isUpdatingProfile} className="gap-2 w-full md:w-auto">
+                                    {isUpdatingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                    Save Profile Changes
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="security" className="mt-6">
@@ -216,32 +250,6 @@ export default function SettingsPage() {
                                     Update Password
                                 </Button>
                             </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-                <TabsContent value="social" className="mt-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Social Media Settings</CardTitle>
-                            <CardDescription>Configure links for real-time analytics data.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="sheet-link">Google Sheet Link (Analytics Data)</Label>
-                                <Input
-                                    id="sheet-link"
-                                    value={sheetLink}
-                                    onChange={(e) => setSheetLink(e.target.value)}
-                                    placeholder="https://docs.google.com/spreadsheets/d/.../edit"
-                                />
-                                <p className="text-[11px] text-muted-foreground italic">
-                                    Make sure the sheet is shared so the system can access it (export to CSV).
-                                </p>
-                            </div>
-                            <Button onClick={handleUpdateSocial} disabled={isUpdatingSocial} className="gap-2">
-                                {isUpdatingSocial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Save Social Settings
-                            </Button>
                         </CardContent>
                     </Card>
                 </TabsContent>

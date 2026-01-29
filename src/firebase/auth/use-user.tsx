@@ -37,7 +37,22 @@ export function useUser() {
       }
       : null, [isProfileLoading, userProfile, authUser]);
 
-  const user = userProfile || adminFallback;
+  const user = React.useMemo(() => {
+    if (!authUser) return null;
+
+    // Base object from either the firestore profile or the admin fallback
+    const baseUser = userProfile || adminFallback;
+
+    // Always ensure critical fields from auth are present
+    return baseUser ? {
+      ...baseUser,
+      id: baseUser.id || authUser.uid,
+      email: baseUser.email || authUser.email || '',
+      name: baseUser.name || authUser.displayName || authUser.email?.split('@')[0] || 'User',
+      avatarUrl: baseUser.avatarUrl || authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.uid}`,
+      role: baseUser.role || 'Guest',
+    } : null;
+  }, [userProfile, adminFallback, authUser]);
 
   return React.useMemo(() => ({
     user,
