@@ -1,45 +1,47 @@
 'use client';
 import * as React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useDoc } from '@/firebase/firestore/use-doc';
 import type { SalesTraining, SalesTrainingCompletion } from '@/lib/types';
-import { collection, query, orderBy, where, doc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { Loader2, Video, GraduationCap, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
 import { Eye } from 'lucide-react';
 
-export default function TrainingsPage() {
+interface TrainingCardProps {
+    training: SalesTraining;
+    userId: string;
+    onViewDetails: (training: SalesTraining) => void;
+}
+
+function TrainingCard({ training, userId, onViewDetails }: TrainingCardProps) {
     const firestore = useFirestore();
-    const { user, isUserLoading } = useUser();
     const { toast } = useToast();
-    const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
-    const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
-    const trainingsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'salesTrainings'), orderBy('createdAt', 'desc'));
-    }, [firestore]);
+    const completionRef = useMemoFirebase(() => {
+        if (!firestore || !userId || !training.id) return null;
+        return doc(firestore, 'salesTrainingCompletions', `${userId}_${training.id}`);
+    }, [firestore, userId, training.id]);
 
-    const completionsQuery = useMemoFirebase(() => {
-        if (!firestore || !user?.id) return null;
-        return query(collection(firestore, 'salesTrainingCompletions'), where('userId', '==', user.id));
-    }, [firestore, user]);
+    const { data: completion, isLoading } = useDoc<SalesTrainingCompletion>(completionRef);
 
-    const { data: trainings, isLoading: trainingsLoading } = useCollection<SalesTraining>(trainingsQuery);
-    const { data: completions, isLoading: completionsLoading } = useCollection<SalesTrainingCompletion>(completionsQuery);
+    const isCompleted = !!completion;
 
-    const handleMarkTrainingComplete = async (trainingId: string) => {
-        if (!firestore || !user) return;
-        const completionId = `${user.id}_${trainingId}`;
+    const handleMarkTrainingComplete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!firestore || !userId) return;
+
+        const completionId = `${userId}_${training.id}`;
         const completionRef = doc(firestore, 'salesTrainingCompletions', completionId);
 
         try {
             await setDoc(completionRef, {
                 id: completionId,
-                userId: user.id,
-                trainingId,
+                userId: userId,
+                trainingId: training.id,
                 completedAt: new Date().toISOString()
             });
             toast({ title: 'Training Completed', description: 'Great job! Training marked as complete.' });
@@ -48,11 +50,80 @@ export default function TrainingsPage() {
         }
     };
 
-    const isTrainingCompleted = (trainingId: string) => {
-        return completions?.some(c => c.trainingId === trainingId);
-    };
+    return (
+        <Card
+            className={`overflow-hidden border-l-4 ${isCompleted ? 'border-l-green-500' : 'border-l-primary'} hover:shadow-lg transition-all cursor-pointer group`}
+            onClick={() => onViewDetails(training)}
+        >
+            <CardHeader className="pb-3 bg-slate-50/50">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <CardTitle className="text-xl group-hover:text-primary transition-colors">{training.title}</CardTitle>
+                        {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                        Published: {new Date(training.createdAt).toLocaleDateString()}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+                <div className="prose prose-sm max-w-none text-slate-600 line-clamp-3">
+                    {training.content}
+                </div>
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onViewDetails(training);
+                            }}
+                        >
+                            <Eye className="h-4 w-4" />
+                        </Button>
+                        {training.videoUrl && (
+                            <Button variant="outline" size="sm" asChild className="gap-2" onClick={(e) => e.stopPropagation()}>
+                                <a href={training.videoUrl} target="_blank" rel="noopener noreferrer">
+                                    <Video className="h-4 w-4" /> Watch Video
+                                </a>
+                            </Button>
+                        )}
+                    </div>
+                    <div>
+                        {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : !isCompleted ? (
+                            <Button onClick={handleMarkTrainingComplete} className="gap-2 shadow-sm">
+                                Mark as Complete
+                            </Button>
+                        ) : (
+                            <div className="bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4" /> Completed on {completion?.completedAt ? new Date(completion.completedAt).toLocaleDateString() : ''}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
-    if (isUserLoading || trainingsLoading || completionsLoading) {
+export default function TrainingsPage() {
+    const firestore = useFirestore();
+    const { user, isUserLoading } = useUser();
+    const [selectedTraining, setSelectedTraining] = React.useState<SalesTraining | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = React.useState(false);
+
+    const trainingsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'salesTrainings'), orderBy('createdAt', 'desc'));
+    }, [firestore]);
+
+    const { data: trainings, isLoading: trainingsLoading } = useCollection<SalesTraining>(trainingsQuery);
+
+    if (isUserLoading || trainingsLoading) {
         return (
             <div className="flex justify-center items-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -75,69 +146,17 @@ export default function TrainingsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-                {trainings?.map(training => {
-                    const completed = isTrainingCompleted(training.id);
-                    return (
-                        <Card
-                            key={training.id}
-                            className={`overflow-hidden border-l-4 ${completed ? 'border-l-green-500' : 'border-l-primary'} hover:shadow-lg transition-all cursor-pointer group`}
-                            onClick={() => {
-                                setSelectedTraining(training);
-                                setIsDetailOpen(true);
-                            }}
-                        >
-                            <CardHeader className="pb-3 bg-slate-50/50">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <CardTitle className="text-xl group-hover:text-primary transition-colors">{training.title}</CardTitle>
-                                        {completed && <CheckCircle2 className="h-5 w-5 text-green-500" />}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                        Published: {new Date(training.createdAt).toLocaleDateString()}
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="prose prose-sm max-w-none text-slate-600 line-clamp-3">
-                                    {training.content}
-                                </div>
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8"
-                                            onClick={() => {
-                                                setSelectedTraining(training);
-                                                setIsDetailOpen(true);
-                                            }}
-                                        >
-                                            <Eye className="h-4 w-4" />
-                                        </Button>
-                                        {training.videoUrl && (
-                                            <Button variant="outline" size="sm" asChild className="gap-2">
-                                                <a href={training.videoUrl} target="_blank" rel="noopener noreferrer">
-                                                    <Video className="h-4 w-4" /> Watch Video
-                                                </a>
-                                            </Button>
-                                        )}
-                                    </div>
-                                    <div>
-                                        {!completed ? (
-                                            <Button onClick={() => handleMarkTrainingComplete(training.id)} className="gap-2 shadow-sm">
-                                                Mark as Complete
-                                            </Button>
-                                        ) : (
-                                            <div className="bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2">
-                                                <CheckCircle2 className="h-4 w-4" /> Completed on {completions?.find(c => c.trainingId === training.id)?.completedAt ? new Date(completions.find(c => c.trainingId === training.id)!.completedAt).toLocaleDateString() : ''}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    );
-                })}
+                {trainings?.map(training => (
+                    <TrainingCard
+                        key={training.id}
+                        training={training}
+                        userId={user.id}
+                        onViewDetails={(t) => {
+                            setSelectedTraining(t);
+                            setIsDetailOpen(true);
+                        }}
+                    />
+                ))}
 
                 {trainings?.length === 0 && (
                     <div className="text-center py-20 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
