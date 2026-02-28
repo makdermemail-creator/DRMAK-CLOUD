@@ -115,9 +115,6 @@ const allMenuItems = [
     // More Sub-menu - We will treat these as individual features
     { id: 'healthRecords', href: '/health-records', label: 'Health Records', icon: HeartPulse, isMore: true },
 
-    // AI Tools
-    { id: 'aiTools', href: '/recommendations', label: 'AI Tools', icon: Sparkles },
-
     // Admin Specific
     { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog }, // Corrected ID from features page
     { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
@@ -146,6 +143,9 @@ const allMenuItems = [
     { id: 'analytics', href: '/analytics', label: 'Analytics', icon: LineChart },
     { id: 'socialInbox', href: '/social-inbox', label: 'Inbox', icon: Share2 },
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
+
+    // AI Tools at the very bottom
+    { id: 'aiTools', href: '/recommendations', label: 'AI Tools', icon: Sparkles },
 ];
 
 const clinicGroups = [
@@ -163,7 +163,11 @@ const clinicGroups = [
     },
     {
         label: "Intelligence & Reports",
-        ids: ["reports.full", "aiTools"]
+        ids: ["reports.full"]
+    },
+    {
+        label: "Advanced Tools",
+        ids: ["aiTools"]
     }
 ];
 
@@ -187,6 +191,10 @@ const organizationGroups = [
     {
         label: "Social & Growth",
         ids: ["dailyPosting", "dailyTasks", "dailyProgress", "trainings_hub", "socialReporting", "contentPlanner", "analytics", "socialInbox", "reachTracker"]
+    },
+    {
+        label: "Advanced Tools",
+        ids: ["aiTools"]
     }
 ];
 
@@ -261,17 +269,17 @@ const NavContent = () => {
         }
 
         if (userProfile?.role === 'Social Media Manager') {
-            const socialAccess = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting'];
+            const socialAccess = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
             return allMenuItems.filter(item => socialAccess.includes(item.id));
         }
 
         if (userProfile?.role === 'Designer') {
-            const designerAccess = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks'];
+            const designerAccess = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks', 'aiTools'];
             return allMenuItems.filter(item => designerAccess.includes(item.id));
         }
 
         if (userProfile?.role === 'Sales') {
-            const salesAccess = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub'];
+            const salesAccess = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
             return allMenuItems.filter(item => salesAccess.includes(item.id));
         }
 
