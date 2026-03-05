@@ -133,6 +133,7 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
                 uid={patient?.id || formData.mobileNumber || 'new-patient'}
                 currentPhotoURL={formData.avatarUrl}
                 onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+                firestore={firestore!}
               />
             </div>
           </div>
@@ -248,11 +249,11 @@ export default function PatientsPage() {
                     <TableCell>{patient.age}</TableCell>
                     <TableCell>{patient.gender}</TableCell>
                     <TableCell>
-                      {new Date().toLocaleDateString('en-GB', {
+                      {patient.registrationDate ? new Date(patient.registrationDate).toLocaleDateString('en-GB', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
-                      })}
+                      }) : 'N/A'}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>

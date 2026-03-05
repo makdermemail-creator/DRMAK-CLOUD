@@ -2,28 +2,28 @@
 
 import * as React from 'react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, PlusCircle, Loader2, Search, Edit, Trash2, Printer, FileDown } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
@@ -33,6 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useSearch } from '@/context/SearchProvider';
 import { DatePicker } from '@/components/DatePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,7 +43,7 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
     const { toast } = useToast();
     const [formData, setFormData] = React.useState<Partial<PharmacyItem>>({});
     const [stockChange, setStockChange] = React.useState(0);
-    
+
     const isStockMode = mode === 'stock';
 
     React.useEffect(() => {
@@ -69,8 +70,8 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
         if (isStockMode && item?.id) {
             const newQuantity = (item.quantity || 0) + stockChange;
             updateDocumentNonBlocking(doc(collectionRef, item.id), { quantity: newQuantity });
-            toast({ title: 'Stock Updated', description: `Stock for ${item.productName} is now ${newQuantity}.`});
-        } else if (item?.id && mode === 'edit') { 
+            toast({ title: 'Stock Updated', description: `Stock for ${item.productName} is now ${newQuantity}.` });
+        } else if (item?.id && mode === 'edit') {
             updateDocumentNonBlocking(doc(collectionRef, item.id), formData);
             toast({ title: 'Product Updated', description: 'The product details have been saved.' });
         } else { // Add mode
@@ -81,8 +82,8 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
     };
 
     const getTitle = () => {
-        if(isStockMode) return 'Update Stock';
-        if(mode === 'edit') return 'Edit Product';
+        if (isStockMode) return 'Update Stock';
+        if (mode === 'edit') return 'Edit Product';
         return 'Add New Product';
     }
 
@@ -97,10 +98,10 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                 </DialogHeader>
 
                 {isStockMode ? (
-                     <div className="grid gap-4 py-4">
+                    <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="stockChange" className="text-right">Change Quantity</Label>
-                            <Input id="stockChange" type="number" value={stockChange} onChange={(e) => setStockChange(Number(e.target.value))} className="col-span-3" placeholder="e.g., 10 or -5"/>
+                            <Input id="stockChange" type="number" value={stockChange} onChange={(e) => setStockChange(Number(e.target.value))} className="col-span-3" placeholder="e.g., 10 or -5" />
                         </div>
                     </div>
                 ) : (
@@ -121,7 +122,7 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                             <Label htmlFor="category">Category</Label>
                             <Input id="category" value={formData.category || ''} onChange={handleChange} />
                         </div>
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             <Label htmlFor="manufacturer">Manufacturer</Label>
                             <Input id="manufacturer" value={formData.manufacturer || ''} onChange={handleChange} />
                         </div>
@@ -145,7 +146,7 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                             <Label htmlFor="stockingUnit">Stocking Unit</Label>
                             <Input id="stockingUnit" type="number" value={formData.stockingUnit || ''} onChange={handleChange} />
                         </div>
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             <Label htmlFor="conversionUnit">Conversion Unit</Label>
                             <Input id="conversionUnit" type="number" value={formData.conversionUnit || ''} onChange={handleChange} />
                         </div>
@@ -173,142 +174,247 @@ export default function PharmacyItemsPage() {
     const { data: pharmacyItems, isLoading } = useCollection<PharmacyItem>(pharmacyQuery);
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
+    const [isBulkOpen, setIsBulkOpen] = React.useState(false);
     const [selectedItem, setSelectedItem] = React.useState<PharmacyItem | undefined>(undefined);
     const [formMode, setFormMode] = React.useState<'add' | 'edit' | 'stock'>('add');
+
+    // Filter states
+    const [selectedSupplier, setSelectedSupplier] = React.useState<string>('all');
+    const [selectedManufacturer, setSelectedManufacturer] = React.useState<string>('all');
+    const [selectedCategory, setSelectedCategory] = React.useState<string>('all');
+
+    const suppliers = React.useMemo(() => Array.from(new Set(pharmacyItems?.map(i => i.supplier).filter((s): s is string => !!s))), [pharmacyItems]);
+    const manufacturers = React.useMemo(() => Array.from(new Set(pharmacyItems?.map(i => i.manufacturer).filter((m): m is string => !!m))), [pharmacyItems]);
+    const categories = React.useMemo(() => Array.from(new Set(pharmacyItems?.map(i => i.category).filter((c): c is string => !!c))), [pharmacyItems]);
+
+    const handleExcelExport = () => {
+        if (!filteredItems.length) return;
+        const headers = ['Name', 'Generic', 'Barcode', 'Category', 'Manufacturer', 'Supplier', 'Quantity', 'Selling Price'];
+        const csvContent = [
+            headers.join(','),
+            ...filteredItems.map(item => [
+                `"${item.productName}"`,
+                `"${item.genericName || ''}"`,
+                `"${item.barcode || ''}"`,
+                `"${item.category}"`,
+                `"${item.manufacturer || ''}"`,
+                `"${item.supplier}"`,
+                item.quantity,
+                item.sellingPrice
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `pharmacy_items_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handlePrint = () => {
+        window.print();
+    };
 
     const filteredItems = React.useMemo(() => {
         if (!pharmacyItems) return [];
         const term = searchTerm.toLowerCase();
-        if (!term) return pharmacyItems;
-        return pharmacyItems.filter(item => 
-            item.productName.toLowerCase().includes(term) ||
-            (item.genericName && item.genericName.toLowerCase().includes(term)) ||
-            (item.barcode && item.barcode.toLowerCase().includes(term)) ||
-            item.category.toLowerCase().includes(term) ||
-            item.supplier.toLowerCase().includes(term)
-        );
-      }, [pharmacyItems, searchTerm]);
+        return pharmacyItems.filter(item => {
+            const matchesSearch = !term ||
+                item.productName.toLowerCase().includes(term) ||
+                (item.genericName && item.genericName.toLowerCase().includes(term)) ||
+                (item.barcode && item.barcode.toLowerCase().includes(term)) ||
+                item.category.toLowerCase().includes(term) ||
+                item.supplier.toLowerCase().includes(term);
+
+            const matchesSupplier = selectedSupplier === 'all' || item.supplier === selectedSupplier;
+            const matchesManufacturer = selectedManufacturer === 'all' || item.manufacturer === selectedManufacturer;
+            const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+
+            return matchesSearch && matchesSupplier && matchesManufacturer && matchesCategory;
+        });
+    }, [pharmacyItems, searchTerm, selectedSupplier, selectedManufacturer, selectedCategory]);
 
     const handleOpenForm = (mode: 'add' | 'edit' | 'stock', item?: PharmacyItem) => {
         setFormMode(mode);
         setSelectedItem(item);
         setIsFormOpen(true);
     }
-    
+
     const handleDelete = (itemId: string) => {
-      if(!firestore) return;
-      const docRef = doc(firestore, 'pharmacyItems', itemId);
-      deleteDocumentNonBlocking(docRef);
-      toast({
-          variant: 'destructive',
-          title: 'Product Deleted',
-          description: "The product has been removed from the pharmacy."
-      })
+        if (!firestore) return;
+        const docRef = doc(firestore, 'pharmacyItems', itemId);
+        deleteDocumentNonBlocking(docRef);
+        toast({
+            variant: 'destructive',
+            title: 'Product Deleted',
+            description: "The product has been removed from the pharmacy."
+        })
     }
-    
+
     const handleStatusChange = (item: PharmacyItem, newStatus: boolean) => {
-        if(!firestore) return;
+        if (!firestore) return;
         const docRef = doc(firestore, 'pharmacyItems', item.id);
         updateDocumentNonBlocking(docRef, { active: newStatus });
         toast({ title: 'Status Updated', description: `${item.productName} is now ${newStatus ? 'Active' : 'Inactive'}.` });
     }
 
-  return (
-    <>
-    <Card>
-      <CardHeader>
-        <CardTitle>Pharmacy Items</CardTitle>
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
-            <div className="flex flex-wrap gap-2">
-                <DatePicker date={undefined} onDateChange={() => {}} />
-                <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search by Name..." className="pl-8 w-48" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                </div>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Supplier" /></SelectTrigger><SelectContent></SelectContent></Select>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Manufacturer" /></SelectTrigger><SelectContent></SelectContent></Select>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Category" /></SelectTrigger><SelectContent></SelectContent></Select>
-            </div>
-            <div className="flex items-center gap-2">
-                <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Excel</Button>
-                <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-            </div>
-        </div>
-         <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
-            <div className="flex flex-wrap gap-2">
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock(All Item)" /></SelectTrigger><SelectContent></SelectContent></Select>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock Level" /></SelectTrigger><SelectContent></SelectContent></Select>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Active/Inactive" /></SelectTrigger><SelectContent></SelectContent></Select>
-                <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Rack" /></SelectTrigger><SelectContent></SelectContent></Select>
-            </div>
-             <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => toast({title: "Coming Soon"})}><PlusCircle className="mr-2 h-4 w-4" /> Add Multiple Items</Button>
-                <Button size="sm" onClick={() => handleOpenForm('add')}><PlusCircle className="mr-2 h-4 w-4" /> Add New Item</Button>
-                <Button size="sm" onClick={() => {
-                    if (filteredItems.length > 0) handleOpenForm('stock', filteredItems[0])
-                    else toast({variant: "destructive", title: "No Item Selected"})
-                }}><PlusCircle className="mr-2 h-4 w-4" /> Add Stock</Button>
-            </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Status</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Generic Name</TableHead>
-              <TableHead>Barcode</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Manufacturer</TableHead>
-              <TableHead>Supplier(s)</TableHead>
-              <TableHead>Stocking Unit</TableHead>
-              <TableHead>Conversion Unit</TableHead>
-              <TableHead className="text-right">Unit Price</TableHead>
-              <TableHead><span className="sr-only">Actions</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredItems?.map((item) => (
-              <TableRow key={item.id} className="group">
-                <TableCell>
-                    <Switch
-                        checked={item.active}
-                        onCheckedChange={(newStatus) => handleStatusChange(item, newStatus)}
-                    />
-                </TableCell>
-                <TableCell className="font-medium">{item.productName}</TableCell>
-                <TableCell>{item.genericName}</TableCell>
-                <TableCell>{item.barcode}</TableCell>
-                <TableCell>{item.category}</TableCell>
-                <TableCell>{item.manufacturer}</TableCell>
-                <TableCell>{item.supplier}</TableCell>
-                <TableCell>{item.stockingUnit}</TableCell>
-                <TableCell>{item.conversionUnit}</TableCell>
-                <TableCell className="text-right">Rs{item.sellingPrice.toLocaleString()}</TableCell>
-                <TableCell>
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenForm('edit', item)}>
-                             <Edit className="h-4 w-4"/>
-                        </Button>
-                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(item.id)}>
-                            <Trash2 className="h-4 w-4"/>
-                        </Button>
+    return (
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Pharmacy Items</CardTitle>
+                    <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
+                        <div className="flex flex-wrap gap-2">
+                            <DatePicker date={undefined} onDateChange={() => { }} />
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Search by Name..." className="pl-8 w-48" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                            </div>
+                            <Select value={selectedSupplier} onValueChange={setSelectedSupplier}><SelectTrigger className="w-40"><SelectValue placeholder="Select Supplier" /></SelectTrigger><SelectContent><SelectItem value="all">All Suppliers</SelectItem>{suppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+                            <Select value={selectedManufacturer} onValueChange={setSelectedManufacturer}><SelectTrigger className="w-40"><SelectValue placeholder="Select Manufacturer" /></SelectTrigger><SelectContent><SelectItem value="all">All Manufacturers</SelectItem>{manufacturers.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
+                            <Select value={selectedCategory} onValueChange={setSelectedCategory}><SelectTrigger className="w-40"><SelectValue placeholder="Select Category" /></SelectTrigger><SelectContent><SelectItem value="all">All Categories</SelectItem>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={handleExcelExport}><FileDown className="mr-2 h-4 w-4" /> Excel</Button>
+                            <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                        </div>
                     </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        )}
-      </CardContent>
-    </Card>
-    <PharmacyFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} item={selectedItem} mode={formMode} />
-    </>
-  );
+                    <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
+                        <div className="flex flex-wrap gap-2">
+                            <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock(All Item)" /></SelectTrigger><SelectContent></SelectContent></Select>
+                            <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock Level" /></SelectTrigger><SelectContent></SelectContent></Select>
+                            <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Active/Inactive" /></SelectTrigger><SelectContent></SelectContent></Select>
+                            <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Rack" /></SelectTrigger><SelectContent></SelectContent></Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button size="sm" onClick={() => setIsBulkOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add Multiple Items</Button>
+                            <Button size="sm" onClick={() => handleOpenForm('add')}><PlusCircle className="mr-2 h-4 w-4" /> Add New Item</Button>
+                            <Button size="sm" onClick={() => {
+                                if (selectedItem) handleOpenForm('stock', selectedItem)
+                                else toast({ variant: "destructive", title: "No Item Selected", description: "Please click on a row to select an item first." })
+                            }}><PlusCircle className="mr-2 h-4 w-4" /> Add Stock</Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="flex justify-center items-center h-64">
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                        </div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Generic Name</TableHead>
+                                    <TableHead>Barcode</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Manufacturer</TableHead>
+                                    <TableHead>Supplier(s)</TableHead>
+                                    <TableHead>Stocking Unit</TableHead>
+                                    <TableHead>Conversion Unit</TableHead>
+                                    <TableHead className="text-right">Unit Price</TableHead>
+                                    <TableHead><span className="sr-only">Actions</span></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredItems?.map((item) => (
+                                    <TableRow
+                                        key={item.id}
+                                        className={`group cursor-pointer ${selectedItem?.id === item.id ? 'bg-muted/50' : ''}`}
+                                        onClick={() => setSelectedItem(item)}
+                                    >
+                                        <TableCell onClick={(e) => e.stopPropagation()}>
+                                            <Switch
+                                                checked={item.active}
+                                                onCheckedChange={(newStatus) => handleStatusChange(item, newStatus)}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="font-medium">{item.productName}</TableCell>
+                                        <TableCell>{item.genericName}</TableCell>
+                                        <TableCell>{item.barcode}</TableCell>
+                                        <TableCell>{item.category}</TableCell>
+                                        <TableCell>{item.manufacturer}</TableCell>
+                                        <TableCell>{item.supplier}</TableCell>
+                                        <TableCell>{item.stockingUnit}</TableCell>
+                                        <TableCell>{item.conversionUnit}</TableCell>
+                                        <TableCell className="text-right">Rs{item.sellingPrice.toLocaleString()}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenForm('edit', item)}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(item.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+            <PharmacyFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} item={selectedItem} mode={formMode} />
+            <BulkAddDialog open={isBulkOpen} onOpenChange={setIsBulkOpen} />
+        </>
+    );
+}
+
+const BulkAddDialog = ({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) => {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [text, setText] = React.useState('');
+
+    const handleBulkAdd = () => {
+        if (!firestore || !text.trim()) return;
+        const lines = text.split('\n').filter(l => l.trim());
+        const collectionRef = collection(firestore, 'pharmacyItems');
+
+        lines.forEach(line => {
+            const newItem: Partial<PharmacyItem> = {
+                productName: line.trim(),
+                category: 'General',
+                supplier: 'General',
+                quantity: 0,
+                sellingPrice: 0,
+                purchasePrice: 0,
+                expiryDate: format(new Date(), 'yyyy-MM-dd'),
+                active: true
+            };
+            addDocumentNonBlocking(collectionRef, newItem);
+        });
+
+        toast({ title: 'Items Added', description: `Successfully scheduled ${lines.length} items for addition.` });
+        setText('');
+        onOpenChange(false);
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add Multiple Items</DialogTitle>
+                    <DialogDescription>Paste a list of product names (one per line) to add them quickly.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <Textarea
+                        placeholder="Paracetamol 500mg&#10;Amoxicillin 250mg&#10;..."
+                        className="min-h-[200px]"
+                        value={text}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setText(e.target.value)}
+                    />
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleBulkAdd}>Add Items</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }

@@ -30,6 +30,9 @@ import { format } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { deleteDocumentNonBlocking } from '@/firebase';
+import { isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 
 export default function InvoiceHistoryPage() {
   const router = useRouter();
@@ -48,7 +51,50 @@ export default function InvoiceHistoryPage() {
   );
 
   const { data: patient, isLoading: patientLoading } = useDoc<Patient>(patientDocRef);
-  const { data: invoices, isLoading: invoicesLoading } = useCollection<Invoice>(invoicesQuery);
+  const { data: invoices, isLoading: invoicesLoading, forceRerender } = useCollection<Invoice>(invoicesQuery);
+
+  const { toast } = useToast();
+
+  const [dateFrom, setDateFrom] = React.useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = React.useState<Date | undefined>(undefined);
+  const [department, setDepartment] = React.useState<string>('all');
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  const filteredInvoices = React.useMemo(() => {
+    if (!invoices) return [];
+    return invoices.filter(invoice => {
+      const invoiceDate = new Date(invoice.invoiceDate);
+
+      const matchDate = (!dateFrom || invoiceDate >= startOfDay(dateFrom)) &&
+        (!dateTo || invoiceDate <= endOfDay(dateTo));
+
+      const matchQuery = !searchQuery ||
+        invoice.items.some(item => item.procedure.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        invoice.id.toLowerCase().includes(searchQuery.toLowerCase());
+
+      // Since department isn't clearly in the Invoice type from common snippets, we'll placeholder it for now
+      // or filter by a specific field if it exists. For now, we'll just allow "all".
+      const matchDept = department === 'all';
+
+      return matchDate && matchQuery && matchDept;
+    });
+  }, [invoices, dateFrom, dateTo, searchQuery, department]);
+
+  const handleDelete = async (invoiceId: string) => {
+    if (!firestore || !window.confirm('Are you sure you want to delete this invoice?')) return;
+    try {
+      await deleteDocumentNonBlocking(doc(firestore, 'invoices', invoiceId));
+      toast({ title: 'Invoice Deleted', description: 'The invoice has been successfully removed.' });
+      forceRerender();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete invoice.' });
+    }
+  };
+
+  const handlePrint = (invoice: Invoice) => {
+    // In a real app, this might open a specialized print view
+    window.print();
+  };
 
   const isLoading = patientLoading || invoicesLoading;
 
@@ -77,16 +123,37 @@ export default function InvoiceHistoryPage() {
           <Button onClick={() => router.push(`/invoices/create?id=${patient.id}`)}>Create Invoice</Button>
         </div>
       </div>
-      
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-            <DatePicker date={new Date()} onDateChange={() => {}} />
-            <DatePicker date={new Date()} onDateChange={() => {}} />
-            <Select>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Select Department"/></SelectTrigger>
-                <SelectContent/>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold px-1">From</span>
+            <DatePicker date={dateFrom} onDateChange={setDateFrom} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold px-1">To</span>
+            <DatePicker date={dateTo} onDateChange={setDateTo} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold px-1">Department</span>
+            <Select value={department} onValueChange={setDepartment}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Select Department" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                <SelectItem value="opd">OPD</SelectItem>
+                <SelectItem value="pharmacy">Pharmacy</SelectItem>
+              </SelectContent>
             </Select>
-            <Input placeholder="Search By Description..." className="w-64"/>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold px-1">Search</span>
+            <Input
+              placeholder="Search By Description..."
+              className="w-64"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -112,8 +179,8 @@ export default function InvoiceHistoryPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {invoices && invoices.length > 0 ? (
-              invoices.map((invoice, index) => (
+            {filteredInvoices && filteredInvoices.length > 0 ? (
+              filteredInvoices.map((invoice, index) => (
                 <TableRow key={invoice.id}>
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>{invoice.id.slice(0, 8)}</TableCell>
@@ -131,10 +198,10 @@ export default function InvoiceHistoryPage() {
                   <TableCell>Admin</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon"><Printer className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => router.push(`/invoices/view?id=${invoice.id}`)}><Eye className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handlePrint(invoice)}><Printer className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(invoice.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>

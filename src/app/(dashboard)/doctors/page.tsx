@@ -123,6 +123,7 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
             <div className="col-span-3">
               <AvatarUpload
                 uid={doctor?.id || 'new-doctor'}
+                firestore={firestore}
                 currentPhotoURL={formData.avatarUrl}
                 onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
               />

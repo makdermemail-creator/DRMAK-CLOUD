@@ -14,7 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Trash2, Printer } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useUser } from '@/firebase';
+import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
+import { collection } from 'firebase/firestore';
+import type { Patient } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 
 type Medicine = {
@@ -27,6 +30,12 @@ type Medicine = {
 
 export default function EPrescriptionPage() {
   const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+
+  const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
+  const { data: patients, isLoading } = useCollection<Patient>(patientsQuery);
+
   const [patient, setPatient] = React.useState('');
   const [diagnosis, setDiagnosis] = React.useState('');
   const [medicines, setMedicines] = React.useState<Medicine[]>([
@@ -48,6 +57,13 @@ export default function EPrescriptionPage() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleSaveTemplate = () => {
+    toast({
+      title: "Feature coming soon",
+      description: "Prescription template saving will be implemented shortly.",
+    });
   };
 
   return (
@@ -73,9 +89,9 @@ export default function EPrescriptionPage() {
                     <SelectValue placeholder="Select a patient" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* In a real app, this would be populated from Firestore */}
-                    <SelectItem value="p1">Alex Johnson</SelectItem>
-                    <SelectItem value="p2">Maria Garcia</SelectItem>
+                    {patients?.map(p => (
+                      <SelectItem key={p.id} value={p.name}>{p.name} - {p.mobileNumber}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -175,7 +191,7 @@ export default function EPrescriptionPage() {
             </CardContent>
             <CardFooter className="flex-col items-stretch gap-2 print:hidden">
               <Button onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Print Prescription</Button>
-              <Button variant="outline">Save as Template</Button>
+              <Button variant="outline" onClick={handleSaveTemplate}>Save as Template</Button>
             </CardFooter>
           </Card>
         </div>

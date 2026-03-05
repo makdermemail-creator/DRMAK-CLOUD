@@ -299,6 +299,7 @@ const SendMessageDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
 
 export default function PatientDetailsPage() {
     const router = useRouter();
+    const { toast } = useToast();
     const searchParams = useSearchParams();
     const patientId = searchParams.get('id');
 
@@ -329,6 +330,8 @@ export default function PatientDetailsPage() {
             setIsMedicalHistoryDialogOpen(true);
         } else if (id === 'sendMessage') {
             setIsSendMessageDialogOpen(true);
+        } else if (id === 'addFile') {
+            toast({ title: 'Add File', description: 'File upload feature coming soon.' });
         }
         else {
             router.push(`${href}?id=${patientId}`);
@@ -374,7 +377,10 @@ export default function PatientDetailsPage() {
                                 <p><strong>HIN ID:</strong> 000011030024</p>
                                 <p><strong>Phone:</strong> {patient.mobileNumber}</p>
                             </div>
-                            <Button className="mt-4 w-full bg-blue-600 hover:bg-blue-700">
+                            <Button
+                                className="mt-4 w-full bg-blue-600 hover:bg-blue-700"
+                                onClick={() => toast({ title: 'Add Reminder', description: 'Reminder feature coming soon.' })}
+                            >
                                 <BellPlus className="mr-2 h-4 w-4" /> Add Reminder
                             </Button>
                         </CardContent>
@@ -403,7 +409,21 @@ export default function PatientDetailsPage() {
                                 <Label htmlFor="follow-up" className="text-sm">Set Followup</Label>
                                 <Switch id="follow-up" />
                             </div>
-                            <Button variant="outline" className="w-full">
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                    const data = JSON.stringify(patient, null, 2);
+                                    const blob = new Blob([data], { type: 'application/json' });
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = `patient_${patient.id}.json`;
+                                    link.click();
+                                    URL.revokeObjectURL(url);
+                                    toast({ title: 'Download Started', description: 'Patient data has been exported.' });
+                                }}
+                            >
                                 <Download className="mr-2 h-4 w-4" /> Download Patient
                             </Button>
                         </CardContent>

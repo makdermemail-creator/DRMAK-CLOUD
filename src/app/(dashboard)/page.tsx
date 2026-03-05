@@ -201,13 +201,34 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
 const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], date: Date, onDateChange: (date: Date | undefined) => void }) => {
     const [isBooking, setIsBooking] = React.useState(false);
     const [selectedTime, setSelectedTime] = React.useState<Date | null>(null);
+    const [startHour, setStartHour] = React.useState(9);
+    const [endHour, setEndHour] = React.useState(17);
+
+    React.useEffect(() => {
+        const savedStart = localStorage.getItem('scheduleStartHour');
+        const savedEnd = localStorage.getItem('scheduleEndHour');
+        if (savedStart) setStartHour(parseInt(savedStart));
+        if (savedEnd) setEndHour(parseInt(savedEnd));
+    }, []);
+
+    const handleStartHourChange = (val: string) => {
+        const hour = parseInt(val);
+        setStartHour(hour);
+        localStorage.setItem('scheduleStartHour', val);
+    };
+
+    const handleEndHourChange = (val: string) => {
+        const hour = parseInt(val);
+        setEndHour(hour);
+        localStorage.setItem('scheduleEndHour', val);
+    };
 
     const timeSlots = React.useMemo(() => {
         const slots = [];
         const start = new Date(date);
-        start.setHours(9, 0, 0, 0);
+        start.setHours(startHour, 0, 0, 0);
         const end = new Date(date);
-        end.setHours(17, 0, 0, 0);
+        end.setHours(endHour, 0, 0, 0);
 
         let currentTime = start;
         while (currentTime < end) {
@@ -215,7 +236,7 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
             currentTime = add(currentTime, { minutes: 30 });
         }
         return slots;
-    }, [date]);
+    }, [date, startHour, endHour]);
 
     const appointmentsByTime = React.useMemo(() => {
         const map = new Map<string, (Appointment & { patient?: Patient, doctor?: Doctor })[]>();
@@ -241,14 +262,46 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
     return (
         <>
             <Card className="xl:col-span-2">
-                <CardHeader className="flex flex-row items-center justify-between gap-2">
-                    <div className="grid gap-2">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="grid gap-1">
                         <CardTitle>Daily Schedule</CardTitle>
                         <CardDescription>
                             An overview of appointments. Click a slot to book.
                         </CardDescription>
                     </div>
-                    <DatePicker date={date} onDateChange={onDateChange} />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Start:</span>
+                            <Select value={startHour.toString()} onValueChange={handleStartHourChange}>
+                                <SelectTrigger className="h-8 w-[80px] text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 24 }).map((_, i) => (
+                                        <SelectItem key={i} value={i.toString()}>
+                                            {format(new Date().setHours(i, 0), 'h aa')}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">End:</span>
+                            <Select value={endHour.toString()} onValueChange={handleEndHourChange}>
+                                <SelectTrigger className="h-8 w-[80px] text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 24 }).map((_, i) => (
+                                        <SelectItem key={i} value={i.toString()}>
+                                            {format(new Date().setHours(i, 0), 'h aa')}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <DatePicker date={date} onDateChange={onDateChange} />
+                    </div>
                 </CardHeader>
                 <CardContent className="h-[400px] overflow-y-auto">
                     <div className="grid grid-cols-1 gap-1">
