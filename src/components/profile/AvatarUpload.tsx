@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Upload, User } from 'lucide-react';
 import { doc, setDoc, Firestore } from 'firebase/firestore';
-import { uploadFile } from '@/firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 
 interface AvatarUploadProps {
@@ -15,9 +14,11 @@ interface AvatarUploadProps {
     firestore: Firestore | null;
     currentPhotoURL?: string;
     onUploadSuccess: (url: string) => void;
+    firestoreCollection?: string; // e.g. 'users', 'doctors'
+    disableAutoSave?: boolean; // If true, only uploads to storage but doesn't write to Firestore
 }
 
-export function AvatarUpload({ uid, firestore, currentPhotoURL, onUploadSuccess }: AvatarUploadProps) {
+export function AvatarUpload({ uid, firestore, currentPhotoURL, onUploadSuccess, firestoreCollection = 'users', disableAutoSave = false }: AvatarUploadProps) {
     const [isUploading, setIsUploading] = React.useState(false);
     const [previewUrl, setPreviewUrl] = React.useState(currentPhotoURL);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -46,68 +47,77 @@ export function AvatarUpload({ uid, firestore, currentPhotoURL, onUploadSuccess 
             return;
         }
 
-        if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        // Enforce a stricter limit for Base64 (max 500KB to stay well under 1MB Firestore doc limit)
+        if (file.size > 500 * 1024) {
             toast({
                 variant: 'destructive',
                 title: 'File too large',
-                description: 'Please upload an image smaller than 2MB.',
+                description: 'For database storage, please upload an image smaller than 500KB.',
             });
             return;
         }
 
         setIsUploading(true);
-        console.log('AvatarUpload: Starting upload for user:', uid);
-        console.log('AvatarUpload: Firestore available:', !!firestore);
+        console.log('AvatarUpload: Starting Base64 conversion...');
+
         try {
-            if (!uid) {
-                throw new Error('User ID is missing. Please try again.');
-            }
-            const fileName = `profile_${uid}_${Date.now()}`;
-            const path = `profiles/${uid}/${fileName}`;
-            console.log('AvatarUpload: Upload path:', path);
-            console.log('AvatarUpload: About to call uploadFile...');
+            const reader = new FileReader();
 
-            const downloadUrl = await uploadFile(file, path);
-            console.log('AvatarUpload: Upload successful, URL:', downloadUrl);
+            reader.onloadend = async () => {
+                const base64String = reader.result as string;
+                console.log('AvatarUpload: Conversion successful. Length:', base64String.length);
 
-            // Auto-save to Firestore for better UX
-            if (firestore && uid) {
-                console.log('AvatarUpload: Attempting Firestore save...');
-                try {
-                    const userRef = doc(firestore, 'users', uid);
-                    console.log('AvatarUpload: Created doc ref:', userRef.path);
-                    await setDoc(userRef, {
-                        avatarUrl: downloadUrl,
-                        updatedAt: new Date().toISOString()
-                    }, { merge: true });
-                    console.log('AvatarUpload: Auto-saved to Firestore successfully');
-                } catch (fsError) {
-                    console.error('AvatarUpload: Failed to auto-save to Firestore:', fsError);
+                // Auto-save to Firestore for better UX
+                if (!disableAutoSave && firestore && uid) {
+                    console.log(`AvatarUpload: Attempting Firestore save to ${firestoreCollection}/${uid}...`);
+                    try {
+                        const docRef = doc(firestore, firestoreCollection, uid);
+                        console.log('AvatarUpload: Created doc ref:', docRef.path);
+                        await setDoc(docRef, {
+                            avatarUrl: base64String,
+                            updatedAt: new Date().toISOString()
+                        }, { merge: true });
+                        console.log('AvatarUpload: Auto-saved to Firestore successfully');
+                    } catch (fsError) {
+                        console.error('AvatarUpload: Failed to auto-save to Firestore:', fsError);
+                    }
+                } else {
+                    console.warn('AvatarUpload: Skipping Firestore save (disabled or missing dependencies)');
                 }
-            } else {
-                console.warn('AvatarUpload: Skipping Firestore save - firestore or uid missing');
-            }
 
-            console.log('AvatarUpload: Setting preview URL...');
-            setPreviewUrl(downloadUrl);
-            console.log('AvatarUpload: Calling onUploadSuccess...');
-            onUploadSuccess(downloadUrl);
+                console.log('AvatarUpload: Setting preview URL...');
+                setPreviewUrl(base64String);
+                console.log('AvatarUpload: Calling onUploadSuccess...');
+                onUploadSuccess(base64String);
 
-            console.log('AvatarUpload: Showing success toast...');
-            toast({
-                title: 'Success',
-                description: 'Profile picture updated successfully.',
-            });
+                console.log('AvatarUpload: Showing success toast...');
+                toast({
+                    title: 'Success',
+                    description: 'Profile picture converted and updated successfully.',
+                });
+                setIsUploading(false);
+            };
+
+            reader.onerror = (error) => {
+                console.error('AvatarUpload FileReader error:', error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Conversion failed',
+                    description: 'Failed to process image file.',
+                });
+                setIsUploading(false);
+            };
+
+            // Read the file as a Data URL (base64)
+            reader.readAsDataURL(file);
+
         } catch (error: any) {
-            console.error('AvatarUpload error:', error);
-            const errorMessage = error.code ? `${error.code}: ${error.message}` : error.message;
+            console.error('AvatarUpload unexpected error:', error);
             toast({
                 variant: 'destructive',
                 title: 'Upload failed',
-                description: errorMessage || 'Failed to upload image.',
+                description: error.message || 'Failed to process image.',
             });
-        } finally {
-            console.log('AvatarUpload: Upload process finished, setting isUploading to false');
             setIsUploading(false);
         }
     };
@@ -136,7 +146,7 @@ export function AvatarUpload({ uid, firestore, currentPhotoURL, onUploadSuccess 
                 <div className="space-y-1">
                     <h4 className="text-sm font-medium">Profile Picture</h4>
                     <p className="text-xs text-muted-foreground">
-                        JPG, PNG or WebP. Max size 2MB.
+                        JPG, PNG or WebP. Max size 500KB.
                     </p>
                 </div>
                 <div className="flex gap-2">

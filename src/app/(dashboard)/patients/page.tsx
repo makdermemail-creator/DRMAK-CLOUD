@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlusCircle, Search, Loader2, Upload } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Search, Loader2, Upload, Bell, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
 import {
@@ -29,11 +29,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Patient } from '@/lib/types';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, query, where, orderBy } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useSearchParams } from 'next/navigation';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSearch } from '@/context/SearchProvider';
@@ -147,15 +148,70 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
 }
 
 export default function PatientsPage() {
+  return (
+    <React.Suspense fallback={
+      <div className="flex justify-center items-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <PatientsContent />
+    </React.Suspense>
+  );
+}
+
+function PatientsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { searchTerm } = useSearch();
   const firestore = useFirestore();
   const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
   const { data: patients, isLoading } = useCollection<Patient>(patientsQuery);
 
+  // Follow-up notifications
+  const followUpsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
+      collection(firestore, 'followUps'),
+      where('status', '==', 'Pending'),
+      orderBy('followUpDate', 'asc')
+    );
+  }, [firestore]);
+  const { data: allFollowUps } = useCollection<{
+    id: string; patientId: string; patientName: string;
+    patientMobile: string; followUpDate: string; reason: string; status: string;
+  }>(followUpsQuery);
+
+  const urgentFollowUps = React.useMemo(() => {
+    if (!allFollowUps) return [];
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return allFollowUps.filter(f => new Date(f.followUpDate) <= today);
+  }, [allFollowUps]);
+
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | undefined>(undefined);
+
+  const handleOpenChange = (open: boolean) => {
+    setIsFormOpen(open);
+    if (!open && searchParams.toString()) {
+      // Clear URL parameters (like ?add=...) when the dialog is closed to prevent auto-reopening
+      router.replace('/patients', { scroll: false });
+    }
+  };
+
+  // Auto-open Add Patient form if 'add' parameter exists in URL
+  React.useEffect(() => {
+    const mobileToAdd = searchParams.get('add');
+    if (mobileToAdd && !isFormOpen && patients !== undefined) {
+      // Check if patient actually exists first (in case they refreshed)
+      const exists = patients?.some(p => p.mobileNumber === mobileToAdd);
+      if (!exists) {
+        setSelectedPatient({ mobileNumber: mobileToAdd } as Patient);
+        setIsFormOpen(true);
+      }
+    }
+  }, [searchParams, patients, isFormOpen]);
 
   const filteredPatients = React.useMemo(() => {
     if (!patients) return [];
@@ -193,6 +249,48 @@ export default function PatientsPage() {
 
   return (
     <>
+      {/* Follow-up Notification Banner */}
+      {urgentFollowUps.length > 0 && (
+        <div className="mb-4 rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-9 w-9 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+              <Bell className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-orange-800 dark:text-orange-300">
+                {urgentFollowUps.length} Follow-up{urgentFollowUps.length > 1 ? 's' : ''} Require Attention
+              </p>
+              <p className="text-xs text-orange-700 dark:text-orange-400">The following patients have overdue or today's follow-ups.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {urgentFollowUps.map(fu => {
+              const isOverdue = new Date(fu.followUpDate) < new Date(new Date().setHours(0, 0, 0, 0));
+              return (
+                <div
+                  key={fu.id}
+                  className="flex items-center justify-between bg-white dark:bg-orange-950/40 rounded-md px-3 py-2 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+                  onClick={() => router.push(`/patients/details?id=${fu.patientId}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    {isOverdue
+                      ? <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                      : <Bell className="h-4 w-4 text-orange-500 flex-shrink-0" />}
+                    <div>
+                      <span className="font-medium text-sm">{fu.patientName}</span>
+                      {fu.reason && <span className="text-xs text-muted-foreground ml-2">· {fu.reason}</span>}
+                    </div>
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                    {isOverdue ? 'Overdue' : 'Today'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
@@ -294,7 +392,7 @@ export default function PatientsPage() {
           )}
         </CardContent>
       </Card>
-      <PatientFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} patient={selectedPatient} />
+      <PatientFormDialog open={isFormOpen} onOpenChange={handleOpenChange} patient={selectedPatient} />
     </>
   );
 }

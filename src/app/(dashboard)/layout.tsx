@@ -16,19 +16,44 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(true);
   const isMobile = useIsMobile();
-  const { user, isUserLoading } = useUser();
-  const { viewMode } = useViewMode();
-  const router = useRouter();
+  const SIDEBAR_KEY = 'sidebar_open';
 
+  const [open, setOpen] = React.useState<boolean>(() => {
+    // Read persisted preference on first render (SSR-safe)
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(SIDEBAR_KEY);
+      if (stored !== null) return stored === 'true';
+    }
+    return true; // default open on desktop
+  });
+
+  // When isMobile resolves, force-close on mobile (always), force-open on desktop if no saved pref
   React.useEffect(() => {
+    if (isMobile === undefined) return; // not resolved yet
     if (isMobile) {
       setOpen(false);
     } else {
-      setOpen(true);
+      // On desktop, restore saved preference (or default open)
+      const stored = localStorage.getItem(SIDEBAR_KEY);
+      setOpen(stored !== null ? stored === 'true' : true);
     }
   }, [isMobile]);
+
+  // Persist the user's toggle choice
+  const handleSetOpen = React.useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setOpen(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (!isMobile) {
+        localStorage.setItem(SIDEBAR_KEY, String(next));
+      }
+      return next;
+    });
+  }, [isMobile]);
+
+  const { user, isUserLoading } = useUser();
+  const { viewMode } = useViewMode();
+  const router = useRouter();
 
   React.useEffect(() => {
     if (!isUserLoading && !user) {
@@ -51,7 +76,7 @@ export default function DashboardLayout({
 
   return (
     <SearchProvider>
-      <SidebarProvider open={open} onOpenChange={setOpen}>
+      <SidebarProvider open={open} onOpenChange={handleSetOpen}>
         {showSidebar && (
           <Sidebar>
             <Nav />

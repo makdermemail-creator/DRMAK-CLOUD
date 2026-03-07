@@ -126,10 +126,10 @@ export function useAnalyticsData() {
                 totalReach: totalReachVal,
                 newFollowers: newFollowersVal,
                 engagementRate: Number(avgEngagementRate.toFixed(1)),
-                activeCampaigns: 12, // Placeholder or fetch if available
-                reachChange: 20.1, // Sample placeholder for now
-                followerChange: 180.1,
-                engagementChange: -2,
+                activeCampaigns: 0,
+                reachChange: 0,
+                followerChange: 0,
+                engagementChange: 0,
             });
 
         } catch (err: any) {

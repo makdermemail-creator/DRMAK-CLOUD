@@ -24,6 +24,7 @@ import {
     Link as LinkIcon,
     Sparkles,
     Building2,
+    PlusCircle,
     Hospital,
     ArrowRight,
     ShieldAlert,
@@ -60,6 +61,12 @@ import {
     DialogFooter
 } from '@/components/ui/dialog';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
@@ -82,7 +89,7 @@ import {
     setDoc
 } from 'firebase/firestore';
 import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork } from '@/lib/types';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
@@ -102,7 +109,11 @@ const statusStyles: Record<AppointmentStatus, string> = {
 
 const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointmentBooked }: { open: boolean, onOpenChange: (open: boolean) => void, selectedTime: Date | null, onAppointmentBooked: () => void }) => {
     const { toast } = useToast();
-    const [patient, setPatient] = React.useState<string>('');
+    const router = useRouter();
+    const [step, setStep] = React.useState<'search' | 'add-patient' | 'book'>('search');
+    const [mobileNumber, setMobileNumber] = React.useState('');
+    const [newName, setNewName] = React.useState('');
+    const [existingPatient, setExistingPatient] = React.useState<Patient | null>(null);
     const [doctor, setDoctor] = React.useState<string>('');
 
     const firestore = useFirestore();
@@ -116,33 +127,76 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
 
     React.useEffect(() => {
         if (open) {
-            setPatient('');
+            setStep('search');
+            setMobileNumber('');
+            setNewName('');
+            setExistingPatient(null);
             setDoctor('');
         }
     }, [open]);
 
-    const handleSubmit = () => {
-        if (!selectedTime || !patient || !doctor) {
+    const handleSearch = () => {
+        if (!mobileNumber) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please enter a mobile number.' });
+            return;
+        }
+        const patient = patients?.find(p => p.mobileNumber === mobileNumber);
+        if (patient) {
+            setExistingPatient(patient);
+            setStep('book');
+        } else {
+            setStep('add-patient');
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!selectedTime || !doctor) {
             toast({
                 variant: 'destructive',
                 title: 'Missing Information',
-                description: 'Please select a patient and a doctor.',
+                description: 'Please select a doctor.',
             });
             return;
         }
 
+        let patientMobile = mobileNumber;
+
+        if (step === 'add-patient') {
+            if (!newName) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Please enter the patient name.' });
+                return;
+            }
+            // Create new patient
+            const newPatient: Omit<Patient, 'id'> = {
+                name: newName,
+                mobileNumber: mobileNumber,
+                age: 0,
+                gender: 'Other',
+                avatarUrl: '',
+                registrationDate: new Date().toISOString(),
+                status: 'Active'
+            };
+            if (patientsRef) {
+                await addDocumentNonBlocking(patientsRef, newPatient);
+            }
+        } else if (existingPatient) {
+            patientMobile = existingPatient.mobileNumber;
+        }
+
         const newAppointment: Omit<Appointment, 'id'> = {
-            patientMobileNumber: patient,
+            patientMobileNumber: patientMobile,
             doctorId: doctor,
             appointmentDateTime: selectedTime.toISOString(),
             status: 'Waiting',
         };
+
         if (appointmentsRef) {
             addDocumentNonBlocking(appointmentsRef, newAppointment);
         }
+
         toast({
-            title: 'Appointment Booked (Mock)',
-            description: `Appointment has been successfully scheduled for ${format(selectedTime, 'PPp')}.`,
+            title: 'Appointment Booked',
+            description: `Appointment successfully scheduled for ${format(selectedTime, 'PPp')}.`,
         });
         onAppointmentBooked();
         onOpenChange(false);
@@ -150,48 +204,82 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Book New Appointment</DialogTitle>
+                    <DialogTitle>
+                        {step === 'search' && "Search Patient"}
+                        {step === 'add-patient' && "New Patient Details"}
+                        {step === 'book' && "Confirm Appointment"}
+                    </DialogTitle>
                     <DialogDescription>
-                        Schedule a new appointment for {selectedTime ? format(selectedTime, 'PPp') : ''}.
+                        {selectedTime ? format(selectedTime, 'MMMM d, h:mm a') : ''}
                     </DialogDescription>
                 </DialogHeader>
+
                 <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="patient" className="text-right">
-                            Patient
-                        </Label>
-                        <Select onValueChange={setPatient} value={patient}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select a patient" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {patients?.map(p => (
-                                    <SelectItem key={p.id} value={p.mobileNumber}>{p.name} - {p.mobileNumber}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="doctor" className="text-right">
-                            Doctor
-                        </Label>
-                        <Select onValueChange={setDoctor} value={doctor}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select a doctor" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {doctors?.map(d => (
-                                    <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {step === 'search' && (
+                        <div className="grid gap-2">
+                            <Label htmlFor="mobile">Mobile Number</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="mobile"
+                                    placeholder="Enter mobile number"
+                                    value={mobileNumber}
+                                    onChange={(e) => setMobileNumber(e.target.value)}
+                                    type="tel"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                />
+                                <Button onClick={handleSearch}>Search</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 'add-patient' && (
+                        <div className="grid gap-2">
+                            <div className="text-sm border-l-4 border-amber-500 bg-amber-50 p-3 text-amber-800 mb-2">
+                                No patient found with number <strong>{mobileNumber}</strong>. Please enter details.
+                            </div>
+                            <p className="text-sm text-muted-foreground pb-2">
+                                You need to register this patient with their full details before booking an appointment.
+                            </p>
+                            <div className="flex justify-end gap-2 mt-2">
+                                <Button variant="ghost" onClick={() => setStep('search')}>Back</Button>
+                                <Button onClick={() => router.push(`/patients?add=${mobileNumber}`)}>Go to Add Patient</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 'book' && (
+                        <div className="grid gap-4">
+                            <div className="bg-muted p-3 rounded-md space-y-1">
+                                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Patient Information</p>
+                                <p className="font-semibold">{existingPatient?.name || newName}</p>
+                                <p className="text-sm text-muted-foreground">{mobileNumber}</p>
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="doctor">Select Doctor</Label>
+                                <Select onValueChange={setDoctor} value={doctor}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Chose a doctor" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {doctors?.map(d => (
+                                            <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <DialogFooter>
-                    <Button onClick={handleSubmit}>Book Appointment</Button>
-                </DialogFooter>
+
+                {step === 'book' && (
+                    <DialogFooter className="flex gap-2 sm:justify-between">
+                        <Button variant="ghost" onClick={() => existingPatient ? setStep('search') : setStep('add-patient')}>Back</Button>
+                        <Button onClick={handleSubmit}>Book Appointment</Button>
+                    </DialogFooter>
+                )}
             </DialogContent>
         </Dialog>
     );
@@ -199,6 +287,8 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
 
 
 const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], date: Date, onDateChange: (date: Date | undefined) => void }) => {
+    const firestore = useFirestore();
+    const { toast } = useToast();
     const [isBooking, setIsBooking] = React.useState(false);
     const [selectedTime, setSelectedTime] = React.useState<Date | null>(null);
     const [startHour, setStartHour] = React.useState(9);
@@ -255,6 +345,15 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
         setIsBooking(true);
     }
 
+    const handleStatusChange = (appointmentId: string, newStatus: AppointmentStatus) => {
+        if (!firestore) return;
+        updateDocumentNonBlocking(doc(firestore, 'appointments', appointmentId), { status: newStatus });
+        toast({
+            title: 'Status Updated',
+            description: `Appointment status changed to ${newStatus}.`,
+        });
+    }
+
     const forceRerender = () => {
         // Dummy state change to force re-render and re-fetch from useCollection
     }
@@ -303,33 +402,71 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
                         <DatePicker date={date} onDateChange={onDateChange} />
                     </div>
                 </CardHeader>
-                <CardContent className="h-[400px] overflow-y-auto">
-                    <div className="grid grid-cols-1 gap-1">
+                <CardContent className="h-[400px] overflow-y-auto px-2 sm:px-4">
+                    <div className="relative border-l-2 border-muted ml-6 sm:ml-12 pl-4 pb-4 mt-4">
                         {timeSlots.map(slot => {
                             const timeKey = format(slot, 'HH:mm');
                             const slotAppointments = appointmentsByTime.get(timeKey);
 
                             return (
-                                <div key={timeKey} onClick={() => !slotAppointments && handleSlotClick(slot)} className={`flex items-start p-3 rounded-lg transition-colors ${!slotAppointments ? 'cursor-pointer hover:bg-muted' : ''}`}>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground w-20">
-                                        <Clock className="h-4 w-4" />
-                                        {format(slot, 'h:mm a')}
+                                <div key={timeKey} className="relative group min-h-[48px] py-1">
+                                    {/* Time Label - Positioned absolutely to the left of the border */}
+                                    <div className="absolute -left-[4.5rem] sm:-left-[5.5rem] top-2 font-medium text-xs text-muted-foreground w-12 sm:w-16 text-right">
+                                        {format(slot, 'h:mm')}
                                     </div>
-                                    <div className="flex-1 pl-4 border-l border-border">
+                                    <div className="absolute -left-[5.5rem] sm:-left-[6.5rem] top-5 font-bold text-[0.6rem] text-muted-foreground/60 w-12 sm:w-16 text-right uppercase">
+                                        {format(slot, 'a')}
+                                    </div>
+
+                                    {/* The Timeline Node Dot */}
+                                    <div className={`absolute -left-[21px] top-3 h-2 w-2 rounded-full border-2 border-background ring-2 ${slotAppointments ? 'bg-primary ring-primary/30' : 'bg-muted ring-transparent'}`} />
+
+                                    {/* Content Area */}
+                                    <div className="pl-4 sm:pl-6 w-full max-w-2xl">
                                         {slotAppointments ? (
-                                            slotAppointments.map(apt => (
-                                                <div key={apt.id} className="text-sm p-2 mb-1 rounded-md bg-secondary text-secondary-foreground">
-                                                    <p className="font-semibold">{apt.patient?.name}</p>
-                                                    <p className="text-xs">with Dr. {apt.doctor?.fullName}</p>
-                                                    <div className="mt-1">
-                                                        <Badge className={`font-semibold text-xs ${statusStyles[apt.status as AppointmentStatus]}`}>
-                                                            {apt.status}
-                                                        </Badge>
+                                            <div className="flex flex-col gap-2">
+                                                {slotAppointments.map(apt => (
+                                                    <div
+                                                        key={apt.id}
+                                                        className="relative bg-card text-card-foreground border rounded-lg shadow-sm p-3 hover:shadow-md transition-shadow cursor-default overflow-hidden group/card"
+                                                    >
+                                                        {/* Status Color Strip */}
+                                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusStyles[apt.status as AppointmentStatus].split(' ')[0]}`} />
+
+                                                        <div className="pl-2 flex items-start justify-between">
+                                                            <div>
+                                                                <p className="font-semibold text-sm">{apt.patient?.name}</p>
+                                                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                                                    <UserCheck className="h-3 w-3" /> Dr. {apt.doctor?.fullName}
+                                                                </p>
+                                                            </div>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Badge className={`font-semibold text-[0.65rem] uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${statusStyles[apt.status as AppointmentStatus]}`}>
+                                                                        {apt.status}
+                                                                    </Badge>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(apt.id, 'Waiting'); }}>Waiting</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(apt.id, 'In Consultation'); }}>In Consultation</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(apt.id, 'Completed'); }}>Completed</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleStatusChange(apt.id, 'Cancelled'); }} className="text-red-500">Cancelled</DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                ))}
+                                            </div>
                                         ) : (
-                                            <div className="text-sm text-muted-foreground">Available</div>
+                                            /* Empty State / Hover to Book */
+                                            <div
+                                                onClick={() => handleSlotClick(slot)}
+                                                className="h-10 mt-1 border border-dashed border-transparent rounded-lg flex items-center px-4 transition-all opacity-0 group-hover:opacity-100 group-hover:bg-muted/50 group-hover:border-border cursor-pointer"
+                                            >
+                                                <span className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+                                                    <PlusCircle className="h-3 w-3" /> Click slot to book appointment
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -563,7 +700,11 @@ const OrganizationDashboard = () => {
 const AdminDashboard = () => {
     const { searchTerm } = useSearch();
     const firestore = useFirestore();
-    const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
+    const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
+
+    React.useEffect(() => {
+        setSelectedDate(new Date());
+    }, []);
 
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
     const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
@@ -918,7 +1059,11 @@ const DoctorDashboard = () => {
     const { user } = useUser();
     const router = useRouter();
 
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const [todayStr, setTodayStr] = React.useState('');
+
+    React.useEffect(() => {
+        setTodayStr(format(new Date(), 'yyyy-MM-dd'));
+    }, []);
 
     const appointmentsQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;

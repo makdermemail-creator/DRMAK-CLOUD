@@ -22,6 +22,8 @@ import {
     Users,
     Stethoscope,
     Boxes,
+    CircleDollarSign,
+    Activity,
     LineChart,
     Sparkles,
     LogOut,
@@ -48,7 +50,8 @@ import {
     BarChart3,
     Compass,
     Mail,
-    Network
+    Network,
+    Truck
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -74,6 +77,10 @@ const allMenuItems = [
     { id: 'appointments', href: '/appointments', label: 'Appointments', icon: Calendar },
     { id: 'patients', href: '/patients', label: 'Patients', icon: Users },
     { id: 'doctors', href: '/doctors', label: 'Doctors', icon: Stethoscope },
+    { id: 'procedures', href: '/procedures', label: 'Procedures', icon: Activity },
+    { id: 'inventory', href: '/inventory', label: 'Inventory', icon: Boxes },
+    { id: 'supplier', href: '/supplier', label: 'Suppliers', icon: Truck },
+    { id: 'billing', href: '/billing', label: 'Billing', icon: CircleDollarSign },
 
     // Pharmacy Sub-menu
     {
@@ -155,7 +162,7 @@ const clinicGroups = [
     },
     {
         label: "Core Operations",
-        ids: ["appointments", "patients", "doctors"]
+        ids: ["appointments", "patients", "doctors", "procedures", "inventory", "supplier", "billing"]
     },
     {
         label: "Medical & Pharmacy",
@@ -199,10 +206,11 @@ const organizationGroups = [
 ];
 
 const SidebarMenuSkeleton = ({ showIcon }: { showIcon?: boolean }) => {
-    // Random width between 50 to 90%.
-    const width = React.useMemo(() => {
-        return `${Math.floor(Math.random() * 40) + 50}%`
-    }, [])
+    const [width, setWidth] = React.useState("70%");
+
+    React.useEffect(() => {
+        setWidth(`${Math.floor(Math.random() * 40) + 50}%`);
+    }, []);
 
     return (
         <div

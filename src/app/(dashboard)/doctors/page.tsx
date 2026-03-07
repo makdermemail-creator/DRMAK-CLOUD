@@ -41,6 +41,7 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
   const firestore = useFirestore();
   const { toast } = useToast();
   const [formData, setFormData] = React.useState<Partial<Doctor>>({});
+  const [tempUid] = React.useState(() => `temp-doctor-${Date.now()}`); // Create a unique temp ID for storage paths
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -122,10 +123,12 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
             <Label className="text-right">Photo</Label>
             <div className="col-span-3">
               <AvatarUpload
-                uid={doctor?.id || 'new-doctor'}
+                uid={doctor?.id || tempUid}
                 firestore={firestore}
                 currentPhotoURL={formData.avatarUrl}
                 onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+                firestoreCollection="doctors"
+                disableAutoSave={!doctor?.id} // Don't auto-save if doctor hasn't been created yet
               />
             </div>
           </div>

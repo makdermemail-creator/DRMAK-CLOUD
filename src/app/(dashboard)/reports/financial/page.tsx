@@ -262,11 +262,11 @@ export default function FinancialReportPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">12,000.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Cash</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">12,000.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Advance</CardTitle></CardHeader>
@@ -366,7 +366,7 @@ export default function FinancialReportPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">11,500.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Expense</CardTitle></CardHeader>
@@ -374,7 +374,7 @@ export default function FinancialReportPage() {
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Net Profit/Loss</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">11,500.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -391,11 +391,11 @@ export default function FinancialReportPage() {
                   <TableBody>
                     <TableRow>
                       <TableCell>OPD</TableCell>
-                      <TableCell>11,500.00</TableCell>
+                      <TableCell>{stats.totalRevenue.toLocaleString()}</TableCell>
                     </TableRow>
                     <TableRow className="font-bold bg-muted/50">
                       <TableCell>Grand Total</TableCell>
-                      <TableCell>11,500.00</TableCell>
+                      <TableCell>{stats.totalRevenue.toLocaleString()}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -424,12 +424,8 @@ export default function FinancialReportPage() {
                   </div>
                 </div>
                 <Card className="w-full max-w-xs">
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-bold">37,000.0</p>
-                  </CardContent>
+                  <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
+                  <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                 </Card>
                 <Table>
                   <TableHeader>
@@ -508,7 +504,7 @@ export default function FinancialReportPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Collection By Cash</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">37,000.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Collection By Other Methods</CardTitle></CardHeader>
@@ -570,10 +566,10 @@ export default function FinancialReportPage() {
                     ))}
                     <TableRow className="font-bold bg-muted/50">
                       <TableCell colSpan={4}>Grand Total</TableCell>
-                      <TableCell>37000.00</TableCell>
-                      <TableCell>37000.00</TableCell>
-                      <TableCell>1000.00</TableCell>
-                      <TableCell>0.00</TableCell>
+                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.total, 0).toFixed(2)}</TableCell>
+                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.paid, 0).toFixed(2)}</TableCell>
+                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.dues, 0).toFixed(2)}</TableCell>
+                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.discount, 0).toFixed(2)}</TableCell>
                       <TableCell>0.00</TableCell>
                       <TableCell>0.00</TableCell>
                       <TableCell>0.00</TableCell>
@@ -606,12 +602,8 @@ export default function FinancialReportPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                   <Card className="md:col-span-1">
-                    <CardHeader>
-                      <CardTitle className="text-base">Totals</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold">37,000.0</p>
-                    </CardContent>
+                    <CardHeader><CardTitle className="text-base">Totals</CardTitle></CardHeader>
+                    <CardContent><p className="text-3xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card className="md:col-span-2">
                     <CardHeader>
@@ -708,7 +700,7 @@ export default function FinancialReportPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">10,000.0</p></CardContent>
+                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
                   </Card>
                   <Card>
                     <CardHeader><CardTitle className="text-sm font-medium">Refund Amount</CardTitle></CardHeader>

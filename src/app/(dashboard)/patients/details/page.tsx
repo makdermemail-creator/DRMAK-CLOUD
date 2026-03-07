@@ -2,71 +2,138 @@
 import * as React from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-    CardFooter
+    Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-    ChevronLeft,
-    Edit,
-    FileText,
-    Calendar,
-    FilePlus2,
-    Users,
-    HeartPulse,
-    MessageSquare,
-    Paperclip,
-    ClipboardList,
-    Receipt,
-    Route,
-    Download,
-    BellPlus,
-    Trash2,
-    PlusCircle
-} from 'lucide-react';
-import { useDoc, useFirestore, useMemoFirebase, useCollection, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
-import type { Patient, Doctor, Appointment, MedicalHistory, Communication, TreatmentPlan } from '@/lib/types';
-import { doc, collection, query, where, orderBy } from 'firebase/firestore';
-import { Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { DatePicker } from '@/components/DatePicker';
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+} from '@/components/ui/dialog';
+import {
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { formatDistanceToNow, format } from 'date-fns';
+import {
+    ChevronLeft, Edit, Calendar, Users, HeartPulse, MessageSquare,
+    Paperclip, ClipboardList, Receipt, BellPlus, Trash2, Download,
+    History, Bell, CheckCircle2, Clock, Loader2, PlusCircle, Phone, FilePlus2, Route
+} from 'lucide-react';
+import { useDoc, useFirestore, useMemoFirebase, useCollection, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
+import type { Patient, Doctor, Appointment, MedicalHistory, Communication } from '@/lib/types';
+import { doc, collection, query, where, orderBy } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { DatePicker } from '@/components/DatePicker';
+import { format, formatDistanceToNow, isPast, isToday, isTomorrow, differenceInDays } from 'date-fns';
 
-const actionItems = [
-    { id: 'addInvoice', label: 'Add Invoice', icon: FilePlus2, href: '/invoices/create' },
-    { id: 'addAppointment', label: 'Add Appointment', icon: Calendar, href: '#' },
-    { id: 'familyHistory', label: 'Patient Family History', icon: Users, href: '/patients/family-history' },
-    { id: 'addMedicalHistory', label: 'Add Medical History', icon: HeartPulse, href: '#' },
-    { id: 'addHealthRecord', label: 'Add Health Record', icon: FilePlus2, href: '/health-records' },
-    { id: 'sendMessage', label: 'Send Message', icon: MessageSquare, href: '#' },
-    { id: 'addFile', label: 'Add File', icon: Paperclip, href: '#' },
-    { id: 'treatmentPlan', label: 'Treatment Plan', icon: ClipboardList, href: '/treatment-plans' },
-    { id: 'invoiceHistory', label: 'Invoice History', icon: Receipt, href: '/invoices/history' },
-    { id: 'patientJourney', label: 'Patient Journey', icon: Route, href: '/patients/patient-journey' },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const AddAppointmentDialog = ({ open, onOpenChange, patient }: { open: boolean, onOpenChange: (open: boolean) => void, patient: Patient }) => {
+interface BillingRecord {
+    id: string;
+    patientMobile: string;
+    patientName: string;
+    items: { id: string; name: string; type: string; price: number; qty: number }[];
+    subTotal: number;
+    discount: number;
+    grandTotal: number;
+    timestamp: string;
+    status: string;
+}
+
+interface FollowUp {
+    id: string;
+    patientId: string;
+    patientName: string;
+    patientMobile: string;
+    followUpDate: string;
+    reason: string;
+    notes: string;
+    status: 'Pending' | 'Completed' | 'Cancelled';
+    createdAt: string;
+}
+
+// ─── Follow-up Dialog ─────────────────────────────────────────────────────────
+
+const AddFollowUpDialog = ({ open, onOpenChange, patient }: { open: boolean; onOpenChange: (v: boolean) => void; patient: Patient }) => {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [date, setDate] = React.useState<Date | undefined>(undefined);
+    const [reason, setReason] = React.useState('');
+    const [notes, setNotes] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+
+    const handleSave = async () => {
+        if (!firestore || !date) {
+            toast({ variant: 'destructive', title: 'Missing Date', description: 'Please select a follow-up date.' });
+            return;
+        }
+        setSaving(true);
+        const followUp: Omit<FollowUp, 'id'> = {
+            patientId: patient.id,
+            patientName: patient.name,
+            patientMobile: patient.mobileNumber,
+            followUpDate: date.toISOString(),
+            reason,
+            notes,
+            status: 'Pending',
+            createdAt: new Date().toISOString(),
+        };
+        await addDocumentNonBlocking(collection(firestore, 'followUps'), followUp);
+        toast({ title: 'Follow-up Scheduled', description: `Follow-up for ${patient.name} set for ${format(date, 'PPP')}.` });
+        setSaving(false);
+        setDate(undefined);
+        setReason('');
+        setNotes('');
+        onOpenChange(false);
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Schedule Follow-up</DialogTitle>
+                    <DialogDescription>Set a follow-up reminder for <strong>{patient.name}</strong>. Admin will be notified on the follow-up date.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                        <Label>Follow-up Date <span className="text-red-500">*</span></Label>
+                        <DatePicker date={date} onDateChange={setDate} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Reason / Purpose</Label>
+                        <Input placeholder="e.g., Laser follow-up, Post-treatment check" value={reason} onChange={e => setReason(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Notes (Optional)</Label>
+                        <Textarea placeholder="Any additional notes..." value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button onClick={handleSave} disabled={saving}>
+                        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Schedule Follow-up
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+// ─── Add Appointment Dialog ───────────────────────────────────────────────────
+
+const AddAppointmentDialog = ({ open, onOpenChange, patient }: { open: boolean; onOpenChange: (v: boolean) => void; patient: Patient }) => {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { data: doctors } = useCollection<Doctor>(useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]));
-
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     const [startTime, setStartTime] = React.useState('10:00');
-    const [endTime, setEndTime] = React.useState('10:30');
-    const [doctorId, setDoctorId] = React.useState<string>('');
+    const [doctorId, setDoctorId] = React.useState('');
     const [procedure, setProcedure] = React.useState('');
     const [comments, setComments] = React.useState('');
 
@@ -75,434 +142,383 @@ const AddAppointmentDialog = ({ open, onOpenChange, patient }: { open: boolean, 
             toast({ variant: 'destructive', title: 'Missing Information', description: 'Please select a date and doctor.' });
             return;
         }
-
-        const [startHours, startMinutes] = startTime.split(':').map(Number);
-        const appointmentDateTime = new Date(date);
-        appointmentDateTime.setHours(startHours, startMinutes);
-
-        const newAppointment: Omit<Appointment, 'id'> = {
-            patientMobileNumber: patient.mobileNumber,
-            doctorId,
-            appointmentDateTime: appointmentDateTime.toISOString(),
-            status: 'Waiting',
-            procedure,
-            comments,
-        };
-
-        const appointmentsCollection = collection(firestore, `patients/${patient.id}/appointments`);
-        await addDocumentNonBlocking(appointmentsCollection, newAppointment);
-        toast({ title: "Appointment Scheduled", description: `Appointment for ${patient.name} has been booked.` });
+        const [h, m] = startTime.split(':').map(Number);
+        const dt = new Date(date);
+        dt.setHours(h, m);
+        await addDocumentNonBlocking(collection(firestore, `patients/${patient.id}/appointments`), {
+            patientMobileNumber: patient.mobileNumber, doctorId,
+            appointmentDateTime: dt.toISOString(), status: 'Waiting', procedure, comments,
+        });
+        toast({ title: 'Appointment Scheduled' });
         onOpenChange(false);
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Add Appointment</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Add Appointment</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Patient</Label>
-                        <Input value={patient.name} disabled />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5"><Label>Date</Label><DatePicker date={date} onDateChange={setDate} /></div>
+                        <div className="space-y-1.5"><Label>Start Time</Label><Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-2 col-span-1">
-                            <Label>Date</Label>
-                            <DatePicker date={date} onDateChange={setDate} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Start Time</Label>
-                            <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>End Time</Label>
-                            <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label>Doctor</Label>
                         <Select onValueChange={setDoctorId} value={doctorId}>
                             <SelectTrigger><SelectValue placeholder="Select a doctor" /></SelectTrigger>
-                            <SelectContent>
-                                {doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}
-                            </SelectContent>
+                            <SelectContent>{doctors?.map(d => <SelectItem key={d.id} value={d.id}>{d.fullName}</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Procedure</Label>
-                        <Input placeholder="e.g., General Consultation" value={procedure} onChange={e => setProcedure(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Comments</Label>
-                        <Textarea value={comments} onChange={e => setComments(e.target.value)} />
-                    </div>
+                    <div className="space-y-1.5"><Label>Procedure</Label><Input value={procedure} onChange={e => setProcedure(e.target.value)} placeholder="e.g., Laser, Consultation" /></div>
+                    <div className="space-y-1.5"><Label>Comments</Label><Textarea value={comments} onChange={e => setComments(e.target.value)} /></div>
                 </div>
-                <DialogFooter>
-                    <Button onClick={handleSubmit}>Add Appointment</Button>
-                </DialogFooter>
+                <DialogFooter><Button onClick={handleSubmit}>Book Appointment</Button></DialogFooter>
             </DialogContent>
         </Dialog>
     );
 };
 
-const MedicalHistoryDialog = ({ open, onOpenChange, patient }: { open: boolean, onOpenChange: (open: boolean) => void, patient: Patient }) => {
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [newHistory, setNewHistory] = React.useState('');
+// ─── Follow-up Status Badge ───────────────────────────────────────────────────
 
-    const historyQuery = useMemoFirebase(() => {
-        return firestore ? query(collection(firestore, `patients/${patient.id}/medicalHistory`), orderBy('createdAt', 'desc')) : null;
-    }, [firestore, patient.id]);
-
-    const { data: history, isLoading, forceRerender } = useCollection<MedicalHistory>(historyQuery);
-
-    const handleSave = async () => {
-        if (!firestore || !newHistory.trim()) return;
-
-        const newEntry: Omit<MedicalHistory, 'id'> = {
-            patientId: patient.id,
-            type: 'History',
-            text: newHistory,
-            createdAt: new Date().toISOString(),
-        };
-
-        const historyCollection = collection(firestore, `patients/${patient.id}/medicalHistory`);
-        await addDocumentNonBlocking(historyCollection, newEntry);
-        toast({ title: "Medical history added." });
-        setNewHistory('');
-        forceRerender();
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!firestore) return;
-        const docRef = doc(firestore, `patients/${patient.id}/medicalHistory`, id);
-        await deleteDocumentNonBlocking(docRef);
-        toast({ title: "History item deleted.", variant: 'destructive' });
-        forceRerender();
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-xl">
-                <DialogHeader>
-                    <DialogTitle>Add Medical History</DialogTitle>
-                </DialogHeader>
-                <Tabs defaultValue="history">
-                    <TabsList>
-                        <TabsTrigger value="history">Medical History</TabsTrigger>
-                        <TabsTrigger value="alerts">Alerts</TabsTrigger>
-                        <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="history" className="pt-4">
-                        <div className="space-y-4">
-                            <div className="max-h-60 overflow-y-auto space-y-2 p-2 border rounded-md">
-                                {isLoading ? <Loader2 className="animate-spin" /> : history && history.length > 0 ? (
-                                    history.map(item => (
-                                        <div key={item.id} className="flex justify-between items-center text-sm p-2 bg-muted/50 rounded-md">
-                                            <span>{item.text}</span>
-                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDelete(item.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground text-center py-4">No medical history has been added yet.</p>
-                                )}
-                            </div>
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Click to add and press enter"
-                                    value={newHistory}
-                                    onChange={(e) => setNewHistory(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                                />
-                                <Button onClick={handleSave}>Save</Button>
-                            </div>
-                        </div>
-                    </TabsContent>
-                    <TabsContent value="alerts" className="pt-4">
-                        <p className="text-sm text-muted-foreground text-center py-4">Alerts feature coming soon.</p>
-                    </TabsContent>
-                    <TabsContent value="suggestions" className="pt-4">
-                        <div className="p-3 border rounded-md">
-                            <p className="text-sm font-semibold">Suggestions 2</p>
-                            <p className="text-xs text-muted-foreground">Laser patient for maps since she has come for laser again and again</p>
-                        </div>
-                    </TabsContent>
-                </Tabs>
-            </DialogContent>
-        </Dialog>
-    )
+function FollowUpBadge({ dateStr }: { dateStr: string }) {
+    const date = new Date(dateStr);
+    const overdue = isPast(date) && !isToday(date);
+    const today = isToday(date);
+    const tomorrow = isTomorrow(date);
+    if (overdue) return <Badge variant="destructive">Overdue</Badge>;
+    if (today) return <Badge className="bg-orange-500 text-white">Today</Badge>;
+    if (tomorrow) return <Badge className="bg-yellow-500 text-white">Tomorrow</Badge>;
+    return <Badge variant="secondary">{format(date, 'dd MMM yyyy')}</Badge>;
 }
 
-const SendMessageDialog = ({ open, onOpenChange, patient }: { open: boolean, onOpenChange: (open: boolean) => void, patient: Patient }) => {
-    const firestore = useFirestore();
-    const { user } = useUser();
-    const { toast } = useToast();
-    const [message, setMessage] = React.useState('');
-    const [service, setService] = React.useState('sms');
-
-    const handleSend = async () => {
-        if (!firestore || !user || !message.trim()) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Message cannot be empty.' });
-            return;
-        }
-
-        const newCommunication: Omit<Communication, 'id'> = {
-            patientId: patient.id,
-            message,
-            service,
-            sentBy: user.id,
-            sentAt: new Date().toISOString(),
-        };
-
-        const communicationsCollection = collection(firestore, `patients/${patient.id}/communications`);
-        await addDocumentNonBlocking(communicationsCollection, newCommunication);
-        toast({ title: "Message Sent", description: "Your message has been logged." });
-        setMessage('');
-        onOpenChange(false);
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Send Message</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Service</Label>
-                        <Select onValueChange={setService} value={service}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a service" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="sms">SMS</SelectItem>
-                                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                                <SelectItem value="email">Email</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="message">Message</Label>
-                        <Textarea id="message" value={message} onChange={e => setMessage(e.target.value)} placeholder="Enter message here..." rows={4} />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleSend}>Send</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PatientDetailsPage() {
     const router = useRouter();
     const { toast } = useToast();
     const searchParams = useSearchParams();
     const patientId = searchParams.get('id');
-
     const firestore = useFirestore();
+
     const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = React.useState(false);
-    const [isMedicalHistoryDialogOpen, setIsMedicalHistoryDialogOpen] = React.useState(false);
-    const [isSendMessageDialogOpen, setIsSendMessageDialogOpen] = React.useState(false);
+    const [isFollowUpDialogOpen, setIsFollowUpDialogOpen] = React.useState(false);
 
+    // Patient
+    const patientDocRef = useMemoFirebase(() => firestore && patientId ? doc(firestore, 'patients', patientId) : null, [firestore, patientId]);
+    const { data: patient, isLoading: patientLoading } = useDoc<Patient>(patientDocRef);
 
-    const patientDocRef = useMemoFirebase(() => {
+    // Billing History for this patient
+    const billingQuery = useMemoFirebase(() => {
+        if (!firestore || !patient) return null;
+        return query(collection(firestore, 'billingRecords'), where('patientMobile', '==', patient.mobileNumber), orderBy('timestamp', 'desc'));
+    }, [firestore, patient]);
+    const { data: billingHistory, isLoading: billingLoading } = useCollection<BillingRecord>(billingQuery);
+
+    // Follow-ups for this patient
+    const followUpsQuery = useMemoFirebase(() => {
         if (!firestore || !patientId) return null;
-        return doc(firestore, 'patients', patientId);
+        return query(collection(firestore, 'followUps'), where('patientId', '==', patientId), orderBy('followUpDate', 'asc'));
     }, [firestore, patientId]);
+    const { data: followUps, isLoading: followUpsLoading } = useCollection<FollowUp>(followUpsQuery);
 
+    // Communications
     const communicationsQuery = useMemoFirebase(() => {
         if (!firestore || !patientId) return null;
         return query(collection(firestore, `patients/${patientId}/communications`), orderBy('sentAt', 'desc'));
     }, [firestore, patientId]);
+    const { data: communications } = useCollection<Communication>(communicationsQuery);
 
-    const { data: patient, isLoading: patientLoading } = useDoc<Patient>(patientDocRef);
-    const { data: communications, isLoading: communicationsLoading } = useCollection<Communication>(communicationsQuery);
+    const stats = React.useMemo(() => {
+        const total = billingHistory?.reduce((s, b) => s + b.grandTotal, 0) ?? 0;
+        const visits = billingHistory?.length ?? 0;
+        const last = billingHistory?.[0];
+        const pendingFollowUps = followUps?.filter(f => f.status === 'Pending').length ?? 0;
+        return { total, visits, last, pendingFollowUps };
+    }, [billingHistory, followUps]);
 
+    const handleMarkFollowUpDone = async (id: string) => {
+        if (!firestore) return;
+        await updateDocumentNonBlocking(doc(firestore, 'followUps', id), { status: 'Completed' });
+        toast({ title: 'Follow-up Completed' });
+    };
 
-    const handleActionClick = (id: string, href: string) => {
-        if (id === 'addAppointment') {
-            setIsAppointmentDialogOpen(true);
-        } else if (id === 'addMedicalHistory') {
-            setIsMedicalHistoryDialogOpen(true);
-        } else if (id === 'sendMessage') {
-            setIsSendMessageDialogOpen(true);
-        } else if (id === 'addFile') {
-            toast({ title: 'Add File', description: 'File upload feature coming soon.' });
-        }
-        else {
-            router.push(`${href}?id=${patientId}`);
-        }
-    }
+    const handleDeleteFollowUp = async (id: string) => {
+        if (!firestore) return;
+        await deleteDocumentNonBlocking(doc(firestore, 'followUps', id));
+        toast({ title: 'Follow-up Removed', variant: 'destructive' });
+    };
 
     if (patientLoading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-        );
+        return <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
     }
-
     if (!patient) {
         return (
-            <div className="text-center">
+            <div className="text-center py-12">
                 <h2 className="text-2xl font-bold">Patient not found</h2>
-                <p className="text-muted-foreground">The requested patient could not be found.</p>
-                <Button onClick={() => router.back()} className="mt-4">
-                    <ChevronLeft className="mr-2 h-4 w-4" /> Go Back
-                </Button>
+                <Button onClick={() => router.back()} className="mt-4"><ChevronLeft className="mr-2 h-4 w-4" /> Go Back</Button>
             </div>
         );
     }
 
     return (
         <>
-            <div className="flex gap-6">
-                {/* Left Sidebar */}
-                <div className="w-64 flex-shrink-0 space-y-6">
+            {/* Header */}
+            <div className="flex items-center gap-4 mb-6">
+                <Button variant="outline" size="icon" onClick={() => router.back()}><ChevronLeft className="h-4 w-4" /></Button>
+                <div>
+                    <h1 className="text-2xl font-bold">{patient.name}</h1>
+                    <p className="text-sm text-muted-foreground">{patient.mobileNumber} · {patient.gender} · Age {patient.age}</p>
+                </div>
+                <div className="ml-auto flex gap-2">
+                    <Button variant="outline" onClick={() => router.push(`/patients/edit?id=${patient.id}`)}><Edit className="mr-2 h-4 w-4" /> Edit</Button>
+                    <Button onClick={() => setIsFollowUpDialogOpen(true)}><Bell className="mr-2 h-4 w-4" /> Schedule Follow-up</Button>
+                </div>
+            </div>
+
+            {/* Stats Bar */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <Card>
+                    <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Total Spent</p>
+                        <p className="text-2xl font-bold">Rs {stats.total.toLocaleString()}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Total Visits</p>
+                        <p className="text-2xl font-bold">{stats.visits}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Last Visit</p>
+                        <p className="text-lg font-bold">{stats.last ? format(new Date(stats.last.timestamp), 'dd MMM yyyy') : '—'}</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Pending Follow-ups</p>
+                        <p className="text-2xl font-bold text-orange-500">{stats.pendingFollowUps}</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Main Tabs */}
+            <Tabs defaultValue="history" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="history" className="gap-2"><History className="h-4 w-4" /> Visit History</TabsTrigger>
+                    <TabsTrigger value="followups" className="gap-2">
+                        <Bell className="h-4 w-4" /> Follow-ups
+                        {stats.pendingFollowUps > 0 && (
+                            <span className="ml-1 bg-orange-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">{stats.pendingFollowUps}</span>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger value="info" className="gap-2"><HeartPulse className="h-4 w-4" /> Patient Info</TabsTrigger>
+                    <TabsTrigger value="comms" className="gap-2"><MessageSquare className="h-4 w-4" /> Communications</TabsTrigger>
+                </TabsList>
+
+                {/* ── Visit History ─────────────────────────────────────────── */}
+                <TabsContent value="history">
                     <Card>
-                        <CardContent className="pt-6 text-center">
-                            <Avatar className="h-24 w-24 mb-4 mx-auto">
-                                <AvatarImage src={patient.avatarUrl} />
-                                <AvatarFallback>{patient.name.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <h2 className="text-lg font-semibold">{patient.name}</h2>
-                            <p className="text-sm text-muted-foreground">{patient.gender?.toUpperCase()}</p>
-                            <Separator className="my-3" />
-                            <div className="text-xs text-muted-foreground text-left space-y-1">
-                                <p><strong>MRN:</strong> {patient.id.slice(0, 8)}</p>
-                                <p><strong>HIN ID:</strong> 000011030024</p>
-                                <p><strong>Phone:</strong> {patient.mobileNumber}</p>
-                            </div>
-                            <Button
-                                className="mt-4 w-full bg-blue-600 hover:bg-blue-700"
-                                onClick={() => toast({ title: 'Add Reminder', description: 'Reminder feature coming soon.' })}
-                            >
-                                <BellPlus className="mr-2 h-4 w-4" /> Add Reminder
-                            </Button>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><History className="h-5 w-5" /> Billing & Visit History</CardTitle>
+                            <CardDescription>All services and treatments received by {patient.name}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {billingLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                            ) : !billingHistory || billingHistory.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <Receipt className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                                    <p className="font-medium">No visit history yet</p>
+                                    <p className="text-xs mt-1">Bills created for this patient will appear here.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {billingHistory.map((bill, idx) => (
+                                        <div key={bill.id} className={`rounded-lg border p-4 ${idx === 0 ? 'border-primary/30 bg-primary/5' : ''}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                                        <Receipt className="h-4 w-4 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-sm">
+                                                            {format(new Date(bill.timestamp), 'EEEE, dd MMMM yyyy')}
+                                                            {idx === 0 && <Badge variant="secondary" className="ml-2 text-[10px]">Latest</Badge>}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">{format(new Date(bill.timestamp), 'hh:mm a')} · Invoice #{bill.id.slice(0, 6).toUpperCase()}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-bold">Rs {bill.grandTotal.toLocaleString()}</p>
+                                                    {bill.discount > 0 && <p className="text-xs text-green-600">Discount: Rs {bill.discount.toLocaleString()}</p>}
+                                                </div>
+                                            </div>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Item</TableHead>
+                                                        <TableHead className="text-center">Qty</TableHead>
+                                                        <TableHead>Type</TableHead>
+                                                        <TableHead className="text-right">Price</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {bill.items.map((item, i) => (
+                                                        <TableRow key={i}>
+                                                            <TableCell className="font-medium">{item.name}</TableCell>
+                                                            <TableCell className="text-center">{item.qty}</TableCell>
+                                                            <TableCell><Badge variant="outline" className="text-[10px] capitalize">{item.type}</Badge></TableCell>
+                                                            <TableCell className="text-right">Rs {(item.price * item.qty).toLocaleString()}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
+                </TabsContent>
 
+                {/* ── Follow-ups ────────────────────────────────────────────── */}
+                <TabsContent value="followups">
                     <Card>
-                        <CardContent className="p-2">
-                            <div className="space-y-1">
-                                <Button variant="ghost" className="w-full justify-start text-sm" onClick={() => router.push(`/patients/edit?id=${patient.id}`)}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit Profile
-                                </Button>
-                                {actionItems.map(item => (
-                                    <Button key={item.id} variant="ghost" className="w-full justify-start text-sm" onClick={() => handleActionClick(item.id, item.href)}>
-                                        <item.icon className="mr-2 h-4 w-4" />
-                                        {item.label}
-                                    </Button>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 space-y-4">
+                        <CardHeader>
                             <div className="flex items-center justify-between">
-                                <Label htmlFor="follow-up" className="text-sm">Set Followup</Label>
-                                <Switch id="follow-up" />
+                                <div>
+                                    <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" /> Follow-up Schedule</CardTitle>
+                                    <CardDescription>Scheduled follow-up reminders for {patient.name}</CardDescription>
+                                </div>
+                                <Button onClick={() => setIsFollowUpDialogOpen(true)} size="sm">
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Add Follow-up
+                                </Button>
                             </div>
-                            <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={() => {
+                        </CardHeader>
+                        <CardContent>
+                            {followUpsLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                            ) : !followUps || followUps.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <Bell className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                                    <p className="font-medium">No follow-ups scheduled</p>
+                                    <p className="text-xs mt-1">Click "Add Follow-up" to schedule a reminder.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {followUps.map(fu => (
+                                        <div key={fu.id} className={`flex items-start justify-between p-4 rounded-lg border ${fu.status === 'Completed' ? 'opacity-60 bg-muted/40' : isPast(new Date(fu.followUpDate)) && !isToday(new Date(fu.followUpDate)) ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-orange-200 bg-orange-50 dark:bg-orange-950/20'}`}>
+                                            <div className="flex items-start gap-3">
+                                                <div className={`h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 ${fu.status === 'Completed' ? 'bg-green-100' : 'bg-orange-100'}`}>
+                                                    {fu.status === 'Completed' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-orange-600" />}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        {fu.status === 'Pending' ? <FollowUpBadge dateStr={fu.followUpDate} /> : <Badge variant="outline" className="text-green-600 border-green-300">Completed</Badge>}
+                                                        {fu.reason && <span className="text-sm font-medium">{fu.reason}</span>}
+                                                    </div>
+                                                    {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
+                                                    <p className="text-xs text-muted-foreground mt-1">Scheduled: {format(new Date(fu.createdAt), 'dd MMM yyyy')}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-1 flex-shrink-0">
+                                                {fu.status === 'Pending' && (
+                                                    <Button size="sm" variant="outline" className="h-8 text-green-600 border-green-300 hover:bg-green-50" onClick={() => handleMarkFollowUpDone(fu.id)}>
+                                                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
+                                                    </Button>
+                                                )}
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => handleDeleteFollowUp(fu.id)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* ── Patient Info ──────────────────────────────────────────── */}
+                <TabsContent value="info">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
+                            <CardContent className="space-y-3 text-sm">
+                                <div className="flex justify-between"><span className="text-muted-foreground">Full Name</span><span className="font-medium">{patient.name}</span></div>
+                                <Separator />
+                                <div className="flex justify-between"><span className="text-muted-foreground">Age</span><span className="font-medium">{patient.age}</span></div>
+                                <Separator />
+                                <div className="flex justify-between"><span className="text-muted-foreground">Gender</span><span className="font-medium">{patient.gender}</span></div>
+                                <Separator />
+                                <div className="flex justify-between"><span className="text-muted-foreground">Mobile</span><span className="font-medium">{patient.mobileNumber}</span></div>
+                                {(patient as any).email && <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{(patient as any).email}</span></div></>}
+                                {(patient as any).address && <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Address</span><span className="font-medium">{(patient as any).address}</span></div></>}
+                            </CardContent>
+                            <CardFooter>
+                                <Button variant="outline" size="sm" onClick={() => router.push(`/patients/edit?id=${patient.id}`)}>
+                                    <Edit className="mr-2 h-3.5 w-3.5" /> Edit Profile
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                        <Card>
+                            <CardHeader><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
+                            <CardContent className="space-y-2">
+                                <Button variant="outline" className="w-full justify-start" onClick={() => setIsAppointmentDialogOpen(true)}>
+                                    <Calendar className="mr-2 h-4 w-4 text-blue-500" /> Book Appointment
+                                </Button>
+                                <Button variant="outline" className="w-full justify-start" onClick={() => setIsFollowUpDialogOpen(true)}>
+                                    <Bell className="mr-2 h-4 w-4 text-orange-500" /> Schedule Follow-up
+                                </Button>
+                                <Button variant="outline" className="w-full justify-start" onClick={() => router.push(`/patients/family-history?id=${patient.id}`)}>
+                                    <Users className="mr-2 h-4 w-4 text-purple-500" /> Family History
+                                </Button>
+                                <Button variant="outline" className="w-full justify-start" onClick={() => router.push(`/health-records?id=${patient.id}`)}>
+                                    <HeartPulse className="mr-2 h-4 w-4 text-red-500" /> Health Records
+                                </Button>
+                                <Button variant="outline" className="w-full justify-start" onClick={() => {
                                     const data = JSON.stringify(patient, null, 2);
                                     const blob = new Blob([data], { type: 'application/json' });
                                     const url = URL.createObjectURL(blob);
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.download = `patient_${patient.id}.json`;
-                                    link.click();
+                                    const a = document.createElement('a');
+                                    a.href = url; a.download = `patient_${patient.id}.json`; a.click();
                                     URL.revokeObjectURL(url);
-                                    toast({ title: 'Download Started', description: 'Patient data has been exported.' });
-                                }}
-                            >
-                                <Download className="mr-2 h-4 w-4" /> Download Patient
-                            </Button>
+                                    toast({ title: 'Download Started' });
+                                }}>
+                                    <Download className="mr-2 h-4 w-4" /> Export Patient Data
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── Communications ────────────────────────────────────────── */}
+                <TabsContent value="comms">
+                    <Card>
+                        <CardHeader><CardTitle className="text-base flex items-center gap-2"><MessageSquare className="h-5 w-5" /> Communication Log</CardTitle></CardHeader>
+                        <CardContent className="space-y-3">
+                            {!communications || communications.length === 0 ? (
+                                <p className="text-sm text-muted-foreground text-center py-8">No communications recorded yet.</p>
+                            ) : (
+                                communications.map(c => (
+                                    <div key={c.id} className="text-sm border rounded-lg p-3">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <Badge variant="secondary" className="capitalize">{c.service}</Badge>
+                                            <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(c.sentAt), { addSuffix: true })}</span>
+                                        </div>
+                                        <p className="text-sm bg-muted rounded-md p-2 mt-1">{c.message}</p>
+                                    </div>
+                                ))
+                            )}
                         </CardContent>
                     </Card>
-                </div>
+                </TabsContent>
+            </Tabs>
 
-                {/* Main Content */}
-                <div className="flex-1 space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <Card className="lg:col-span-2">
-                            <CardHeader><CardTitle className="text-base">OPD</CardTitle></CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-muted-foreground">No appointment has been added yet.</p>
-                            </CardContent>
-                            <CardFooter>
-                                <p className="text-sm font-semibold ml-auto">0 Total</p>
-                            </CardFooter>
-                        </Card>
-                        <Card>
-                            <CardHeader><CardTitle className="text-base">Last Invoice</CardTitle></CardHeader>
-                            <CardContent className="space-y-1 text-sm">
-                                <div className="flex justify-between"><span>gluta max cream</span> <span>1500.13</span></div>
-                                <div className="flex justify-between"><span>irene bright acid serum 10%</span> <span>2307.77</span></div>
-                                <div className="flex justify-between"><span>MAXRON</span> <span>2320.01</span></div>
-                                <div className="flex justify-between"><span>PURI-SEBOSTATIC</span> <span>4809.45</span></div>
-                                <div className="flex justify-between"><span>FLEXONE</span> <span>1325.64</span></div>
-                                <Separator className="my-2" />
-                                <div className="flex justify-between font-semibold"><span>Total (Billed Amount)</span><span>12263.0</span></div>
-                                <div className="flex justify-between font-semibold"><span>Amount Paid</span><span>12263.0</span></div>
-                                <div className="flex justify-between font-semibold"><span>Dues:</span><span>0.00</span></div>
-                                <div className="flex justify-between font-semibold"><span>Advance:</span><span>0.00</span></div>
-                                <div className="flex justify-between font-semibold"><span>Total Dues:</span><span>0.00</span></div>
-                            </CardContent>
-                            <CardFooter>
-                                <Button variant="link" className="text-xs h-auto p-0 ml-auto">View all</Button>
-                            </CardFooter>
-                        </Card>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <Card>
-                            <CardHeader><CardTitle className="text-base">Recent Files</CardTitle></CardHeader>
-                            <CardContent><p className="text-sm text-muted-foreground">No Files Found</p></CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader><CardTitle className="text-base">Patient Family History</CardTitle></CardHeader>
-                            <CardContent><p className="text-sm text-muted-foreground">No patient family history has been added yet.</p></CardContent>
-                        </Card>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <Card>
-                            <CardHeader><CardTitle className="text-base">Recent Communications</CardTitle></CardHeader>
-                            <CardContent className="space-y-2">
-                                {communicationsLoading ? (
-                                    <Loader2 className="animate-spin" />
-                                ) : communications && communications.length > 0 ? (
-                                    communications.map(comm => (
-                                        <div key={comm.id} className="text-xs text-muted-foreground">
-                                            <p>
-                                                Message sent via {comm.service}
-                                                <span className="float-right">{formatDistanceToNow(new Date(comm.sentAt), { addSuffix: true })}</span>
-                                            </p>
-                                            <p className="text-sm text-foreground bg-muted p-2 rounded-md mt-1">{comm.message}</p>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">No Communications found.</p>
-                                )}
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader><CardTitle className="text-base">Treatment Plan</CardTitle></CardHeader>
-                            <CardContent><p className="text-sm text-muted-foreground">Not Available.</p></CardContent>
-                        </Card>
-                    </div>
-                </div>
-            </div>
             <AddAppointmentDialog open={isAppointmentDialogOpen} onOpenChange={setIsAppointmentDialogOpen} patient={patient} />
-            <MedicalHistoryDialog open={isMedicalHistoryDialogOpen} onOpenChange={setIsMedicalHistoryDialogOpen} patient={patient} />
-            <SendMessageDialog open={isSendMessageDialogOpen} onOpenChange={setIsSendMessageDialogOpen} patient={patient} />
+            <AddFollowUpDialog open={isFollowUpDialogOpen} onOpenChange={setIsFollowUpDialogOpen} patient={patient} />
         </>
     );
 }
