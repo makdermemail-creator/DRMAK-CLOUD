@@ -6,29 +6,30 @@ import {
     CardDescription,
     CardHeader,
     CardTitle,
+    CardFooter,
 } from '@/components/ui/card';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole, FeatureAccess } from '@/lib/types';
-import { Save, Loader2 } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, useUser } from '@/firebase';
+import { Save, Loader2, Shield, Settings, Users, Activity, LayoutDashboard, Share2, Sparkles, ShoppingBag, PieChart } from 'lucide-react';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, doc, setDoc } from 'firebase/firestore';
+import { availableFeatures, FeatureCategory } from '@/lib/features';
+import { cn } from '@/lib/utils';
 
 const availableRoles: UserRole[] = ['Admin', 'Doctor', 'Receptionist', 'Sales', 'Social Media Manager', 'Operations Manager', 'Designer'];
 
-import { availableFeatures } from '@/lib/features';
-
-
-import Link from 'next/link';
+const categoryIcons: { [key in FeatureCategory]: any } = {
+    'Operations': Settings,
+    'Sales': Users,
+    'Social Media': Share2,
+    'Clinic': Activity,
+    'Pharmacy': ShoppingBag,
+    'Reports': PieChart,
+    'Intelligence': Sparkles,
+    'General': LayoutDashboard
+};
 
 type FeatureAccessState = {
     [role in UserRole]?: {
@@ -41,6 +42,7 @@ export default function FeaturesPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const [isSaving, setIsSaving] = React.useState(false);
+    const [selectedRole, setSelectedRole] = React.useState<UserRole>('Admin');
 
     const featureAccessQuery = useMemoFirebase(() => firestore ? collection(firestore, 'feature_access') : null, [firestore]);
     const { data: savedFeatureAccess, isLoading } = useCollection<FeatureAccess>(featureAccessQuery);
@@ -68,7 +70,6 @@ export default function FeaturesPage() {
         }
     }, [savedFeatureAccess]);
 
-
     const handleCheckboxChange = (role: UserRole, featureId: string, checked: boolean) => {
         setFeatureAccess(prevState => ({
             ...prevState,
@@ -76,6 +77,20 @@ export default function FeaturesPage() {
                 ...prevState[role],
                 [featureId]: checked,
             },
+        }));
+    };
+
+    const handleCategoryToggle = (role: UserRole, category: FeatureCategory, checked: boolean) => {
+        const categoryFeatures = availableFeatures.filter(f => f.category === category);
+        const updatedFeatures = { ...featureAccess[role] };
+
+        categoryFeatures.forEach(f => {
+            updatedFeatures[f.id] = checked;
+        });
+
+        setFeatureAccess(prevState => ({
+            ...prevState,
+            [role]: updatedFeatures
         }));
     };
 
@@ -104,7 +119,12 @@ export default function FeaturesPage() {
         }
     };
 
-    const isMainAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin;
+    const isMainAdmin =
+        userProfile?.email === 'admin1@skinsmith.com' ||
+        userProfile?.isMainAdmin ||
+        userProfile?.role === 'Admin' ||
+        userProfile?.isAdmin ||
+        userProfile?.role === 'Operations Manager';
 
     if (isProfileLoading || isLoading) {
         return (
@@ -123,58 +143,96 @@ export default function FeaturesPage() {
         )
     }
 
+    const categories = Array.from(new Set(availableFeatures.map(f => f.category))) as FeatureCategory[];
+
     return (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>Feature Access Control</CardTitle>
-                            <CardDescription>
-                                Manage which user roles have access to specific application features.
-                            </CardDescription>
-                        </div>
-                        <Button onClick={handleSaveChanges} disabled={isSaving}>
-                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                            Save Changes
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[250px] sticky left-0 bg-background z-10">Feature</TableHead>
-                                    {availableRoles.map(role => (
-                                        <TableHead key={role} className="text-center">{role}</TableHead>
-                                    ))}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {availableFeatures.map(feature => (
-                                    <TableRow key={feature.id}>
-                                        <TableCell className="font-medium sticky left-0 bg-background z-10">
-                                            <Link href={feature.href || '#'} className="hover:text-primary hover:underline transition-colors">
-                                                {feature.label}
-                                            </Link>
-                                        </TableCell>
-                                        {availableRoles.map(role => (
-                                            <TableCell key={`${role}-${feature.id}`} className="text-center">
-                                                <Checkbox
-                                                    checked={featureAccess[role]?.[feature.id] || false}
-                                                    onCheckedChange={(checked) => handleCheckboxChange(role, feature.id, !!checked)}
-                                                    aria-label={`Access for ${role} to ${feature.label}`}
-                                                />
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
+        <div className="space-y-8 pb-10">
+            {/* Header section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Feature Access Control</h1>
+                    <p className="text-muted-foreground">Manage granular permissions by category for each user role.</p>
+                </div>
+                <Button onClick={handleSaveChanges} disabled={isSaving} size="lg" className="shadow-lg">
+                    {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                    Save All Changes
+                </Button>
+            </div>
+
+            {/* Role Selection Tabs */}
+            <div className="flex flex-wrap gap-2 p-1 bg-muted/50 rounded-xl w-fit">
+                {availableRoles.map(role => (
+                    <button
+                        key={role}
+                        onClick={() => setSelectedRole(role)}
+                        className={cn(
+                            "px-4 py-2 text-sm font-medium transition-all rounded-lg",
+                            selectedRole === role
+                                ? "bg-background shadow-sm text-foreground"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                    >
+                        {role}
+                    </button>
+                ))}
+            </div>
+
+            {/* Category Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {categories.map(category => {
+                    const featuresInCategory = availableFeatures.filter(f => f.category === category);
+                    const allChecked = featuresInCategory.every(f => featureAccess[selectedRole]?.[f.id]);
+                    const someChecked = featuresInCategory.some(f => featureAccess[selectedRole]?.[f.id]);
+                    const Icon = categoryIcons[category] || Shield;
+
+                    return (
+                        <Card key={category} className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300">
+                            <CardHeader className="bg-muted/30 border-b border-border/50 py-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-background rounded-lg shadow-sm">
+                                            <Icon className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <CardTitle className="text-lg">{category}</CardTitle>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Grant Box</span>
+                                        <Checkbox
+                                            id={`toggle-${category}`}
+                                            checked={allChecked}
+                                            onCheckedChange={(checked) => handleCategoryToggle(selectedRole, category, !!checked)}
+                                            className="h-5 w-5"
+                                        />
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-6 space-y-4">
+                                {featuresInCategory.map(feature => (
+                                    <div key={feature.id} className="flex items-center justify-between group/item">
+                                        <label
+                                            htmlFor={`${selectedRole}-${feature.id}`}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer group-hover/item:text-primary transition-colors"
+                                        >
+                                            {feature.label}
+                                        </label>
+                                        <Checkbox
+                                            id={`${selectedRole}-${feature.id}`}
+                                            checked={featureAccess[selectedRole]?.[feature.id] || false}
+                                            onCheckedChange={(checked) => handleCheckboxChange(selectedRole, feature.id, !!checked)}
+                                        />
+                                    </div>
                                 ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                            </CardContent>
+                            <CardFooter className="bg-muted/5 py-2 px-6 flex justify-end">
+                                <span className="text-[10px] text-muted-foreground italic">
+                                    {featuresInCategory.filter(f => featureAccess[selectedRole]?.[f.id]).length} of {featuresInCategory.length} active
+                                </span>
+                            </CardFooter>
+                        </Card>
+                    );
+                })}
+            </div>
         </div>
     );
 }
+

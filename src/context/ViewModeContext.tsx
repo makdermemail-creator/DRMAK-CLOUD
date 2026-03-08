@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { useAuth } from '@/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
-type ViewMode = 'none' | 'organization' | 'clinic';
+type ViewMode = 'none' | 'organization' | 'clinic' | 'reports';
 
 interface ViewModeContextType {
     viewMode: ViewMode;
@@ -20,7 +20,7 @@ export function ViewModeProvider({ children }: { children: ReactNode }) {
         // Restore saved view mode from localStorage immediately on first render
         if (typeof window !== 'undefined') {
             const stored = localStorage.getItem(VIEW_MODE_KEY);
-            if (stored === 'organization' || stored === 'clinic') return stored;
+            if (stored === 'organization' || stored === 'clinic' || stored === 'reports') return stored;
         }
         return 'none';
     });

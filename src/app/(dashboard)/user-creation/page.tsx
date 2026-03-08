@@ -39,9 +39,22 @@ import { useSearch } from '@/context/SearchProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { Checkbox } from '@/components/ui/checkbox';
-import { availableFeatures } from '@/lib/features';
+import { availableFeatures, FeatureCategory } from '@/lib/features';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
+import { Shield, Settings, Users, Activity, LayoutDashboard, Share2, Sparkles, ShoppingBag, PieChart } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const categoryIcons: { [key in FeatureCategory]: any } = {
+  'Operations': Settings,
+  'Sales': Users,
+  'Social Media': Share2,
+  'Clinic': Activity,
+  'Pharmacy': ShoppingBag,
+  'Reports': PieChart,
+  'Intelligence': Sparkles,
+  'General': LayoutDashboard
+};
 
 const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenChange: (open: boolean) => void, user?: User }) => {
   const firestore = useFirestore();
@@ -70,6 +83,20 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
   const handleRoleChange = (value: User['role']) => {
     setFormData(prev => ({ ...prev, role: value, isAdmin: value === 'Admin' }));
   }
+
+  const handleCategoryToggle = (category: FeatureCategory, checked: boolean) => {
+    const categoryFeatures = availableFeatures.filter(f => f.category === category);
+
+    setFormData(prev => {
+      const updatedFeatureAccess = { ...prev.featureAccess };
+      categoryFeatures.forEach(f => {
+        updatedFeatureAccess[f.id] = checked;
+      });
+      return { ...prev, featureAccess: updatedFeatureAccess };
+    });
+  };
+
+  const categories = Array.from(new Set(availableFeatures.map(f => f.category))) as FeatureCategory[];
 
   const handleSubmit = async () => {
     if (!firestore || !auth) return;
@@ -143,7 +170,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{user ? 'Edit User' : 'Add New User'}</DialogTitle>
           <DialogDescription>
@@ -156,6 +183,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
             <div className="col-span-3">
               <AvatarUpload
                 uid={user?.id || 'new-user'}
+                firestore={firestore}
                 currentPhotoURL={formData.avatarUrl}
                 onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
               />
@@ -193,39 +221,73 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
             </Select>
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right pt-2">Feature Access</Label>
-            <Card className="col-span-3">
-              <ScrollArea className="h-[200px] p-4">
-                <div className="space-y-4">
-                  {availableFeatures.map((feature) => (
-                    <div key={feature.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`feature-${feature.id}`}
-                        checked={formData.featureAccess?.[feature.id] || false}
-                        onCheckedChange={(checked) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            featureAccess: {
-                              ...prev.featureAccess,
-                              [feature.id]: !!checked
-                            }
-                          }));
-                        }}
-                      />
-                      <Label
-                        htmlFor={`feature-${feature.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {feature.label}
-                      </Label>
-                    </div>
-                  ))}
+            <Label className="text-right pt-2 font-semibold">Feature Access</Label>
+            <div className="col-span-3">
+              <ScrollArea className="h-[350px] pr-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4">
+                  {categories.map(category => {
+                    const featuresInCategory = availableFeatures.filter(f => f.category === category);
+                    const allChecked = featuresInCategory.every(f => formData.featureAccess?.[f.id]);
+                    const selectedCount = featuresInCategory.filter(f => formData.featureAccess?.[f.id]).length;
+                    const Icon = categoryIcons[category] || Shield;
+
+                    return (
+                      <Card key={category} className="overflow-hidden border border-border/50">
+                        <CardHeader className="bg-muted/30 border-b border-border/50 py-3 px-4 flex flex-row items-center justify-between space-y-0">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-primary" />
+                            <CardTitle className="text-sm font-semibold">{category}</CardTitle>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Grant Box</span>
+                            <Checkbox
+                              checked={allChecked}
+                              onCheckedChange={(checked) => handleCategoryToggle(category, !!checked)}
+                              className="h-4 w-4"
+                            />
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-3">
+                          {featuresInCategory.map(feature => (
+                            <div key={feature.id} className="flex items-center justify-between group/item">
+                              <Label
+                                htmlFor={`form-feature-${feature.id}`}
+                                className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer group-hover/item:text-primary transition-colors line-clamp-1 pr-2"
+                                title={feature.label}
+                              >
+                                {feature.label}
+                              </Label>
+                              <Checkbox
+                                id={`form-feature-${feature.id}`}
+                                checked={formData.featureAccess?.[feature.id] || false}
+                                onCheckedChange={(checked) => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    featureAccess: {
+                                      ...prev.featureAccess,
+                                      [feature.id]: !!checked
+                                    }
+                                  }));
+                                }}
+                                className="h-3.5 w-3.5"
+                              />
+                            </div>
+                          ))}
+                        </CardContent>
+                        <div className="bg-muted/10 px-4 py-1.5 text-right border-t border-border/10">
+                          <span className="text-[10px] text-muted-foreground italic">
+                            {selectedCount} of {featuresInCategory.length} active
+                          </span>
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
               </ScrollArea>
-            </Card>
+            </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="mt-auto pt-4 border-t">
           <Button onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {user ? 'Save Changes' : 'Add User'}
@@ -253,8 +315,8 @@ export default function UserManagementPage() {
     if (!term) return users;
     return users.filter(u =>
       (u.name && u.name.toLowerCase().includes(term)) ||
-      u.email.toLowerCase().includes(term) ||
-      u.role.toLowerCase().includes(term)
+      (u.email && u.email.toLowerCase().includes(term)) ||
+      (u.role && u.role.toLowerCase().includes(term))
     );
   }, [users, searchTerm]);
 
@@ -337,7 +399,7 @@ export default function UserManagementPage() {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
                         <AvatarImage src={user.avatarUrl} alt={user.name} />
-                        <AvatarFallback>{user.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{user.name?.charAt(0) || user.email?.charAt(0) || 'U'}</AvatarFallback>
                       </Avatar>
                       <div className="grid">
                         <span className="font-semibold">{user.name}</span>

@@ -28,6 +28,7 @@ import {
     Hospital,
     ArrowRight,
     ShieldAlert,
+    Boxes,
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,6 +94,7 @@ import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, u
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
+import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -1213,6 +1215,164 @@ const DoctorDashboard = () => {
 
 
 
+const ReportsDashboard = () => {
+    const firestore = useFirestore();
+    const { summaryMetrics } = useAnalyticsData();
+    const [selectedRange, setSelectedRange] = React.useState<{ from: Date; to: Date } | undefined>();
+
+    const billingRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
+    const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
+    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+
+    const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
+    const { data: users } = useCollection<User>(usersRef);
+    const { data: appointments } = useCollection<Appointment>(appointmentsRef);
+
+    const financialStats = React.useMemo(() => {
+        if (!billingRecords) return { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 };
+        return billingRecords.reduce((acc, curr) => ({
+            totalRevenue: acc.totalRevenue + (curr.totalAmount || 0),
+            consultation: acc.consultation + (curr.consultationCharges || 0),
+            procedures: acc.procedures + (curr.procedureCharges || 0),
+            medicines: acc.medicines + (curr.medicineCharges || 0),
+        }), { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 });
+    }, [billingRecords]);
+
+    const employeePerformance = React.useMemo(() => {
+        if (!users || !appointments) return [];
+        return users.map(u => {
+            const userAppointments = appointments.filter(a => a.doctorId === u.id);
+            const completed = userAppointments.filter(a => a.status === 'Completed').length;
+            return {
+                name: u.name || u.email?.split('@')[0] || 'Unknown',
+                role: u.role,
+                appointments: userAppointments.length,
+                completed,
+                efficiency: userAppointments.length > 0 ? Math.round((completed / userAppointments.length) * 100) : 0
+            };
+        }).sort((a, b) => b.completed - a.completed);
+    }, [users, appointments]);
+
+    return (
+        <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Financial & Performance Reports</h2>
+                    <p className="text-muted-foreground">Comprehensive overview of clinic health and team productivity.</p>
+                </div>
+                <DatePickerWithRange />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                        <CircleDollarSign className="h-4 w-4 text-emerald-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">Rs {financialStats.totalRevenue.toLocaleString()}</div>
+                        <p className="text-xs text-emerald-600/80">All-time billing accumulated</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Consultations</CardTitle>
+                        <Activity className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">Rs {financialStats.consultation.toLocaleString()}</div>
+                        <p className="text-xs text-muted-foreground">Fees from doctor visits</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Procedures</CardTitle>
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">Rs {financialStats.procedures.toLocaleString()}</div>
+                        <p className="text-xs text-muted-foreground">Surgical & skin treatments</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Medicines</CardTitle>
+                        <Boxes className="h-4 w-4 text-orange-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">Rs {financialStats.medicines.toLocaleString()}</div>
+                        <p className="text-xs text-muted-foreground">Pharmacy sales revenue</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+                <Card className="col-span-4">
+                    <CardHeader>
+                        <CardTitle>Employee Performance</CardTitle>
+                        <CardDescription>Appointment completion rates and efficiency by staff member.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Employee</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead className="text-center">Total Appts</TableHead>
+                                    <TableHead className="text-center">Completed</TableHead>
+                                    <TableHead className="text-right">Efficiency</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {employeePerformance.map((emp) => (
+                                    <TableRow key={emp.name}>
+                                        <TableCell className="font-medium">{emp.name}</TableCell>
+                                        <TableCell><Badge variant="outline">{emp.role}</Badge></TableCell>
+                                        <TableCell className="text-center">{emp.appointments}</TableCell>
+                                        <TableCell className="text-center text-emerald-600 font-semibold">{emp.completed}</TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <span className="text-xs font-medium">{emp.efficiency}%</span>
+                                                <Progress value={emp.efficiency} className="h-1.5 w-12" />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
+                <Card className="col-span-3">
+                    <CardHeader>
+                        <CardTitle>Revenue Attribution</CardTitle>
+                        <CardDescription>Breakdown by service category.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ChartContainer config={{
+                            value: { label: "Revenue", color: "hsl(var(--primary))" }
+                        }} className="h-full w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RechartsBarChart data={[
+                                    { name: 'Consultations', value: financialStats.consultation },
+                                    { name: 'Procedures', value: financialStats.procedures },
+                                    { name: 'Medicines', value: financialStats.medicines },
+                                ]}>
+                                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                                    <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `Rs${v / 1000}k`} />
+                                    <RechartsTooltip content={<ChartTooltipContent />} />
+                                    <RechartsBar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                </RechartsBarChart>
+                            </ResponsiveContainer>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+
 const ReceptionistDashboard = () => {
     // For now, the receptionist dashboard can be the same as the admin dashboard
     // as it focuses on appointments and high-level stats.
@@ -1220,76 +1380,121 @@ const ReceptionistDashboard = () => {
 }
 
 
-const ViewModeSelection = ({ onSelect }: { onSelect: (mode: 'clinic' | 'organization') => void }) => {
+const ViewModeSelection = ({ user, onSelect }: { user: any, onSelect: (mode: 'clinic' | 'organization' | 'reports') => void }) => {
+    // Only true super users get automatic access to all boxes.
+    const isSuperUser = user?.email === 'admin1@skinsmith.com' || user?.role === 'Admin';
+
+    // Strict checks: Either superuser OR explicit feature flag.
+    const hasOrgAccess = isSuperUser || !!user?.featureAccess?.['mgmt_organization'];
+    const hasClinicAccess = isSuperUser || !!user?.featureAccess?.['mgmt_clinic'];
+    const hasReportsAccess = isSuperUser || !!user?.featureAccess?.['mgmt_reports'];
+
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)] space-y-8 animate-in fade-in duration-500">
             <div className="text-center space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Welcome, Administrator</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Welcome, {user?.name || 'Administrator'}</h2>
                 <p className="text-muted-foreground text-lg">Please select a workstation to continue</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl px-4">
                 {/* Organization Selection */}
-                <Card
-                    className="group relative overflow-hidden border-2 transition-all hover:border-primary cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
-                    onClick={() => onSelect('organization')}
-                >
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Building2 className="h-32 w-32" />
-                    </div>
-                    <CardHeader className="space-y-4">
-                        <div className="p-3 bg-primary/10 rounded-2xl w-fit group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                            <Building2 className="h-8 w-8" />
+                {hasOrgAccess && (
+                    <Card
+                        className="group relative overflow-hidden border-2 transition-all hover:border-primary cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
+                        onClick={() => onSelect('organization')}
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Building2 className="h-32 w-32" />
                         </div>
-                        <div>
-                            <CardTitle className="text-2xl">Organization</CardTitle>
-                            <CardDescription className="text-base mt-2">
-                                Manage employees, reports, revenues, and overall organizational growth.
-                            </CardDescription>
+                        <CardHeader className="space-y-4">
+                            <div className="p-3 bg-primary/10 rounded-2xl w-fit group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                                <Building2 className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-2xl">Organization</CardTitle>
+                                <CardDescription className="text-base mt-2">
+                                    Manage employees, reports, revenues, and overall organizational growth.
+                                </CardDescription>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Employee Progress Reports</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Sales & Lead Dashboards</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Task & Training Management</li>
+                            </ul>
+                        </CardContent>
+                        <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-primary group-hover:translate-x-1 transition-transform">
+                            Enter Workspace <ArrowRight className="h-4 w-4" />
                         </div>
-                    </CardHeader>
-                    <CardContent>
-                        <ul className="space-y-2 text-sm text-muted-foreground">
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Employee Progress Reports</li>
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Sales & Lead Dashboards</li>
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Task & Training Management</li>
-                        </ul>
-                    </CardContent>
-                    <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-primary group-hover:translate-x-1 transition-transform">
-                        Enter Workspace <ArrowRight className="h-4 w-4" />
-                    </div>
-                </Card>
+                    </Card>
+                )}
 
-                {/* Clinic Selection */}
-                <Card
-                    className="group relative overflow-hidden border-2 transition-all hover:border-indigo-500 cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
-                    onClick={() => onSelect('clinic')}
-                >
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Hospital className="h-32 w-32" />
-                    </div>
-                    <CardHeader className="space-y-4">
-                        <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                            <Hospital className="h-8 w-8" />
+                {/* Reports Selection - SWAPPED TO SECOND SLOT */}
+                {hasReportsAccess && (
+                    <Card
+                        className="group relative overflow-hidden border-2 transition-all hover:border-amber-500 cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
+                        onClick={() => onSelect('reports')}
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <BarChart className="h-32 w-32" />
                         </div>
-                        <div>
-                            <CardTitle className="text-2xl">Manage Skin Smith</CardTitle>
-                            <CardDescription className="text-base mt-2">
-                                Oversee daily clinic operations, appointments, patients, and medical records.
-                            </CardDescription>
+                        <CardHeader className="space-y-4">
+                            <div className="p-3 bg-amber-500/10 rounded-2xl w-fit group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                                <BarChart className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-2xl">Reports & Analytics</CardTitle>
+                                <CardDescription className="text-base mt-2">
+                                    Access detailed financial statements and evaluate employee performance metrics.
+                                </CardDescription>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Financial Reports & Revenue</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Employee Efficiency Metrics</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Performance Analytics</li>
+                            </ul>
+                        </CardContent>
+                        <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-amber-600 group-hover:translate-x-1 transition-transform">
+                            View Reports <ArrowRight className="h-4 w-4" />
                         </div>
-                    </CardHeader>
-                    <CardContent>
-                        <ul className="space-y-2 text-sm text-muted-foreground">
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Core Clinic Operations</li>
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Patient & Doctor Schedules</li>
-                            <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Pharmacy & Records</li>
-                        </ul>
-                    </CardContent>
-                    <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform">
-                        Enter Clinic <ArrowRight className="h-4 w-4" />
-                    </div>
-                </Card>
+                    </Card>
+                )}
+
+                {/* Clinic Selection - SWAPPED TO THIRD SLOT */}
+                {hasClinicAccess && (
+                    <Card
+                        className="group relative overflow-hidden border-2 transition-all hover:border-indigo-500 cursor-pointer hover:shadow-xl bg-card/50 backdrop-blur-md"
+                        onClick={() => onSelect('clinic')}
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Hospital className="h-32 w-32" />
+                        </div>
+                        <CardHeader className="space-y-4">
+                            <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                <Hospital className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-2xl">Manage Skin Smith</CardTitle>
+                                <CardDescription className="text-base mt-2">
+                                    Oversee daily clinic operations, appointments, patients, and medical records.
+                                </CardDescription>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Core Clinic Operations</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Patient & Doctor Schedules</li>
+                                <li className="flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Pharmacy & Records</li>
+                            </ul>
+                        </CardContent>
+                        <div className="absolute bottom-4 right-6 flex items-center gap-2 font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform">
+                            Enter Clinic <ArrowRight className="h-4 w-4" />
+                        </div>
+                    </Card>
+                )}
             </div>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-full border">
@@ -1306,9 +1511,37 @@ export default function Dashboard() {
     const { viewMode, setViewMode } = useViewMode();
     const router = useRouter();
 
+    // For the main Dashboard rendering logic, isMainAdmin means they have access to the ViewModeSelection screen
+    // (either because they are a super user, OR because they have at least one mgmt_* flag)
     const isMainAdmin = React.useMemo(() =>
-        user?.email === 'admin1@skinsmith.com' || user?.isMainAdmin || user?.role === 'Admin' || user?.isAdmin || user?.role === 'Operations Manager',
+        user?.email === 'admin1@skinsmith.com' ||
+        user?.role === 'Admin' ||
+        user?.role === 'Operations Manager' ||
+        user?.featureAccess?.['mgmt_clinic'] ||
+        user?.featureAccess?.['mgmt_organization'] ||
+        user?.featureAccess?.['mgmt_reports'],
         [user]);
+
+    // Auto-routing logic for users with exactly ONE workstation feature granted
+    const isSuperUser = React.useMemo(() =>
+        user?.email === 'admin1@skinsmith.com' || user?.role === 'Admin',
+        [user]);
+
+    React.useEffect(() => {
+        if (!isUserLoading && user && !isSuperUser && viewMode === 'none') {
+            const hasOrg = !!user.featureAccess?.['mgmt_organization'];
+            const hasClinic = !!user.featureAccess?.['mgmt_clinic'];
+            const hasReports = !!user.featureAccess?.['mgmt_reports'];
+
+            if (hasClinic && !hasOrg && !hasReports) {
+                setViewMode('clinic');
+            } else if (hasOrg && !hasClinic && !hasReports) {
+                setViewMode('organization');
+            } else if (hasReports && !hasOrg && !hasClinic) {
+                setViewMode('reports');
+            }
+        }
+    }, [isUserLoading, user, isSuperUser, viewMode, setViewMode]);
 
     React.useEffect(() => {
         if (!isUserLoading && user?.role === 'Sales') {
@@ -1356,7 +1589,7 @@ export default function Dashboard() {
     // Main Admin Logic
     if (isMainAdmin) {
         if (viewMode === 'none') {
-            return <ViewModeSelection onSelect={setViewMode} />;
+            return <ViewModeSelection user={user} onSelect={setViewMode} />;
         }
 
         if (viewMode === 'organization') {
@@ -1366,10 +1599,14 @@ export default function Dashboard() {
         if (viewMode === 'clinic') {
             return <AdminDashboard />;
         }
+
+        if (viewMode === 'reports') {
+            return <ReportsDashboard />;
+        }
     }
 
     // Default Fallback for Admins who haven't selected a mode or failed profile
-    if (isMainAdmin) return <ViewModeSelection onSelect={setViewMode} />;
+    if (isMainAdmin) return <ViewModeSelection user={user} onSelect={setViewMode} />;
 
     // Default Fallback for regular accounts with no role or unhandled role
     return (

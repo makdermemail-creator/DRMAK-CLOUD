@@ -178,6 +178,21 @@ const clinicGroups = [
     }
 ];
 
+const reportsGroups = [
+    {
+        label: "Main",
+        ids: ["dashboard"]
+    },
+    {
+        label: "Intelligence & Analysis",
+        ids: ["reports.full", "employeeReports", "analytics"]
+    },
+    {
+        label: "Advanced Tools",
+        ids: ["aiTools"]
+    }
+];
+
 const organizationGroups = [
     {
         label: "Main",
@@ -243,9 +258,13 @@ const NavContent = () => {
     const { user: userProfile, isUserLoading } = useUser();
     const { viewMode, setViewMode } = useViewMode();
 
-    const isMainAdmin = React.useMemo(() =>
-        userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin || userProfile?.role === 'Admin' || userProfile?.isAdmin || userProfile?.role === 'Operations Manager',
-        [userProfile]);
+    // For sidebar rendering, we determine if we should show the "grouped" view Modes.
+    // We show this if the user is a true admin OR if they explicitly have a management flag.
+    const isMainAdmin = React.useMemo(() => {
+        const isTrueAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.role === 'Admin';
+        const hasAnyManagementFlag = userProfile?.featureAccess?.['mgmt_clinic'] || userProfile?.featureAccess?.['mgmt_organization'] || userProfile?.featureAccess?.['mgmt_reports'];
+        return isTrueAdmin || !!hasAnyManagementFlag;
+    }, [userProfile]);
 
     const filteredNavItems = React.useMemo(() => {
         if (isUserLoading) return [];
@@ -256,46 +275,43 @@ const NavContent = () => {
             return allMenuItems;
         }
 
-        // 1. Check for per-user Feature Access Overrides
-        if (userProfile?.featureAccess) {
-            return allMenuItems.filter(item => {
-                if (userProfile.featureAccess?.[item.id]) return true;
-                if (userProfile.featureAccess?.['trainings']) {
+        // 1. Determine base role access
+        let baseAccessIds: string[] = [];
+        if (userProfile?.role === 'Admin') {
+            baseAccessIds = allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl').map(i => i.id);
+        } else if (userProfile?.role === 'Social Media Manager') {
+            baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
+        } else if (userProfile?.role === 'Designer') {
+            baseAccessIds = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks', 'aiTools'];
+        } else if (userProfile?.role === 'Sales') {
+            baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
+        } else if (userProfile) {
+            baseAccessIds = ['dashboard', 'settings']; // Default
+        }
+
+        // 2. Filter items based on base access OR explicit feature grants
+        return allMenuItems.filter(item => {
+            // Check if it's in their base role
+            if (baseAccessIds.includes(item.id)) return true;
+
+            // Check if it was explicitly granted via featureAccess
+            if (userProfile?.featureAccess) {
+                if (userProfile.featureAccess[item.id]) return true;
+
+                // Special handling for trainings which might have sub-features or distinct roles
+                if (userProfile.featureAccess['trainings_hub'] || userProfile.featureAccess['admin_trainings']) {
                     if (item.id === 'admin_trainings' && userProfile.role === 'Admin') return true;
                     if (item.id === 'trainings_hub' && userProfile.role !== 'Admin') return true;
                 }
+
+                // Handling parent items if a subitem is granted
                 if (item.subItems) {
                     return item.subItems.some(sub => userProfile.featureAccess?.[sub.id]);
                 }
-                return false;
-            });
-        }
+            }
 
-        // 2. Fallback to Role-based defaults
-        if (userProfile?.role === 'Admin') {
-            return allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl');
-        }
-
-        if (userProfile?.role === 'Social Media Manager') {
-            const socialAccess = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
-            return allMenuItems.filter(item => socialAccess.includes(item.id));
-        }
-
-        if (userProfile?.role === 'Designer') {
-            const designerAccess = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks', 'aiTools'];
-            return allMenuItems.filter(item => designerAccess.includes(item.id));
-        }
-
-        if (userProfile?.role === 'Sales') {
-            const salesAccess = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
-            return allMenuItems.filter(item => salesAccess.includes(item.id));
-        }
-
-        if (userProfile) {
-            // Default restricted access for users with no assigned role
-            const defaultAccess = ['dashboard', 'settings'];
-            return allMenuItems.filter(item => defaultAccess.includes(item.id));
-        }
+            return false;
+        });
 
         return [];
     }, [userProfile, isUserLoading, isMainAdmin]);
@@ -315,7 +331,7 @@ const NavContent = () => {
 
     // Main Admin View Logic
     if (isMainAdmin) {
-        const activeGroups = viewMode === 'clinic' ? clinicGroups : organizationGroups;
+        const activeGroups = viewMode === 'clinic' ? clinicGroups : (viewMode === 'reports' ? reportsGroups : organizationGroups);
 
         return (
             <div className="space-y-4">
