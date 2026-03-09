@@ -22,8 +22,8 @@ import { UserRole } from '@/lib/types';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@skinsmith.com');
-  const [password, setPassword] = useState('asdasd');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const router = useRouter();

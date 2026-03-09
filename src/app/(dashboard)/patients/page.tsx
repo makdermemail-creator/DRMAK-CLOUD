@@ -38,6 +38,7 @@ import { useSearchParams } from 'next/navigation';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSearch } from '@/context/SearchProvider';
+import { PatientImportDialog } from '@/components/patients/PatientImportDialog';
 
 const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onOpenChange: (open: boolean) => void, patient?: Patient }) => {
   const firestore = useFirestore();
@@ -190,7 +191,9 @@ function PatientsContent() {
   }, [allFollowUps]);
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | undefined>(undefined);
+  const [patientToDelete, setPatientToDelete] = React.useState<Patient | null>(null);
 
   const handleOpenChange = (open: boolean) => {
     setIsFormOpen(open);
@@ -233,14 +236,15 @@ function PatientsContent() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (patientId: string) => {
-    if (!firestore) return;
-    deleteDocumentNonBlocking(doc(firestore, 'patients', patientId));
+  const handleDelete = () => {
+    if (!firestore || !patientToDelete) return;
+    deleteDocumentNonBlocking(doc(firestore, 'patients', patientToDelete.id));
     toast({
       variant: 'destructive',
       title: 'Patient Deleted',
       description: "The patient's record has been removed."
-    })
+    });
+    setPatientToDelete(null);
   }
 
   const handleViewDetails = (patientId: string) => {
@@ -301,6 +305,10 @@ function PatientsContent() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => setIsImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
               <Button size="sm" className="gap-1" onClick={handleAdd}>
                 <PlusCircle className="h-4 w-4" />
                 Add Patient
@@ -365,23 +373,12 @@ function PatientsContent() {
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => handleViewDetails(patient.id)}>View Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleEdit(patient)}>Edit</DropdownMenuItem>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">Delete</DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the patient's record.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(patient.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DropdownMenuItem
+                            onClick={() => setPatientToDelete(patient)}
+                            className="text-red-600"
+                          >
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -393,6 +390,29 @@ function PatientsContent() {
         </CardContent>
       </Card>
       <PatientFormDialog open={isFormOpen} onOpenChange={handleOpenChange} patient={selectedPatient} />
+      <PatientImportDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImportSuccess={() => {
+          // No need for manual refresh if useCollection is real-time, 
+          // but we can add a toast or similar if needed.
+        }}
+      />
+
+      <AlertDialog open={!!patientToDelete} onOpenChange={(open) => !open && setPatientToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the patient's record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

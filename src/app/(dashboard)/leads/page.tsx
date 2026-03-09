@@ -376,6 +376,7 @@ export default function LeadsPage() {
   const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [isConfigOpen, setIsConfigOpen] = React.useState(false);
   const [selectedLead, setSelectedLead] = React.useState<Lead | undefined>(undefined);
+  const [leadToDelete, setLeadToDelete] = React.useState<Lead | null>(null);
   const [sheetUrl, setSheetUrl] = React.useState<string>('');
 
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
@@ -484,15 +485,16 @@ export default function LeadsPage() {
     }
   };
 
-  const handleDelete = (leadId: string) => {
-    if (!firestore) return;
-    const docRef = doc(firestore, 'leads', leadId);
+  const handleDelete = () => {
+    if (!firestore || !leadToDelete) return;
+    const docRef = doc(firestore, 'leads', leadToDelete.id);
     deleteDocumentNonBlocking(docRef);
     toast({
       variant: 'destructive',
       title: 'Lead Deleted',
       description: "The lead record has been removed."
-    })
+    });
+    setLeadToDelete(null);
   }
 
   const handleClearAll = async () => {
@@ -644,23 +646,12 @@ export default function LeadsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => handleEdit(lead)}>Edit</DropdownMenuItem>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">Delete</DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the lead record.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(lead.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DropdownMenuItem
+                            onClick={() => setLeadToDelete(lead)}
+                            className="text-red-600"
+                          >
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -686,6 +677,21 @@ export default function LeadsPage() {
           }
         }}
       />
+
+      <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the lead record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

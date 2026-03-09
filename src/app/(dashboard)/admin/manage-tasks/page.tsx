@@ -158,6 +158,7 @@ export default function ManageTasksPage() {
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [selectedTask, setSelectedTask] = React.useState<AdminTaskTemplate | undefined>(undefined);
+    const [taskToDelete, setTaskToDelete] = React.useState<AdminTaskTemplate | null>(null);
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -191,14 +192,15 @@ export default function ManageTasksPage() {
         setIsFormOpen(true);
     };
 
-    const handleDelete = (taskId: string) => {
-        if (!firestore) return;
-        const taskRef = doc(firestore, 'adminTaskTemplates', taskId);
+    const handleDelete = () => {
+        if (!firestore || !taskToDelete) return;
+        const taskRef = doc(firestore, 'adminTaskTemplates', taskToDelete.id);
         deleteDocumentNonBlocking(taskRef);
         toast({
             title: 'Task Deleted',
             description: 'Task template has been removed.'
         });
+        setTaskToDelete(null);
     };
 
     return (
@@ -255,25 +257,9 @@ export default function ManageTasksPage() {
                                                     <Button variant="ghost" size="icon" onClick={() => handleEdit(task)}>
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon">
-                                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Task Template?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This will permanently delete this task template. Users will no longer see this task.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDelete(task.id)}>Delete</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                    <Button variant="ghost" size="icon" onClick={() => setTaskToDelete(task)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -294,6 +280,21 @@ export default function ManageTasksPage() {
                 task={selectedTask}
                 users={users || []}
             />
+
+            <AlertDialog open={!!taskToDelete} onOpenChange={(open) => !open && setTaskToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Task Template?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this task template. Users will no longer see this task.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

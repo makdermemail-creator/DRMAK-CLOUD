@@ -142,7 +142,16 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedTime, onAppointment
             toast({ variant: 'destructive', title: 'Error', description: 'Please enter a mobile number.' });
             return;
         }
-        const patient = patients?.find(p => p.mobileNumber === mobileNumber);
+
+        // Sanitize search input (keep digits only)
+        const sanitizedSearch = mobileNumber.replace(/\D/g, '');
+
+        // Find patient by matching sanitized mobile numbers
+        const patient = patients?.find(p => {
+            const sanitizedPatientMobile = (p.mobileNumber || '').replace(/\D/g, '');
+            return sanitizedPatientMobile === sanitizedSearch;
+        });
+
         if (patient) {
             setExistingPatient(patient);
             setStep('book');
@@ -736,7 +745,8 @@ const AdminDashboard = () => {
         if (term) {
             apts = apts.filter(apt =>
                 apt.patient?.name.toLowerCase().includes(term) ||
-                apt.doctor?.fullName.toLowerCase().includes(term)
+                apt.doctor?.fullName.toLowerCase().includes(term) ||
+                (apt.patient?.mobileNumber && apt.patient.mobileNumber.toLowerCase().includes(term))
             );
         }
         return apts;

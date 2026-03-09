@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUser, useAuth } from '@/firebase';
-import { updatePassword, updateProfile, getAuth, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { updatePassword, updateProfile, getAuth, EmailAuthProvider, reauthenticateWithCredential, verifyBeforeUpdateEmail } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User, Lock, Save, ShieldCheck, Link } from 'lucide-react';
 import { useFirestore, useMemoFirebase } from '@/firebase';
@@ -26,8 +26,10 @@ export default function SettingsPage() {
     const [confirmPassword, setConfirmPassword] = React.useState('');
     const [photoURL, setPhotoURL] = React.useState('');
     const [selectedIcon, setSelectedIcon] = React.useState('');
+    const [newEmail, setNewEmail] = React.useState('');
     const [isUpdatingProfile, setIsUpdatingProfile] = React.useState(false);
     const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
+    const [isUpdatingEmail, setIsUpdatingEmail] = React.useState(false);
 
     const [isInitialized, setIsInitialized] = React.useState(false);
 
@@ -36,6 +38,7 @@ export default function SettingsPage() {
             if (userProfile.name) setDisplayName(userProfile.name);
             if (userProfile.avatarUrl) setPhotoURL(userProfile.avatarUrl);
             if (userProfile.icon) setSelectedIcon(userProfile.icon);
+            if (userProfile.email) setNewEmail(userProfile.email);
             setIsInitialized(true);
         }
     }, [userProfile, isUserLoading, isInitialized]);
@@ -86,7 +89,6 @@ export default function SettingsPage() {
 
         setIsUpdatingPassword(true);
         try {
-            // Re-authenticate is required for sensitive operations like password change
             const user = auth.currentUser;
             if (user.email && currentPassword) {
                 const credential = EmailAuthProvider.credential(user.email, currentPassword);
@@ -108,6 +110,52 @@ export default function SettingsPage() {
             toast({ variant: 'destructive', title: 'Update Failed', description: message });
         } finally {
             setIsUpdatingPassword(false);
+        }
+    };
+
+    const handleUpdateEmail = async () => {
+        if (!auth?.currentUser || !firestore) return;
+        if (!newEmail || newEmail === auth.currentUser.email) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please enter a new email address.' });
+            return;
+        }
+
+        setIsUpdatingEmail(true);
+        try {
+            const user = auth.currentUser;
+            if (user.email && currentPassword) {
+                // Re-authenticate is required for email change
+                const credential = EmailAuthProvider.credential(user.email, currentPassword);
+                await reauthenticateWithCredential(user, credential);
+
+                // Update in Auth
+                await verifyBeforeUpdateEmail(user, newEmail);
+
+                // Update in Firestore profile
+                const userRef = doc(firestore, 'users', user.uid);
+                await updateDoc(userRef, { email: newEmail });
+
+                toast({
+                    title: 'Email Update Initiated',
+                    description: 'A verification email has been sent to your new address. Please verify it to complete the change.'
+                });
+                setCurrentPassword('');
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: 'Please provide your current password for security.' });
+            }
+        } catch (error: any) {
+            console.error('Email update error:', error);
+            let message = 'Failed to update email.';
+            if (error.code === 'auth/wrong-password') {
+                message = 'Incorrect current password.';
+            } else if (error.code === 'auth/invalid-email') {
+                message = 'Invalid email address.';
+            } else if (error.code === 'auth/email-already-in-use') {
+                message = 'This email is already in use.';
+            }
+            toast({ variant: 'destructive', title: 'Update Failed', description: message });
+        } finally {
+            setIsUpdatingEmail(false);
         }
     };
 
@@ -199,7 +247,7 @@ export default function SettingsPage() {
                                         disabled
                                         className="bg-muted text-muted-foreground"
                                     />
-                                    <p className="text-[10px] text-muted-foreground italic">Email changes are managed by administrators.</p>
+                                    <p className="text-[10px] text-muted-foreground italic">Email changes can be initiated in the Security tab.</p>
                                 </div>
                                 <Button onClick={handleUpdateProfile} disabled={isUpdatingProfile} className="gap-2 w-full md:w-auto">
                                     {isUpdatingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -214,11 +262,11 @@ export default function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Security Settings</CardTitle>
-                            <CardDescription>Update your password to keep your account secure.</CardDescription>
+                            <CardDescription>Update your credentials to keep your account secure.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="current-password">Current Password</Label>
+                                <Label htmlFor="current-password">Current Password (Required for all changes)</Label>
                                 <Input
                                     id="current-password"
                                     type="password"
@@ -227,32 +275,57 @@ export default function SettingsPage() {
                                     placeholder="••••••••"
                                 />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="new-password">New Password</Label>
-                                    <Input
-                                        id="new-password"
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="••••••••"
-                                    />
+
+                            <div className="border-t pt-6 space-y-4">
+                                <h3 className="text-lg font-semibold flex items-center gap-2">
+                                    <Lock className="h-4 w-4" /> Change Password
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="new-password">New Password</Label>
+                                        <Input
+                                            id="new-password"
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="confirm-password">Confirm New Password</Label>
+                                        <Input
+                                            id="confirm-password"
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="confirm-password">Confirm New Password</Label>
-                                    <Input
-                                        id="confirm-password"
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        placeholder="••••••••"
-                                    />
-                                </div>
-                            </div>
-                            <div className="pt-4">
                                 <Button onClick={handleChangePassword} disabled={isUpdatingPassword} className="gap-2">
                                     {isUpdatingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
                                     Update Password
+                                </Button>
+                            </div>
+
+                            <div className="border-t pt-6 space-y-4">
+                                <h3 className="text-lg font-semibold flex items-center gap-2">
+                                    <User className="h-4 w-4" /> Change Email
+                                </h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="new-email">New Email Address</Label>
+                                    <Input
+                                        id="new-email"
+                                        type="email"
+                                        value={newEmail}
+                                        onChange={(e) => setNewEmail(e.target.value)}
+                                        placeholder="your-new-email@example.com"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground italic">Note: You&apos;ll need to verify the new email address before it becomes active.</p>
+                                </div>
+                                <Button onClick={handleUpdateEmail} disabled={isUpdatingEmail} className="gap-2">
+                                    {isUpdatingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                    Update Email
                                 </Button>
                             </div>
                         </CardContent>

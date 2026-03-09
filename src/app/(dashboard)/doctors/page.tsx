@@ -150,6 +150,7 @@ export default function DoctorsPage() {
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [selectedDoctor, setSelectedDoctor] = React.useState<Doctor | undefined>(undefined);
+  const [doctorToDelete, setDoctorToDelete] = React.useState<Doctor | null>(null);
 
   const filteredDoctors = React.useMemo(() => {
     if (!doctors) return [];
@@ -172,15 +173,16 @@ export default function DoctorsPage() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (doctorId: string) => {
-    if (!firestore) return;
-    const docRef = doc(firestore, 'doctors', doctorId);
+  const handleDelete = () => {
+    if (!firestore || !doctorToDelete) return;
+    const docRef = doc(firestore, 'doctors', doctorToDelete.id);
     deleteDocumentNonBlocking(docRef);
     toast({
       variant: 'destructive',
       title: 'Doctor Deleted',
       description: "The doctor's record has been removed."
-    })
+    });
+    setDoctorToDelete(null);
   }
 
   return (
@@ -254,23 +256,12 @@ export default function DoctorsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => handleEdit(doctor)}>Edit</DropdownMenuItem>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">Delete</DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the doctor's record.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(doctor.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DropdownMenuItem
+                            onClick={() => setDoctorToDelete(doctor)}
+                            className="text-red-600"
+                          >
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -282,6 +273,21 @@ export default function DoctorsPage() {
         </CardContent>
       </Card>
       <DoctorFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} doctor={selectedDoctor} />
+
+      <AlertDialog open={!!doctorToDelete} onOpenChange={(open) => !open && setDoctorToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the doctor's record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

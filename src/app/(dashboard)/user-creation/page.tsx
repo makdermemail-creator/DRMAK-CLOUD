@@ -37,7 +37,7 @@ import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useSearch } from '@/context/SearchProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { Checkbox } from '@/components/ui/checkbox';
 import { availableFeatures, FeatureCategory } from '@/lib/features';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -300,6 +300,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
 
 export default function UserManagementPage() {
   const { user: userProfile, isUserLoading: isProfileLoading } = useUser();
+  const auth = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
   const { searchTerm } = useSearch();
@@ -308,6 +309,7 @@ export default function UserManagementPage() {
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<User | undefined>(undefined);
+  const [userToDelete, setUserToDelete] = React.useState<User | null>(null);
 
   const filteredUsers = React.useMemo(() => {
     if (!users) return [];
@@ -330,17 +332,36 @@ export default function UserManagementPage() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (userId: string) => {
-    if (!firestore) return;
+  const handleDelete = () => {
+    if (!firestore || !userToDelete) return;
     // Note: This only deletes the Firestore document.
     // In a real app, you would also need to delete the user from Firebase Auth, which is a privileged operation.
-    const docRef = doc(firestore, 'users', userId);
+    const docRef = doc(firestore, 'users', userToDelete.id);
     deleteDocumentNonBlocking(docRef);
     toast({
       variant: 'destructive',
       title: 'User Deleted',
       description: "The user's record has been removed."
-    })
+    });
+    setUserToDelete(null);
+  }
+
+  const handlePasswordReset = async (email: string) => {
+    if (!auth) return;
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast({
+        title: 'Password Reset Sent',
+        description: `A password reset link has been sent to ${email}.`
+      });
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to send password reset email.'
+      });
+    }
   }
 
   const isMainAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.isMainAdmin;
@@ -421,23 +442,13 @@ export default function UserManagementPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleEdit(user)}>Edit</DropdownMenuItem>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">Delete</DropdownMenuItem>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the user's record from Firestore. The authentication record will remain.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(user.id)}>Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <DropdownMenuItem onClick={() => handlePasswordReset(user.email)}>Reset Password</DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setUserToDelete(user)}
+                          className="text-red-600"
+                        >
+                          Delete
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -448,6 +459,21 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
       <UserFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} user={selectedUser} />
+
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the user's record from Firestore. The authentication record will remain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
