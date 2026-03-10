@@ -69,8 +69,8 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
 
   const handleSubmit = () => {
     if (!firestore) return;
-    if (!formData.name || !formData.mobileNumber || !formData.age) {
-      toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please fill in all required patient details.' });
+    if (!formData.name || !formData.mobileNumber) {
+      toast({ variant: 'destructive', title: 'Missing Fields', description: 'Please fill in the Name and Mobile Number.' });
       return;
     }
 
@@ -81,7 +81,11 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
       toast({ title: "Patient Updated", description: "The patient's details have been updated." });
     } else {
       // Firestore will auto-generate an ID, but mobileNumber must be unique for our model
-      const newPatientDoc = { ...formData, age: Number(formData.age) };
+      const newPatientDoc = {
+        ...formData,
+        age: formData.age ? Number(formData.age) : null,
+        registrationDate: new Date().toISOString()
+      };
       // Use mobileNumber as the document ID
       setDoc(doc(collectionRef, formData.mobileNumber), newPatientDoc);
       toast({ title: "Patient Added", description: "The new patient has been registered." });
@@ -108,8 +112,8 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
             <Input id="mobileNumber" value={formData.mobileNumber || ''} onChange={handleChange} className="col-span-3" disabled={!!patient} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="age" className="text-right">Age</Label>
-            <Input id="age" type="number" value={formData.age || ''} onChange={handleChange} className="col-span-3" />
+            <Label htmlFor="age" className="text-right">Age (Optional)</Label>
+            <Input id="age" type="number" value={formData.age || ''} onChange={handleChange} className="col-span-3" placeholder="Enter age" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="gender" className="text-right">Gender</Label>
@@ -125,11 +129,11 @@ const PatientFormDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="address" className="text-right">Address</Label>
-            <Input id="address" value={formData.address || ''} onChange={handleChange} className="col-span-3" />
+            <Label htmlFor="address" className="text-right">Address (Optional)</Label>
+            <Input id="address" value={formData.address || ''} onChange={handleChange} className="col-span-3" placeholder="Enter address" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Photo</Label>
+            <Label className="text-right">Photo (Optional)</Label>
             <div className="col-span-3">
               <AvatarUpload
                 uid={patient?.id || formData.mobileNumber || 'new-patient'}
@@ -197,32 +201,35 @@ function PatientsContent() {
 
   const handleOpenChange = (open: boolean) => {
     setIsFormOpen(open);
-    if (!open && searchParams.toString()) {
-      // Clear URL parameters (like ?add=...) when the dialog is closed to prevent auto-reopening
+    if (!open && searchParams.get('add')) {
+      // Clear URL parameter when the dialog is closed to prevent auto-reopening
       router.replace('/patients', { scroll: false });
     }
   };
 
-  // Auto-open Add Patient form if 'add' parameter exists in URL
   React.useEffect(() => {
     const mobileToAdd = searchParams.get('add');
     if (mobileToAdd && !isFormOpen && patients !== undefined) {
-      // Check if patient actually exists first (in case they refreshed)
-      const exists = patients?.some(p => p.mobileNumber === mobileToAdd);
-      if (!exists) {
-        setSelectedPatient({ mobileNumber: mobileToAdd } as Patient);
+      if (mobileToAdd === 'new') {
+        setSelectedPatient(undefined);
         setIsFormOpen(true);
+      } else {
+        const exists = patients?.some(p => p.mobileNumber === mobileToAdd);
+        if (!exists) {
+          setSelectedPatient({ mobileNumber: mobileToAdd } as Patient);
+          setIsFormOpen(true);
+        }
       }
     }
-  }, [searchParams, patients, isFormOpen]);
+  }, [searchParams, patients]); // Removed isFormOpen from dependencies to prevent re-opening loop
 
   const filteredPatients = React.useMemo(() => {
     if (!patients) return [];
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.trim().toLowerCase();
     if (!term) return patients;
     return patients.filter(p =>
-      p.name.toLowerCase().includes(term) ||
-      p.mobileNumber.includes(term)
+      (p.name?.toLowerCase() || '').includes(term) ||
+      (p.mobileNumber || '').includes(term)
     );
   }, [patients, searchTerm]);
 

@@ -51,12 +51,12 @@ const statusStyles: Record<AppointmentStatus, string> = {
 };
 
 
-const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointmentBooked }: { open: boolean, onOpenChange: (open: boolean) => void, selectedDate: Date | undefined, onAppointmentBooked: () => void }) => {
+const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointmentBooked, time, setTime }: { open: boolean, onOpenChange: (open: boolean) => void, selectedDate: Date | undefined, onAppointmentBooked: () => void, time: string, setTime: (t: string) => void }) => {
+    const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
     const [patient, setPatient] = React.useState<string>('');
     const [doctor, setDoctor] = React.useState<string>('');
-    const [time, setTime] = React.useState<string>('10:00');
 
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
     const doctorsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
@@ -108,14 +108,25 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="patient" className="text-right">Patient</Label>
-                        <Select onValueChange={setPatient} value={patient}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Select a patient" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {patients?.map(p => <SelectItem key={p.id} value={p.mobileNumber}>{p.name} - {p.mobileNumber}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                        <div className="col-span-3 flex gap-2">
+                            <Select onValueChange={setPatient} value={patient}>
+                                <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Select a patient" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {patients?.map(p => <SelectItem key={p.id} value={p.mobileNumber}>{p.name} - {p.mobileNumber}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => router.push('/patients?add=new')}
+                                title="Add New Patient"
+                            >
+                                <PlusCircle className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="doctor" className="text-right">Doctor</Label>
@@ -142,13 +153,37 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
 };
 
 
-const AppointmentsCalendarView = ({ appointments, week, onSlotClick }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], week: Date[], onSlotClick: (date: Date) => void }) => {
-    const timeSlots = Array.from({ length: 10 }, (_, i) => addHours(startOfHour(new Date()), i + 9)); // 9 AM to 6 PM
+const AppointmentsCalendarView = ({ appointments, week, onSlotClick, draftTime, selectedDate }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], week: Date[], onSlotClick: (date: Date) => void, draftTime?: string, selectedDate?: Date }) => {
+    const timeSlots = Array.from({ length: 11 }, (_, i) => addHours(startOfHour(new Date().setHours(8, 0, 0, 0)), i)); // 8 AM to 6 PM
+
+    const renderAppointmentBox = (apt: any, isDraft: boolean = false) => {
+        const aptDate = new Date(apt.appointmentDateTime);
+        const dayIndex = week.findIndex(day => isSameDay(day, aptDate));
+        const hour = aptDate.getHours();
+        if (dayIndex === -1 || hour < 8 || hour > 18) return null;
+
+        const top = (hour - 8) * 80 + (aptDate.getMinutes() / 60) * 80;
+        const left = dayIndex * (100 / 7);
+
+        return (
+            <div
+                key={isDraft ? 'draft' : apt.id}
+                className={`absolute p-2 rounded-lg shadow-md transition-all duration-300 ${isDraft
+                    ? 'bg-primary/20 border-2 border-primary border-dashed text-primary animate-pulse z-20'
+                    : 'bg-primary text-primary-foreground z-10'
+                    }`}
+                style={{ top: `${top}px`, left: `calc(${left}% + 4px)`, width: 'calc(100% / 7 - 8px)', height: '50px' }}
+            >
+                <p className="text-xs font-bold truncate">{isDraft ? 'Draft Appointment' : apt.patient?.name}</p>
+                <p className="text-xs truncate">{format(aptDate, 'h:mm a')}</p>
+            </div>
+        );
+    };
 
     return (
         <div className="relative grid grid-cols-[auto_1fr]">
             {/* Time labels */}
-            <div className="grid grid-rows-10">
+            <div className="grid grid-rows-11">
                 {timeSlots.map(time => (
                     <div key={time.toISOString()} className="h-20 pr-2 text-right text-sm text-muted-foreground">{format(time, 'ha')}</div>
                 ))}
@@ -170,26 +205,18 @@ const AppointmentsCalendarView = ({ appointments, week, onSlotClick }: { appoint
                     </div>
                 ))}
                 {/* Render appointments */}
-                {appointments.map(apt => {
-                    const aptDate = new Date(apt.appointmentDateTime);
-                    const dayIndex = week.findIndex(day => isSameDay(day, aptDate));
-                    const hour = aptDate.getHours();
-                    if (dayIndex === -1 || hour < 9 || hour > 18) return null;
+                {appointments.map(apt => renderAppointmentBox(apt))}
 
-                    const top = (hour - 9) * 80 + (aptDate.getMinutes() / 60) * 80;
-                    const left = dayIndex * (100 / 7);
-
-                    return (
-                        <div
-                            key={apt.id}
-                            className="absolute p-2 rounded-lg bg-primary text-primary-foreground shadow-md"
-                            style={{ top: `${top}px`, left: `calc(${left}% + 4px)`, width: 'calc(100% / 7 - 8px)', height: '50px' }}
-                        >
-                            <p className="text-xs font-bold truncate">{apt.patient?.name}</p>
-                            <p className="text-xs truncate">{format(aptDate, 'h:mm a')}</p>
-                        </div>
-                    );
-                })}
+                {/* Render Draft Preview */}
+                {draftTime && selectedDate && renderAppointmentBox({
+                    id: 'draft',
+                    appointmentDateTime: (() => {
+                        const [hours, minutes] = draftTime.split(':').map(Number);
+                        const d = new Date(selectedDate);
+                        d.setHours(hours, minutes, 0, 0);
+                        return d.toISOString();
+                    })()
+                }, true)}
             </div>
         </div>
     );
@@ -342,6 +369,7 @@ export default function AppointmentsPage() {
     const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
     const [isBooking, setIsBooking] = React.useState(false);
     const [selectedSlot, setSelectedSlot] = React.useState<Date | undefined>();
+    const [draftTime, setDraftTime] = React.useState<string>('10:00');
     const [selectedDoctor, setSelectedDoctor] = React.useState<string | 'all'>('all');
     const [viewMode, setViewMode] = React.useState<'day' | 'week' | 'month'>('week');
     const [selectedPatientForMessage, setSelectedPatientForMessage] = React.useState<Patient | null>(null);
@@ -421,6 +449,7 @@ export default function AppointmentsPage() {
 
     const handleSlotClick = (date: Date) => {
         setSelectedSlot(date);
+        setDraftTime(format(date, 'HH:mm'));
         setIsBooking(true);
     }
 
@@ -495,7 +524,13 @@ export default function AppointmentsPage() {
                         </div>
                     </CardHeader>
                     <CardContent className="h-[600px] overflow-auto">
-                        <AppointmentsCalendarView appointments={appointmentsForWeek} week={week} onSlotClick={handleSlotClick} />
+                        <AppointmentsCalendarView
+                            appointments={appointmentsForWeek}
+                            week={week}
+                            onSlotClick={handleSlotClick}
+                            draftTime={isBooking ? draftTime : undefined}
+                            selectedDate={selectedSlot}
+                        />
                     </CardContent>
                 </Card>
                 <Card>
@@ -515,6 +550,8 @@ export default function AppointmentsPage() {
                 onOpenChange={setIsBooking}
                 selectedDate={selectedSlot}
                 onAppointmentBooked={forceRerender}
+                time={draftTime}
+                setTime={setDraftTime}
             />
             {selectedPatientForMessage && (
                 <SendMessageDialog
