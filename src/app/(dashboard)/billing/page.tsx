@@ -43,6 +43,12 @@ interface BillItem {
     qty: number;
 }
 
+interface Reimbursement {
+    id: string;
+    description: string;
+    amount: number;
+}
+
 const COMMON_PROCEDURES = [
     { id: 'proc-1', name: 'Standard Consultation', price: 1500 },
     { id: 'proc-2', name: 'Follow-up Consultation', price: 1000 },
@@ -70,12 +76,17 @@ export default function BillingPage() {
     const [patientSearch, setPatientSearch] = React.useState('');
 
     const [billItems, setBillItems] = React.useState<BillItem[]>([]);
+    const [reimbursements, setReimbursements] = React.useState<Reimbursement[]>([]);
     const [discountPercent, setDiscountPercent] = React.useState<number>(0);
-    const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | ''>('');
+    const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | 'Nill' | ''>('');
 
     // Custom Item Temp State
     const [customName, setCustomName] = React.useState('');
     const [customPrice, setCustomPrice] = React.useState('');
+
+    // Reimbursement Temp State
+    const [reimbursementName, setReimbursementName] = React.useState('');
+    const [reimbursementAmount, setReimbursementAmount] = React.useState('');
 
     const filteredPatients = React.useMemo(() => {
         if (!patients || !patientSearch) return [];
@@ -167,11 +178,53 @@ export default function BillingPage() {
         });
     };
 
+    const addReimbursement = () => {
+        if (!reimbursementName || !reimbursementAmount) return;
+        const amount = parseFloat(reimbursementAmount);
+        if (isNaN(amount)) return;
+
+        setReimbursements(prev => [...prev, {
+            id: `reimb-${Date.now()}`,
+            description: reimbursementName,
+            amount: amount
+        }]);
+        setReimbursementName('');
+        setReimbursementAmount('');
+    };
+
+    const removeReimbursement = (id: string) => {
+        setReimbursements(prev => prev.filter(r => r.id !== id));
+    };
+
+    const addProcedureReturn = (procId: string) => {
+        const procedure = dynamicProcedures?.find(p => p.id === procId) || COMMON_PROCEDURES.find(p => p.id === procId);
+        if (procedure) {
+            setReimbursements(prev => [...prev, {
+                id: `reimb-proc-${Date.now()}`,
+                description: procedure.name,
+                amount: Number(procedure.price)
+            }]);
+        }
+    };
+
+    const addPharmacyReturn = (itemId: string) => {
+        const item = pharmacyItems?.find(p => p.id === itemId);
+        if (item) {
+            setReimbursements(prev => [...prev, {
+                id: `reimb-pharm-${Date.now()}`,
+                description: item.name,
+                amount: Number(item.sellingPrice) || 0
+            }]);
+        }
+    };
+
     // Calculations
     const subTotal = billItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const discountAmount = subTotal * (discountPercent / 100);
-    const taxableAmount = subTotal - discountAmount;
+    const reimbursementTotal = reimbursements.reduce((sum, r) => sum + r.amount, 0);
+    const taxableAmount = Math.max(0, subTotal - discountAmount - reimbursementTotal);
     const taxRate = paymentMethod === 'Cash' ? 0.18 : (paymentMethod === 'Card' || paymentMethod === 'Online') ? 0.05 : 0;
+    // Note: paymentMethod === 'Nill' or '' will result in taxRate 0
     const taxAmount = taxableAmount * taxRate;
     const grandTotal = Math.max(0, taxableAmount + taxAmount);
 
@@ -200,6 +253,17 @@ export default function BillingPage() {
                 </td>
                 <td style="padding:10px 8px; border-bottom:1px solid #eee; text-align:center;">${item.qty}</td>
                 <td style="padding:10px 8px; border-bottom:1px solid #eee; text-align:right;">${(item.price * item.qty).toLocaleString()} Rs</td>
+            </tr>
+        `).join('');
+
+        const reimbursementRows = reimbursements.map(r => `
+            <tr style="color: #c00;">
+                <td style="padding:10px 8px; border-bottom:1px solid #eee;">
+                    <div style="font-weight:600;">RETURN: ${r.description}</div>
+                    <div style="font-size:10px;text-transform:uppercase;">Reimbursement</div>
+                </td>
+                <td style="padding:10px 8px; border-bottom:1px solid #eee; text-align:center;">1</td>
+                <td style="padding:10px 8px; border-bottom:1px solid #eee; text-align:right;">- ${r.amount.toLocaleString()} Rs</td>
             </tr>
         `).join('');
 
@@ -258,12 +322,14 @@ export default function BillingPage() {
                     </thead>
                     <tbody>
                         ${itemsRows}
+                        ${reimbursementRows}
                     </tbody>
                 </table>
 
                 <div class="totals">
                     <div class="row"><span>Subtotal</span><span>${subTotal.toLocaleString()} Rs</span></div>
                     ${discountPercent > 0 ? `<div class="row"><span>Discount (${discountPercent}%)</span><span>- ${discountAmount.toLocaleString()} Rs</span></div>` : ''}
+                    ${reimbursementTotal > 0 ? `<div class="row" style="color: #c00;"><span>Reimbursements</span><span>- ${reimbursementTotal.toLocaleString()} Rs</span></div>` : ''}
                     <div class="row"><span>Tax (${paymentMethod} - ${(taxRate * 100).toFixed(0)}%)</span><span>${taxAmount.toLocaleString()} Rs</span></div>
                     <div class="grand"><span>Total Amount</span><span>${grandTotal.toLocaleString()} Rs</span></div>
                 </div>
@@ -272,6 +338,7 @@ export default function BillingPage() {
                     <p style="font-weight: 600; color: #333; margin-bottom: 4px;">SkinSmith Clinic</p>
                     <p>1st Floor, Lord Trade Centre, 06, F-11 Markaz Islamabad</p>
                     <p>Mobile: +92333 0477704 | Landline: 0518748123</p>
+                    <p style="margin-top: 12px; font-weight: bold; color: #333; text-transform: uppercase; letter-spacing: 1px;">No Refund and Exchange Policy</p>
                     <p style="margin-top: 12px; font-style: italic; color: #888;">Thank you for your trust in our services.</p>
                 </div>
             </body>
@@ -301,9 +368,11 @@ export default function BillingPage() {
             patientName: selectedPatient.name,
             patientMobile: selectedPatient.mobileNumber,
             items: billItems,
+            reimbursements,
             subTotal,
             discountPercent,
             discountAmount,
+            reimbursementTotal,
             taxRate,
             taxAmount,
             grandTotal,
@@ -420,6 +489,7 @@ export default function BillingPage() {
                                         <SelectItem value="Cash">Cash (18% Tax)</SelectItem>
                                         <SelectItem value="Card">Card (5% Tax)</SelectItem>
                                         <SelectItem value="Online">Online Transfer (5% Tax)</SelectItem>
+                                        <SelectItem value="Nill">Nill (0% Tax)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -513,6 +583,93 @@ export default function BillingPage() {
                                 </div>
                             </div>
 
+                            <Separator className="my-2" />
+
+                            {/* Bill Reimbursement Section */}
+                            <div className="space-y-2 pt-2">
+                                <Label className="text-xs font-semibold uppercase tracking-wider text-red-600 flex items-center gap-2">
+                                    <Trash2 className="h-3 w-3" /> Bill Reimbursement / Returns
+                                </Label>
+                                <div className="space-y-2 bg-red-50/50 dark:bg-red-950/10 p-3 rounded-md border border-red-100 dark:border-red-900/30">
+                                    <p className="text-[10px] text-muted-foreground mb-2">Select existing items or enter manually to add a return.</p>
+
+                                    <div className="grid grid-cols-2 gap-2 mb-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-red-700">Return Procedure</Label>
+                                            <Select onValueChange={addProcedureReturn} value="" disabled={!selectedPatient}>
+                                                <SelectTrigger className="h-8 text-xs border-red-100 bg-white/50">
+                                                    <SelectValue placeholder="Select procedure..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {dynamicProcedures && dynamicProcedures.length > 0 ? (
+                                                        dynamicProcedures.map(p => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                        ))
+                                                    ) : (
+                                                        COMMON_PROCEDURES.map(p => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                        ))
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-red-700">Return Product</Label>
+                                            <Select onValueChange={addPharmacyReturn} value="" disabled={!selectedPatient}>
+                                                <SelectTrigger className="h-8 text-xs border-red-100 bg-white/50">
+                                                    <SelectValue placeholder="Select product..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {pharmacyItems?.map(p => (
+                                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 border-t border-red-100 pt-3">
+                                        <Input
+                                            placeholder="Return reason..."
+                                            className="flex-1 h-8 text-xs"
+                                            value={reimbursementName}
+                                            onChange={e => setReimbursementName(e.target.value)}
+                                            disabled={!selectedPatient}
+                                        />
+                                        <Input
+                                            placeholder="Amount"
+                                            type="number"
+                                            className="w-20 h-8 text-xs"
+                                            value={reimbursementAmount}
+                                            onChange={e => setReimbursementAmount(e.target.value)}
+                                            disabled={!selectedPatient}
+                                        />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 text-[10px] border-red-200 text-red-600 hover:bg-red-50"
+                                            onClick={addReimbursement}
+                                            disabled={!selectedPatient}
+                                        >
+                                            Add Return
+                                        </Button>
+                                    </div>
+
+                                    {reimbursements.length > 0 && (
+                                        <div className="mt-3 space-y-1">
+                                            {reimbursements.map(r => (
+                                                <div key={r.id} className="flex items-center justify-between text-xs p-1.5 bg-background rounded border border-red-100">
+                                                    <span className="font-medium truncate flex-1 mr-2">{r.description}</span>
+                                                    <span className="text-red-600 font-bold mr-2">-{r.amount} Rs</span>
+                                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-red-500" onClick={() => removeReimbursement(r.id)}>
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
                     </CardContent>
@@ -587,6 +744,22 @@ export default function BillingPage() {
                                             </tr>
                                         ))
                                     )}
+
+                                    {reimbursements.map(r => (
+                                        <tr key={r.id} className="border-b last:border-0 group bg-red-50/20 print:bg-transparent">
+                                            <td className="py-3">
+                                                <p className="font-medium text-red-600">RETURN: {r.description}</p>
+                                                <p className="text-[10px] text-muted-foreground uppercase">REIMBURSEMENT</p>
+                                            </td>
+                                            <td className="py-3 text-center">1</td>
+                                            <td className="py-3 text-right text-red-600">-{r.amount.toLocaleString()} Rs</td>
+                                            <td className="py-3 text-right print:hidden">
+                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeReimbursement(r.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
@@ -602,6 +775,13 @@ export default function BillingPage() {
                                 <div className="flex justify-between text-sm text-green-600 font-medium">
                                     <span>Discount (${discountPercent}%)</span>
                                     <span>- {discountAmount.toLocaleString()} Rs</span>
+                                </div>
+                            )}
+
+                            {reimbursementTotal > 0 && (
+                                <div className="flex justify-between text-sm text-red-600 font-medium">
+                                    <span>Reimbursements / Returns</span>
+                                    <span>- {reimbursementTotal.toLocaleString()} Rs</span>
                                 </div>
                             )}
 
@@ -621,6 +801,7 @@ export default function BillingPage() {
                                 <p className="font-bold text-foreground">SkinSmith Clinic</p>
                                 <p>1st Floor, Lord Trade Centre, 06, F-11 Markaz Islamabad</p>
                                 <p>Mobile: +92 333 0477704 | Landline: 051-8748123</p>
+                                <p className="font-bold text-foreground pt-2 uppercase tracking-wider text-[9px]">No Refund and Exchange Policy</p>
                             </div>
                         </div>
                     </CardContent>
