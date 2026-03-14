@@ -51,15 +51,15 @@ export default function DashboardLayout({
     });
   }, [isMobile]);
 
-  const { user, isUserLoading } = useUser();
+  const { user, authUser, isUserLoading } = useUser();
   const { viewMode } = useViewMode();
   const router = useRouter();
 
   React.useEffect(() => {
-    if (!isUserLoading && !user) {
+    if (!isUserLoading && !authUser) {
       router.replace('/login');
     }
-  }, [isUserLoading, user, router]);
+  }, [isUserLoading, authUser, router]);
 
 
   if (isUserLoading || !user) {

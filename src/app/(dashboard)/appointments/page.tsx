@@ -28,6 +28,7 @@ import {
     DialogFooter
 } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -71,7 +72,7 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
         if (!patients) return [];
         const term = (patientSearch || '').toLowerCase().trim();
         if (!term) return patients.slice(0, 50); // Show first 50 only initially
-        
+
         return patients.filter(p => {
             const name = (p.name || '').toLowerCase();
             const phone = (p.mobileNumber || '').toLowerCase();
@@ -129,7 +130,7 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="patient" className="text-right">Patient</Label>
                         <div className="col-span-3 flex gap-2">
-                            <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen}>
+                            <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen} modal={false}>
                                 <PopoverTrigger asChild>
                                     <Button
                                         variant="outline"
@@ -147,9 +148,17 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                                         <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[350px] p-0" align="start" side="bottom" sideOffset={4}>
+                                <PopoverPrimitive.Content
+                                    align="start"
+                                    side="bottom"
+                                    sideOffset={4}
+                                    className="z-[100] w-[350px] rounded-md border bg-popover text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2"
+                                    onOpenAutoFocus={(e) => e.preventDefault()}
+                                    onPointerDownOutside={(e) => e.preventDefault()}
+                                    onInteractOutside={(e) => e.preventDefault()}
+                                >
                                     <div className="flex flex-col h-[400px]">
-                                        <div className="p-3 border-b bg-muted/30">
+                                        <div className="p-3 border-b bg-muted/30" onPointerDown={(e) => e.stopPropagation()}>
                                             <div className="relative">
                                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                                 <Input
@@ -157,6 +166,12 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                                                     className="pl-9 h-9 border-muted focus-visible:ring-1"
                                                     value={patientSearch}
                                                     onChange={(e) => setPatientSearch(e.target.value)}
+                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                    onKeyUp={(e) => e.stopPropagation()}
+                                                    onFocusCapture={(e) => e.stopPropagation()}
                                                     autoFocus
                                                 />
                                             </div>
@@ -190,7 +205,7 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                                             )}
                                         </div>
                                     </div>
-                                </PopoverContent>
+                                </PopoverPrimitive.Content>
                             </Popover>
                             <Button
                                 type="button"

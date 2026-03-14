@@ -6,7 +6,7 @@
 
 
 
-export type UserRole = 'Admin' | 'Doctor' | 'Receptionist' | 'Sales' | 'Social Media Manager' | 'Operations Manager' | 'Designer';
+export type UserRole = 'Admin' | 'Doctor' | 'Receptionist' | 'Sales' | 'Social Media Manager' | 'Operations Manager' | 'Designer' | 'Guest';
 
 export type User = {
   id: string;

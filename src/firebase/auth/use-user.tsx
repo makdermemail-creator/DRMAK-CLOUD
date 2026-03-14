@@ -41,9 +41,18 @@ export function useUser() {
     if (!authUser) return null;
 
     // Use current profile if it exists, otherwise use fallback
-    const baseUser = userProfile || adminFallback;
+    let baseUser = userProfile || adminFallback;
 
-    if (!baseUser) return null;
+    // Last resort guest fallback if even adminFallback didn't trigger
+    if (!baseUser) {
+      baseUser = {
+        id: authUser.uid,
+        name: authUser.displayName || authUser.email?.split('@')[0] || 'Guest',
+        email: authUser.email || '',
+        avatarUrl: authUser.photoURL || '',
+        role: 'Guest',
+      };
+    }
 
     // Determine avatar URL: 
     // 1. Firestore avatarUrl (highest priority)
