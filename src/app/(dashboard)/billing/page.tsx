@@ -33,6 +33,7 @@ interface PharmacyItem {
     name: string;
     sellingPrice: number;
     quantity: number;
+    rack?: string;
 }
 
 interface BillItem {
@@ -531,7 +532,7 @@ export default function BillingPage() {
                                     <SelectContent>
                                         {pharmacyItems?.map(p => (
                                             <SelectItem key={p.id} value={p.id}>
-                                                {p.name} - {p.sellingPrice} Rs (Stock: {p.quantity})
+                                                {p.rack ? `[Rack ${p.rack}] ` : ''}{p.name} - {p.sellingPrice} Rs (Stock: {p.quantity})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
