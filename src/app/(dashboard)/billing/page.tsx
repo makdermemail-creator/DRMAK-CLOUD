@@ -25,6 +25,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 
 // Define PharmacyItem type based on typical app structure (or adjust if needed)
@@ -78,7 +79,8 @@ export default function BillingPage() {
 
     const [billItems, setBillItems] = React.useState<BillItem[]>([]);
     const [reimbursements, setReimbursements] = React.useState<Reimbursement[]>([]);
-    const [discountPercent, setDiscountPercent] = React.useState<number>(0);
+    const [discountType, setDiscountType] = React.useState<'percentage' | 'fixed'>('percentage');
+    const [discountValue, setDiscountValue] = React.useState<number>(0);
     const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | 'Nill' | ''>('');
 
     // Custom Item Temp State
@@ -221,7 +223,7 @@ export default function BillingPage() {
 
     // Calculations
     const subTotal = billItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const discountAmount = subTotal * (discountPercent / 100);
+    const discountAmount = discountType === 'percentage' ? (subTotal * (discountValue / 100)) : discountValue;
     const reimbursementTotal = reimbursements.reduce((sum, r) => sum + r.amount, 0);
     const taxableAmount = Math.max(0, subTotal - discountAmount - reimbursementTotal);
     const taxRate = paymentMethod === 'Cash' ? 0.18 : (paymentMethod === 'Card' || paymentMethod === 'Online') ? 0.05 : 0;
@@ -329,7 +331,7 @@ export default function BillingPage() {
 
                 <div class="totals">
                     <div class="row"><span>Subtotal</span><span>${subTotal.toLocaleString()} Rs</span></div>
-                    ${discountPercent > 0 ? `<div class="row"><span>Discount (${discountPercent}%)</span><span>- ${discountAmount.toLocaleString()} Rs</span></div>` : ''}
+                    ${discountValue > 0 ? `<div class="row"><span>Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}</span><span>- ${discountAmount.toLocaleString()} Rs</span></div>` : ''}
                     ${reimbursementTotal > 0 ? `<div class="row" style="color: #c00;"><span>Reimbursements</span><span>- ${reimbursementTotal.toLocaleString()} Rs</span></div>` : ''}
                     <div class="row"><span>Tax (${paymentMethod} - ${(taxRate * 100).toFixed(0)}%)</span><span>${taxAmount.toLocaleString()} Rs</span></div>
                     <div class="grand"><span>Total Amount</span><span>${grandTotal.toLocaleString()} Rs</span></div>
@@ -371,7 +373,8 @@ export default function BillingPage() {
             items: billItems,
             reimbursements,
             subTotal,
-            discountPercent,
+            discountType,
+            discountValue,
             discountAmount,
             reimbursementTotal,
             taxRate,
@@ -478,7 +481,7 @@ export default function BillingPage() {
                             </div>
                         )}
 
-                        <div className={`space-y-4 transition-opacity duration-200 ${!selectedPatient ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                        <div className={`space - y - 4 transition - opacity duration - 200 ${!selectedPatient ? 'opacity-40 pointer-events-none select-none' : ''} `}>
 
                             <div className="space-y-1.5">
                                 <Label>Payment Method</Label>
@@ -532,7 +535,7 @@ export default function BillingPage() {
                                     <SelectContent>
                                         {pharmacyItems?.map(p => (
                                             <SelectItem key={p.id} value={p.id}>
-                                                {p.rack ? `[Rack ${p.rack}] ` : ''}{p.name} - {p.sellingPrice} Rs (Stock: {p.quantity})
+                                                {p.rack ? `[Rack ${p.rack}]` : ''}{p.name} - {p.sellingPrice} Rs (Stock: {p.quantity})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -563,25 +566,57 @@ export default function BillingPage() {
                                 </div>
                             </div>
 
-                            {/* Discount Input Moved Here */}
+                            {/* Flexible Discount Selector */}
                             <div className="space-y-1.5 pt-2">
                                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                     <CircleDollarSign className="h-3 w-3" /> Set Bill Discount
                                 </Label>
-                                <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-md border border-dashed">
-                                    <div className="flex-1 text-xs text-muted-foreground">Apply percentage discount to entire bill</div>
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            className="h-9 w-20 text-right font-medium"
-                                            value={discountPercent || ''}
-                                            onChange={e => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                                            placeholder="0"
-                                            disabled={!selectedPatient}
-                                        />
-                                        <span className="font-bold text-lg">%</span>
-                                    </div>
-                                </div>
+                                <Tabs defaultValue="percentage" value={discountType} onValueChange={(v: any) => {
+                                    setDiscountType(v);
+                                    setDiscountValue(0);
+                                }}>
+                                    <TabsList className="grid w-full grid-cols-2 h-8">
+                                        <TabsTrigger value="percentage" className="text-[10px]">Percentage %</TabsTrigger>
+                                        <TabsTrigger value="fixed" className="text-[10px]">Fixed Rs</TabsTrigger>
+                                    </TabsList>
+
+                                    <TabsContent value="percentage" className="mt-1.5">
+                                        <div className="flex items-center justify-between p-2 border border-dashed rounded-md bg-muted/30">
+                                            <div className="text-[10px] text-muted-foreground">Apply % discount</div>
+                                            <div className="flex items-center gap-1">
+                                                <Input
+                                                    type="number"
+                                                    className="h-7 w-16 text-right text-xs font-bold"
+                                                    value={discountValue || ''}
+                                                    onChange={(e) => setDiscountValue(Number(e.target.value))}
+                                                    placeholder="0"
+                                                    disabled={!selectedPatient}
+                                                    min="0"
+                                                    max="100"
+                                                />
+                                                <span className="font-bold text-sm text-muted-foreground">%</span>
+                                            </div>
+                                        </div>
+                                    </TabsContent>
+
+                                    <TabsContent value="fixed" className="mt-1.5">
+                                        <div className="flex items-center justify-between p-2 border border-dashed rounded-md bg-muted/30">
+                                            <div className="text-[10px] text-muted-foreground">Apply flat discount (Rs)</div>
+                                            <div className="flex items-center gap-1">
+                                                <Input
+                                                    type="number"
+                                                    className="h-7 w-20 text-right text-xs font-bold"
+                                                    value={discountValue || ''}
+                                                    onChange={(e) => setDiscountValue(Number(e.target.value))}
+                                                    placeholder="0"
+                                                    disabled={!selectedPatient}
+                                                    min="0"
+                                                />
+                                                <span className="font-bold text-[10px] text-muted-foreground">Rs</span>
+                                            </div>
+                                        </div>
+                                    </TabsContent>
+                                </Tabs>
                             </div>
 
                             <Separator className="my-2" />
@@ -772,14 +807,14 @@ export default function BillingPage() {
                                 <span>{subTotal.toLocaleString()} Rs</span>
                             </div>
 
-                            {discountPercent > 0 && (
+                            {discountValue > 0 && (
                                 <div className="flex justify-between text-sm text-green-600 font-medium">
-                                    <span>Discount (${discountPercent}%)</span>
+                                    <span>Discount {discountType === 'percentage' ? `(${discountValue}%)` : ''}</span>
                                     <span>- {discountAmount.toLocaleString()} Rs</span>
                                 </div>
                             )}
 
-                            {reimbursementTotal > 0 && (
+                            {reimbursements.length > 0 && (
                                 <div className="flex justify-between text-sm text-red-600 font-medium">
                                     <span>Reimbursements / Returns</span>
                                     <span>- {reimbursementTotal.toLocaleString()} Rs</span>
