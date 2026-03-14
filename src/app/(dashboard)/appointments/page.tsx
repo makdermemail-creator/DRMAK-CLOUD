@@ -6,7 +6,7 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Loader2, ChevronLeft, ChevronRight, Printer, Edit, MessageSquare, CheckCircle, Video } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, ChevronLeft, ChevronRight, Printer, Edit, MessageSquare, CheckCircle, Video, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -27,6 +27,7 @@ import {
     DialogDescription,
     DialogFooter
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -55,7 +56,9 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [patient, setPatient] = React.useState<string>('');
+    const [patientId, setPatientId] = React.useState<string>('');
+    const [patientSearch, setPatientSearch] = React.useState<string>('');
+    const [isPatientOpen, setIsPatientOpen] = React.useState(false);
     const [doctor, setDoctor] = React.useState<string>('');
 
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
@@ -64,7 +67,24 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
     const { data: patients } = useCollection<Patient>(patientsQuery);
     const { data: doctors } = useCollection<Doctor>(doctorsQuery);
 
+    const filteredPatients = React.useMemo(() => {
+        if (!patients) return [];
+        const term = (patientSearch || '').toLowerCase().trim();
+        if (!term) return patients.slice(0, 50); // Show first 50 only initially
+        
+        return patients.filter(p => {
+            const name = (p.name || '').toLowerCase();
+            const phone = (p.mobileNumber || '').toLowerCase();
+            return name.includes(term) || phone.includes(term);
+        }).slice(0, 50); // Limit to top 50 results for performance
+    }, [patients, patientSearch]);
+
+    const selectedPatientData = React.useMemo(() => {
+        return patients?.find(p => p.id === patientId);
+    }, [patients, patientId]);
+
     const handleSubmit = () => {
+        const patient = selectedPatientData?.mobileNumber;
         if (!firestore || !selectedDate || !patient || !doctor || !time) {
             toast({
                 variant: 'destructive',
@@ -98,7 +118,7 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle>Book New Appointment</DialogTitle>
                     <DialogDescription>
@@ -109,18 +129,74 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="patient" className="text-right">Patient</Label>
                         <div className="col-span-3 flex gap-2">
-                            <Select onValueChange={setPatient} value={patient}>
-                                <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="Select a patient" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {patients?.map(p => <SelectItem key={p.id} value={p.mobileNumber}>{p.name} - {p.mobileNumber}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isPatientOpen}
+                                        className="flex-1 justify-between font-normal h-10 px-3 overflow-hidden text-left"
+                                    >
+                                        <span className="truncate">
+                                            {selectedPatientData ? (
+                                                `${selectedPatientData.name} - ${selectedPatientData.mobileNumber}`
+                                            ) : (
+                                                <span className="text-muted-foreground">Select a patient...</span>
+                                            )}
+                                        </span>
+                                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[350px] p-0" align="start" side="bottom" sideOffset={4}>
+                                    <div className="flex flex-col h-[400px]">
+                                        <div className="p-3 border-b bg-muted/30">
+                                            <div className="relative">
+                                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                <Input
+                                                    placeholder="Search name or mobile..."
+                                                    className="pl-9 h-9 border-muted focus-visible:ring-1"
+                                                    value={patientSearch}
+                                                    onChange={(e) => setPatientSearch(e.target.value)}
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            {patientSearch && (
+                                                <div className="mt-2 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold px-0.5">
+                                                    Showing top 50 matches
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-1 scrollbar-thin">
+                                            {filteredPatients.length === 0 ? (
+                                                <div className="p-8 text-center text-sm text-muted-foreground">
+                                                    {patientSearch ? "No matching patients found" : "Loading patients..."}
+                                                </div>
+                                            ) : (
+                                                filteredPatients.map(p => (
+                                                    <Button
+                                                        key={p.id}
+                                                        variant="ghost"
+                                                        className={`w-full justify-start h-auto py-3 px-4 mb-0.5 flex flex-col items-start gap-0.5 ${patientId === p.id ? 'bg-accent' : ''}`}
+                                                        onClick={() => {
+                                                            setPatientId(p.id);
+                                                            setPatientSearch('');
+                                                            setIsPatientOpen(false);
+                                                        }}
+                                                    >
+                                                        <span className="text-sm font-semibold">{p.name || 'Unknown'}</span>
+                                                        <span className="text-xs text-muted-foreground">{p.mobileNumber}</span>
+                                                    </Button>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="icon"
+                                className="h-10 w-10 shrink-0"
                                 onClick={() => router.push('/patients?add=new')}
                                 title="Add New Patient"
                             >

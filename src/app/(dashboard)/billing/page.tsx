@@ -70,7 +70,8 @@ export default function BillingPage() {
     const [patientSearch, setPatientSearch] = React.useState('');
 
     const [billItems, setBillItems] = React.useState<BillItem[]>([]);
-    const [discount, setDiscount] = React.useState<number>(0);
+    const [discountPercent, setDiscountPercent] = React.useState<number>(0);
+    const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | ''>('');
 
     // Custom Item Temp State
     const [customName, setCustomName] = React.useState('');
@@ -168,11 +169,20 @@ export default function BillingPage() {
 
     // Calculations
     const subTotal = billItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const grandTotal = Math.max(0, subTotal - discount);
+    const discountAmount = subTotal * (discountPercent / 100);
+    const taxableAmount = subTotal - discountAmount;
+    const taxRate = paymentMethod === 'Cash' ? 0.18 : (paymentMethod === 'Card' || paymentMethod === 'Online') ? 0.05 : 0;
+    const taxAmount = taxableAmount * taxRate;
+    const grandTotal = Math.max(0, taxableAmount + taxAmount);
 
     const handlePrint = () => {
         if (billItems.length === 0) {
             toast({ variant: 'destructive', title: 'No Items', description: 'Please add at least one item to the bill before printing.' });
+            return;
+        }
+
+        if (!paymentMethod) {
+            toast({ variant: 'destructive', title: 'Payment Method Required', description: 'Please select a payment method before printing.' });
             return;
         }
 
@@ -253,13 +263,16 @@ export default function BillingPage() {
 
                 <div class="totals">
                     <div class="row"><span>Subtotal</span><span>${subTotal.toLocaleString()} Rs</span></div>
-                    ${discount > 0 ? `<div class="row"><span>Discount</span><span>- ${discount.toLocaleString()} Rs</span></div>` : ''}
+                    ${discountPercent > 0 ? `<div class="row"><span>Discount (${discountPercent}%)</span><span>- ${discountAmount.toLocaleString()} Rs</span></div>` : ''}
+                    <div class="row"><span>Tax (${paymentMethod} - ${(taxRate * 100).toFixed(0)}%)</span><span>${taxAmount.toLocaleString()} Rs</span></div>
                     <div class="grand"><span>Total Amount</span><span>${grandTotal.toLocaleString()} Rs</span></div>
                 </div>
 
                 <div class="footer">
-                    <p>Thank you for visiting SkinSmith Clinic.</p>
-                    <p>Please retain this receipt for your records.</p>
+                    <p style="font-weight: 600; color: #333; margin-bottom: 4px;">SkinSmith Clinic</p>
+                    <p>1st Floor, Lord Trade Centre, 06, F-11 Markaz Islamabad</p>
+                    <p>Mobile: +92333 0477704 | Landline: 0518748123</p>
+                    <p style="margin-top: 12px; font-style: italic; color: #888;">Thank you for your trust in our services.</p>
                 </div>
             </body>
             </html>
@@ -277,6 +290,11 @@ export default function BillingPage() {
     const handleSaveBill = () => {
         if (!firestore || !selectedPatient || billItems.length === 0) return;
 
+        if (!paymentMethod) {
+            toast({ variant: 'destructive', title: 'Payment Method Required', description: 'Please select a payment method before saving.' });
+            return;
+        }
+
         // Create a comprehensive bill record in a new 'billingRecords' collection
         const billData = {
             patientId: selectedPatient.id,
@@ -284,8 +302,12 @@ export default function BillingPage() {
             patientMobile: selectedPatient.mobileNumber,
             items: billItems,
             subTotal,
-            discount,
+            discountPercent,
+            discountAmount,
+            taxRate,
+            taxAmount,
             grandTotal,
+            paymentMethod,
             timestamp: new Date().toISOString(),
             status: 'Paid'
         };
@@ -389,6 +411,22 @@ export default function BillingPage() {
                         <div className={`space-y-4 transition-opacity duration-200 ${!selectedPatient ? 'opacity-40 pointer-events-none select-none' : ''}`}>
 
                             <div className="space-y-1.5">
+                                <Label>Payment Method</Label>
+                                <Select onValueChange={(value: any) => setPaymentMethod(value)} value={paymentMethod} disabled={!selectedPatient}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select payment method..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Cash">Cash (18% Tax)</SelectItem>
+                                        <SelectItem value="Card">Card (5% Tax)</SelectItem>
+                                        <SelectItem value="Online">Online Transfer (5% Tax)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <Separator className="my-2" />
+
+                            <div className="space-y-1.5">
                                 <Label>Procedures</Label>
                                 <Select onValueChange={addProcedure} value="" disabled={!selectedPatient}>
                                     <SelectTrigger>
@@ -451,6 +489,27 @@ export default function BillingPage() {
                                         disabled={!selectedPatient}
                                     />
                                     <Button variant="secondary" onClick={addCustomItem} disabled={!selectedPatient}>Add</Button>
+                                </div>
+                            </div>
+
+                            {/* Discount Input Moved Here */}
+                            <div className="space-y-1.5 pt-2">
+                                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                    <CircleDollarSign className="h-3 w-3" /> Set Bill Discount
+                                </Label>
+                                <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-md border border-dashed">
+                                    <div className="flex-1 text-xs text-muted-foreground">Apply percentage discount to entire bill</div>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            className="h-9 w-20 text-right font-medium"
+                                            value={discountPercent || ''}
+                                            onChange={e => setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                                            placeholder="0"
+                                            disabled={!selectedPatient}
+                                        />
+                                        <span className="font-bold text-lg">%</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -538,30 +597,37 @@ export default function BillingPage() {
                                 <span>Subtotal</span>
                                 <span>{subTotal.toLocaleString()} Rs</span>
                             </div>
-                            <div className="flex justify-between text-sm items-center print:items-start group">
-                                <span className="text-muted-foreground">Discount</span>
-                                <div className="flex items-center gap-2 print:hidden">
-                                    <Input
-                                        type="number"
-                                        className="h-7 w-20 text-right text-xs"
-                                        value={discount || ''}
-                                        onChange={e => setDiscount(Number(e.target.value) || 0)}
-                                        placeholder="0"
-                                    />
-                                    <span className="text-xs">Rs</span>
+
+                            {discountPercent > 0 && (
+                                <div className="flex justify-between text-sm text-green-600 font-medium">
+                                    <span>Discount (${discountPercent}%)</span>
+                                    <span>- {discountAmount.toLocaleString()} Rs</span>
                                 </div>
-                                <span className="hidden print:inline">{discount.toLocaleString()} Rs</span>
-                            </div>
+                            )}
+
+                            {paymentMethod && (
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                    <span>Tax ({paymentMethod} - {(taxRate * 100).toFixed(0)}%)</span>
+                                    <span>{taxAmount.toLocaleString()} Rs</span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
                                 <span>Total Amount</span>
                                 <span>{grandTotal.toLocaleString()} Rs</span>
+                            </div>
+
+                            <div className="mt-6 pt-4 border-t border-dashed text-center text-[10px] text-muted-foreground space-y-1">
+                                <p className="font-bold text-foreground">SkinSmith Clinic</p>
+                                <p>1st Floor, Lord Trade Centre, 06, F-11 Markaz Islamabad</p>
+                                <p>Mobile: +92 333 0477704 | Landline: 051-8748123</p>
                             </div>
                         </div>
                     </CardContent>
 
                     <CardFooter className="bg-muted/30 pt-4 print:hidden flex justify-between">
-                        <Button variant="outline" onClick={handleSaveBill} disabled={!selectedPatient || billItems.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" /> Save Record</Button>
-                        <Button onClick={handlePrint} disabled={billItems.length === 0} className="w-32"><Printer className="mr-2 h-4 w-4" /> Print Bill</Button>
+                        <Button variant="outline" onClick={handleSaveBill} disabled={!selectedPatient || !paymentMethod || billItems.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" /> Save Record</Button>
+                        <Button onClick={handlePrint} disabled={!paymentMethod || billItems.length === 0} className="w-32"><Printer className="mr-2 h-4 w-4" /> Print Bill</Button>
                     </CardFooter>
                 </Card>
             </div>
