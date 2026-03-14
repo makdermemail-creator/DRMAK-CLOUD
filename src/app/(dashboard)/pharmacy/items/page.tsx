@@ -154,6 +154,21 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                             <Label htmlFor="expiryDate">Expiry Date</Label>
                             <Input id="expiryDate" type="date" value={formData.expiryDate || ''} onChange={handleChange} />
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="rack">Rack</Label>
+                            <Select onValueChange={(value: any) => setFormData(prev => ({ ...prev, rack: value }))} value={formData.rack || ''}>
+                                <SelectTrigger id="rack">
+                                    <SelectValue placeholder="Select Rack" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="A">Rack A</SelectItem>
+                                    <SelectItem value="B">Rack B</SelectItem>
+                                    <SelectItem value="C">Rack C</SelectItem>
+                                    <SelectItem value="D">Rack D</SelectItem>
+                                    <SelectItem value="E">Rack E</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 )}
                 <DialogFooter>
@@ -182,6 +197,7 @@ export default function PharmacyItemsPage() {
     const [selectedSupplier, setSelectedSupplier] = React.useState<string>('all');
     const [selectedManufacturer, setSelectedManufacturer] = React.useState<string>('all');
     const [selectedCategory, setSelectedCategory] = React.useState<string>('all');
+    const [selectedRack, setSelectedRack] = React.useState<string>('all');
 
     const suppliers = React.useMemo(() => Array.from(new Set(pharmacyItems?.map(i => i.supplier).filter((s): s is string => !!s))), [pharmacyItems]);
     const manufacturers = React.useMemo(() => Array.from(new Set(pharmacyItems?.map(i => i.manufacturer).filter((m): m is string => !!m))), [pharmacyItems]);
@@ -189,7 +205,7 @@ export default function PharmacyItemsPage() {
 
     const handleExcelExport = () => {
         if (!filteredItems.length) return;
-        const headers = ['Name', 'Generic', 'Barcode', 'Category', 'Manufacturer', 'Supplier', 'Quantity', 'Selling Price'];
+        const headers = ['Name', 'Generic', 'Barcode', 'Category', 'Manufacturer', 'Supplier', 'Rack', 'Quantity', 'Selling Price'];
         const csvContent = [
             headers.join(','),
             ...filteredItems.map(item => [
@@ -199,6 +215,7 @@ export default function PharmacyItemsPage() {
                 `"${item.category}"`,
                 `"${item.manufacturer || ''}"`,
                 `"${item.supplier}"`,
+                `"${item.rack || '—'}"`,
                 item.quantity,
                 item.sellingPrice
             ].join(','))
@@ -233,10 +250,11 @@ export default function PharmacyItemsPage() {
             const matchesSupplier = selectedSupplier === 'all' || item.supplier === selectedSupplier;
             const matchesManufacturer = selectedManufacturer === 'all' || item.manufacturer === selectedManufacturer;
             const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+            const matchesRack = selectedRack === 'all' || item.rack === selectedRack;
 
-            return matchesSearch && matchesSupplier && matchesManufacturer && matchesCategory;
+            return matchesSearch && matchesSupplier && matchesManufacturer && matchesCategory && matchesRack;
         });
-    }, [pharmacyItems, searchTerm, selectedSupplier, selectedManufacturer, selectedCategory]);
+    }, [pharmacyItems, searchTerm, selectedSupplier, selectedManufacturer, selectedCategory, selectedRack]);
 
     const handleOpenForm = (mode: 'add' | 'edit' | 'stock', item?: PharmacyItem) => {
         setFormMode(mode);
@@ -288,7 +306,19 @@ export default function PharmacyItemsPage() {
                             <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock(All Item)" /></SelectTrigger><SelectContent></SelectContent></Select>
                             <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Stock Level" /></SelectTrigger><SelectContent></SelectContent></Select>
                             <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Active/Inactive" /></SelectTrigger><SelectContent></SelectContent></Select>
-                            <Select><SelectTrigger className="w-40"><SelectValue placeholder="Select Rack" /></SelectTrigger><SelectContent></SelectContent></Select>
+                            <Select value={selectedRack} onValueChange={setSelectedRack}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue placeholder="Select Rack" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Racks</SelectItem>
+                                    <SelectItem value="A">Rack A</SelectItem>
+                                    <SelectItem value="B">Rack B</SelectItem>
+                                    <SelectItem value="C">Rack C</SelectItem>
+                                    <SelectItem value="D">Rack D</SelectItem>
+                                    <SelectItem value="E">Rack E</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button size="sm" onClick={() => setIsBulkOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add Multiple Items</Button>
@@ -316,6 +346,7 @@ export default function PharmacyItemsPage() {
                                     <TableHead>Category</TableHead>
                                     <TableHead>Manufacturer</TableHead>
                                     <TableHead>Supplier(s)</TableHead>
+                                    <TableHead>Rack</TableHead>
                                     <TableHead>Stocking Unit</TableHead>
                                     <TableHead>Conversion Unit</TableHead>
                                     <TableHead className="text-right">Unit Price</TableHead>
@@ -341,6 +372,11 @@ export default function PharmacyItemsPage() {
                                         <TableCell>{item.category}</TableCell>
                                         <TableCell>{item.manufacturer}</TableCell>
                                         <TableCell>{item.supplier}</TableCell>
+                                        <TableCell>
+                                            <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-medium bg-secondary text-secondary-foreground border">
+                                                {item.rack || '—'}
+                                            </span>
+                                        </TableCell>
                                         <TableCell>{item.stockingUnit}</TableCell>
                                         <TableCell>{item.conversionUnit}</TableCell>
                                         <TableCell className="text-right">Rs{item.sellingPrice.toLocaleString()}</TableCell>

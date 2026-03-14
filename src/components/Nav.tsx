@@ -75,6 +75,7 @@ const allMenuItems = [
     { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
 
     { id: 'appointments', href: '/appointments', label: 'Appointments', icon: Calendar },
+    { id: 'followUpCalendar', href: '/appointments/follow-ups', label: 'Follow-up Calendar', icon: CalendarCheck },
     { id: 'patients', href: '/patients', label: 'Patients', icon: Users },
     { id: 'doctors', href: '/doctors', label: 'Doctors', icon: Stethoscope },
     { id: 'procedures', href: '/procedures', label: 'Procedures', icon: Activity },
@@ -162,7 +163,7 @@ const clinicGroups = [
     },
     {
         label: "Core Operations",
-        ids: ["appointments", "patients", "doctors", "procedures", "inventory", "supplier", "billing"]
+        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing"]
     },
     {
         label: "Medical & Pharmacy",

@@ -21,22 +21,42 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Boxes } from 'lucide-react';
+import { Plus, Pencil, Trash2, Boxes, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { useSearch } from '@/context/SearchProvider';
 
 export interface PharmacyItem {
     id: string;
     name: string;
     sellingPrice: number;
     quantity: number;
+    rack?: 'A' | 'B' | 'C' | 'D' | 'E';
 }
 
 export default function InventoryPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
+    const { searchTerm, setSearchTerm } = useSearch();
     const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
     const { data: inventoryItems, isLoading } = useCollection<PharmacyItem>(pharmacyRef);
+
+    const filteredItems = React.useMemo(() => {
+        if (!inventoryItems) return [];
+        const term = searchTerm.toLowerCase().trim();
+        if (!term) return inventoryItems;
+        return inventoryItems.filter(item =>
+            item.name.toLowerCase().includes(term) ||
+            (item.rack && item.rack.toLowerCase().includes(term))
+        );
+    }, [inventoryItems, searchTerm]);
 
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
     const [editingItem, setEditingItem] = React.useState<PharmacyItem | null>(null);
@@ -45,6 +65,7 @@ export default function InventoryPage() {
     const [name, setName] = React.useState('');
     const [price, setPrice] = React.useState<number | string>('');
     const [quantity, setQuantity] = React.useState<number | string>('');
+    const [rack, setRack] = React.useState<string>('');
 
     const handleOpenDialog = (item?: PharmacyItem) => {
         if (item) {
@@ -52,11 +73,13 @@ export default function InventoryPage() {
             setName(item.name);
             setPrice(item.sellingPrice);
             setQuantity(item.quantity);
+            setRack(item.rack || '');
         } else {
             setEditingItem(null);
             setName('');
             setPrice('');
             setQuantity('');
+            setRack('');
         }
         setIsDialogOpen(true);
     };
@@ -74,10 +97,10 @@ export default function InventoryPage() {
             const numQty = Number(quantity);
 
             if (editingItem) {
-                updateDocumentNonBlocking(doc(firestore, 'pharmacy', editingItem.id), { name, sellingPrice: numPrice, quantity: numQty });
+                updateDocumentNonBlocking(doc(firestore, 'pharmacy', editingItem.id), { name, sellingPrice: numPrice, quantity: numQty, rack });
                 toast({ title: 'Item Updated', description: 'The inventory item has been updated successfully.' });
             } else {
-                addDocumentNonBlocking(collection(firestore, 'pharmacy'), { name, sellingPrice: numPrice, quantity: numQty, createdAt: new Date().toISOString() });
+                addDocumentNonBlocking(collection(firestore, 'pharmacy'), { name, sellingPrice: numPrice, quantity: numQty, rack, createdAt: new Date().toISOString() });
                 toast({ title: 'Item Added', description: 'The new item has been added to inventory.' });
             }
             setIsDialogOpen(false);
@@ -96,7 +119,7 @@ export default function InventoryPage() {
 
     return (
         <div className="flex flex-col gap-6 p-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                         <Boxes className="h-6 w-6 text-primary" />
@@ -104,9 +127,21 @@ export default function InventoryPage() {
                     </h2>
                     <p className="text-muted-foreground">Manage physical stock, pharmacy items, and material pricing.</p>
                 </div>
-                <Button onClick={() => handleOpenDialog()}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Item
-                </Button>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <div className="relative w-full md:w-72">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search inventory..."
+                            className="pl-8 w-full"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <Button onClick={() => handleOpenDialog()} className="shrink-0">
+                        <Plus className="h-4 w-4 mr-2" /> Add Item
+                    </Button>
+                </div>
             </div>
 
             <Card>
@@ -120,6 +155,7 @@ export default function InventoryPage() {
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     <TableHead>Item Name</TableHead>
+                                    <TableHead>Rack</TableHead>
                                     <TableHead className="text-right">Selling Price (Rs)</TableHead>
                                     <TableHead className="text-right">Current Stock Qty</TableHead>
                                     <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -128,21 +164,26 @@ export default function InventoryPage() {
                             <TableBody>
                                 {isLoading ? (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Loading inventory...</TableCell>
+                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading inventory...</TableCell>
                                     </TableRow>
-                                ) : !inventoryItems || inventoryItems.length === 0 ? (
+                                ) : !filteredItems || filteredItems.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground italic">
-                                            No items found in inventory. Click "Add Item" to create one.
+                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
+                                            {searchTerm ? 'No items match your search.' : 'No items found in inventory. Click "Add Item" to create one.'}
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    inventoryItems.map((item) => (
+                                    filteredItems.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell className="font-medium">{item.name}</TableCell>
+                                            <TableCell>
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-muted border uppercase tracking-wider">
+                                                    Rack {item.rack || '—'}
+                                                </span>
+                                            </TableCell>
                                             <TableCell className="text-right font-medium">{Number(item.sellingPrice).toLocaleString()} Rs</TableCell>
                                             <TableCell className="text-right">
-                                                <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${item.quantity <= 0 ? 'bg-red-100 text-red-800' : item.quantity < 5 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                                <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${Number(item.quantity) <= 0 ? 'bg-red-100 text-red-800' : Number(item.quantity) < 5 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                                                     {item.quantity}
                                                 </span>
                                             </TableCell>
@@ -199,6 +240,21 @@ export default function InventoryPage() {
                                     onChange={(e) => setQuantity(e.target.value)}
                                 />
                             </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Rack Assignment</Label>
+                            <Select onValueChange={setRack} value={rack}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a rack (A-E)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="A">Rack A</SelectItem>
+                                    <SelectItem value="B">Rack B</SelectItem>
+                                    <SelectItem value="C">Rack C</SelectItem>
+                                    <SelectItem value="D">Rack D</SelectItem>
+                                    <SelectItem value="E">Rack E</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                     <DialogFooter>

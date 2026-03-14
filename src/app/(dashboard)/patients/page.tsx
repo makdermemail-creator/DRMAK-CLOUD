@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { MoreHorizontal, PlusCircle, Search, Loader2, Upload, Bell, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
@@ -336,61 +337,90 @@ function PatientsContent() {
                   <TableHead>Age</TableHead>
                   <TableHead>Gender</TableHead>
                   <TableHead>First Visit</TableHead>
+                  <TableHead>Next Follow-up</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPatients.map((patient) => (
-                  <TableRow key={patient.id}>
-                    <TableCell className="font-medium">
-                      <div
-                        className="flex items-center gap-3 cursor-pointer hover:underline"
-                        onClick={() => handleViewDetails(patient.id)}
-                      >
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={patient.avatarUrl} alt={patient.name} />
-                          <AvatarFallback>{patient.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div className="grid">
-                          <span className="font-semibold">{patient.name}</span>
-                          <span className="text-sm text-muted-foreground">{patient.mobileNumber}</span>
+                {filteredPatients.map((patient) => {
+                  const patientFollowUp = allFollowUps?.find(f => f.patientId === patient.id && f.status === 'Pending');
+                  return (
+                    <TableRow key={patient.id}>
+                      <TableCell className="font-medium">
+                        <div
+                          className="flex items-center gap-3 cursor-pointer hover:underline"
+                          onClick={() => handleViewDetails(patient.id)}
+                        >
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage src={patient.avatarUrl} alt={patient.name} />
+                            <AvatarFallback>{patient.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <div className="grid">
+                            <span className="font-semibold">{patient.name}</span>
+                            <span className="text-sm text-muted-foreground">{patient.mobileNumber}</span>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{patient.age}</TableCell>
-                    <TableCell>{patient.gender}</TableCell>
-                    <TableCell>
-                      {patient.registrationDate ? new Date(patient.registrationDate).toLocaleDateString('en-GB', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      }) : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => handleViewDetails(patient.id)}>View Details</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEdit(patient)}>Edit</DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setPatientToDelete(patient)}
-                            className="text-red-600"
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>{patient.age}</TableCell>
+                      <TableCell>{patient.gender}</TableCell>
+                      <TableCell>
+                        {patient.registrationDate ? new Date(patient.registrationDate).toLocaleDateString('en-GB', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        }) : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {patientFollowUp ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm font-medium">
+                              {new Date(patientFollowUp.followUpDate).toLocaleDateString('en-GB', {
+                                day: 'numeric',
+                                month: 'short'
+                              })}
+                            </span>
+                            {(() => {
+                              const date = new Date(patientFollowUp.followUpDate);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const isOverdue = date < today;
+                              const isTodayDate = date.toDateString() === new Date().toDateString();
+
+                              if (isOverdue) return <Badge variant="destructive" className="w-fit text-[10px] h-4">Overdue</Badge>;
+                              if (isTodayDate) return <Badge className="bg-orange-500 text-white w-fit text-[10px] h-4">Today</Badge>;
+                              return <Badge variant="secondary" className="w-fit text-[10px] h-4">Upcoming</Badge>;
+                            })()}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Toggle menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleViewDetails(patient.id)}>View Details</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEdit(patient)}>Edit</DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setPatientToDelete(patient)}
+                              className="text-red-600"
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

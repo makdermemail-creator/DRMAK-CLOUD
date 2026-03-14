@@ -127,6 +127,7 @@ export type PharmacyItem = {
   quantity: number;
   expiryDate: string; // ISO string
   active: boolean;
+  rack?: 'A' | 'B' | 'C' | 'D' | 'E';
 };
 
 export type Visit = {
@@ -382,3 +383,15 @@ export type SalesTrainingCompletion = {
   trainingId: string;
   completedAt: string; // ISO string
 };
+
+export type FollowUp = {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientMobile: string;
+  followUpDate: string; // ISO string
+  reason?: string;
+  notes?: string;
+  status: 'Pending' | 'Completed' | 'Cancelled';
+  createdAt: string; // ISO string
+}
