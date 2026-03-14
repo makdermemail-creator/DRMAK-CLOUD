@@ -82,6 +82,7 @@ const allMenuItems = [
     { id: 'inventory', href: '/inventory', label: 'Inventory', icon: Boxes },
     { id: 'supplier', href: '/supplier', label: 'Suppliers', icon: Truck },
     { id: 'billing', href: '/billing', label: 'Billing', icon: CircleDollarSign },
+    { id: 'todaySummary', href: '/today-summary', label: 'Today Summary', icon: TrendingUp },
 
     // Pharmacy Sub-menu
     {
@@ -163,7 +164,7 @@ const clinicGroups = [
     },
     {
         label: "Core Operations",
-        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing"]
+        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing", "todaySummary"]
     },
     {
         label: "Medical & Pharmacy",
