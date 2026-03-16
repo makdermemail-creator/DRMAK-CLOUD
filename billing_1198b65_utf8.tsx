@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import * as React from 'react';
 import {
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
 import type { Patient } from '@/lib/types';
 import { Search, Plus, Trash2, Printer, CheckCircle2, CircleDollarSign } from 'lucide-react';
@@ -26,25 +26,6 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { 
-    Table, 
-    TableBody, 
-    TableCell, 
-    TableHead, 
-    TableHeader, 
-    TableRow 
-} from '@/components/ui/table';
-import { 
-    AlertCircle, 
-    FileText, 
-    History, 
-    Calendar as CalendarIcon,
-    RefreshCcw,
-    X
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { Edit } from 'lucide-react';
 
 
 // Define PharmacyItem type based on typical app structure (or adjust if needed)
@@ -79,27 +60,6 @@ const COMMON_PROCEDURES = [
     { id: 'proc-6', name: 'Botox (Per Unit)', price: 500 },
 ];
 
-interface BillingRecord {
-    id: string;
-    patientId: string;
-    patientName: string;
-    patientMobile: string;
-    items: BillItem[];
-    reimbursements: Reimbursement[];
-    subTotal: number;
-    discountType: 'percentage' | 'fixed';
-    discountValue: number;
-    discountAmount: number;
-    reimbursementTotal: number;
-    taxRate: number;
-    taxAmount: number;
-    grandTotal: number;
-    paymentMethod: string;
-    timestamp: string;
-    status: string;
-    editReason?: string;
-}
-
 export default function BillingPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
@@ -108,12 +68,10 @@ export default function BillingPage() {
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
     const pharmacyQuery = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
     const proceduresQuery = useMemoFirebase(() => firestore ? collection(firestore, 'procedures') : null, [firestore]);
-    const billingRecordsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
 
     const { data: patients } = useCollection<Patient>(patientsQuery);
     const { data: pharmacyItems } = useCollection<PharmacyItem>(pharmacyQuery);
     const { data: dynamicProcedures } = useCollection<any>(proceduresQuery); // Using any temporarily to avoid circular deps with ProceduresPage
-    const { data: billingRecords, isLoading: isBillingLoading } = useCollection<BillingRecord>(billingRecordsQuery);
 
     // State
     const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
@@ -124,12 +82,6 @@ export default function BillingPage() {
     const [discountType, setDiscountType] = React.useState<'percentage' | 'fixed'>('percentage');
     const [discountValue, setDiscountValue] = React.useState<number>(0);
     const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | 'Nill' | ''>('');
-
-    const [activeTab, setActiveTab] = React.useState('new-bill');
-    const [editingBillId, setEditingBillId] = React.useState<string | null>(null);
-    const [editReason, setEditReason] = React.useState('');
-    const [billingSearch, setBillingSearch] = React.useState('');
-    const [categoryFilter, setCategoryFilter] = React.useState('All');
 
     // Custom Item Temp State
     const [customName, setCustomName] = React.useState('');
@@ -145,7 +97,7 @@ export default function BillingPage() {
         return patients.filter(p =>
             p.name.toLowerCase().includes(term) ||
             p.mobileNumber.includes(term)
-        );
+        ).slice(0, 5); // Limit suggestions
     }, [patients, patientSearch]);
 
     const addProcedure = (procId: string) => {
@@ -296,9 +248,6 @@ export default function BillingPage() {
             return;
         }
 
-        // Determine Stamp Layer
-        let stampHtml = '';
-        
         const itemsRows = billItems.map(item => `
             <tr>
                 <td style="padding:10px 8px; border-bottom:1px solid #eee;">
@@ -358,15 +307,13 @@ export default function BillingPage() {
                 <div class="patient-grid">
                     <div>
                         <div class="label">Patient Name</div>
-                        <div class="value">${selectedPatient?.name || '—'}</div>
+                        <div class="value">${selectedPatient?.name || 'ΓÇö'}</div>
                     </div>
                     <div class="right">
                         <div class="label">Mobile Number</div>
-                        <div class="value">${selectedPatient?.mobileNumber || '—'}</div>
+                        <div class="value">${selectedPatient?.mobileNumber || 'ΓÇö'}</div>
                     </div>
                 </div>
-
-                ${stampHtml}
 
                 <table>
                     <thead>
@@ -434,181 +381,38 @@ export default function BillingPage() {
             taxAmount,
             grandTotal,
             paymentMethod,
-            timestamp: editingBillId ? (billingRecords?.find(b => b.id === editingBillId)?.timestamp || new Date().toISOString()) : new Date().toISOString(),
-            status: 'Paid',
-            ...(editingBillId && { editReason })
+            timestamp: new Date().toISOString(),
+            status: 'Paid'
         };
 
-        if (editingBillId) {
-            if (!editReason.trim()) {
-                toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for updating this bill.' });
-                return;
+        // Deduct stock for pharmacy items
+        billItems.forEach(item => {
+            if (item.type === 'pharmacy') {
+                const inventoryItem = pharmacyItems?.find(p => p.id === item.id);
+                if (inventoryItem) {
+                    const newQuantity = Math.max(0, inventoryItem.quantity - item.qty);
+                    updateDocumentNonBlocking(doc(firestore, 'pharmacy', inventoryItem.id), { quantity: newQuantity });
+                }
             }
-            updateDocumentNonBlocking(doc(firestore, 'billingRecords', editingBillId), billData);
-            toast({
-                title: 'Bill Updated',
-                description: 'The bill has been successfully updated.',
-            });
-            setEditingBillId(null);
-        } else {
-            // Deduct stock for pharmacy items only for new bills
-            billItems.forEach(item => {
-                if (item.type === 'pharmacy') {
-                    const inventoryItem = pharmacyItems?.find(p => p.id === item.id);
-                    if (inventoryItem) {
-                        const newQuantity = Math.max(0, inventoryItem.quantity - item.qty);
-                        updateDocumentNonBlocking(doc(firestore, 'pharmacy', inventoryItem.id), { quantity: newQuantity });
-                    }
-                }
-            });
+        });
 
-            addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
-            toast({
-                title: 'Bill Saved',
-                description: 'The bill has been successfully saved to the records.',
-            });
-        }
+        addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
 
-        // Reset state
-        handleClear();
+        toast({
+            title: 'Bill Saved',
+            description: 'The bill has been successfully saved to the records.',
+        });
     };
-
-    const handleClear = () => {
-        setSelectedPatient(null);
-        setBillItems([]);
-        setReimbursements([]);
-        setDiscountValue(0);
-        setPaymentMethod('');
-        setEditingBillId(null);
-        setEditReason('');
-    };
-
-    const handleEditBill = (bill: BillingRecord) => {
-        const patient = patients?.find(p => p.id === bill.patientId);
-        if (patient) {
-            setSelectedPatient(patient);
-        } else {
-            // Minimal patient object if not found in current collection
-            setSelectedPatient({ id: bill.patientId, name: bill.patientName, mobileNumber: bill.patientMobile } as any);
-        }
-
-        setBillItems(bill.items);
-        setReimbursements(bill.reimbursements || []);
-        setDiscountType(bill.discountType);
-        setDiscountValue(bill.discountValue);
-        setPaymentMethod(bill.paymentMethod as any);
-        setEditingBillId(bill.id);
-        setEditReason(''); // Clear any previous reason
-        setActiveTab('new-bill');
-        toast({ title: 'Editing Bill', description: `Now editing bill for ${bill.patientName}` });
-    };
-
-    const handleDeleteBill = async (billId: string) => {
-        if (!firestore || !window.confirm('Are you sure you want to delete this billing record?')) return;
-        try {
-            await deleteDocumentNonBlocking(doc(firestore, 'billingRecords', billId));
-            toast({ title: 'Bill Deleted', description: 'The record has been permanently removed.' });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete record.' });
-        }
-    };
-
-    const handleMarkAsPaid = async (billId: string) => {
-        if (!firestore) return;
-        try {
-            await updateDocumentNonBlocking(doc(firestore, 'billingRecords', billId), {
-                status: 'Paid',
-                paymentMethod: 'Cash', // Default to cash if marked paid later, or could prompt for this
-                editReason: 'Marked as Paid from Invoices list'
-            });
-            toast({ title: 'Payment Marked', description: 'The bill has been successfully marked as Paid.' });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to update payment status.' });
-        }
-    };
-
-    const filteredRecords = React.useMemo(() => {
-        if (!billingRecords) return [];
-        const term = billingSearch.toLowerCase();
-        
-        let filtered = billingRecords.filter(b => 
-            b.patientName.toLowerCase().includes(term) ||
-            b.patientMobile.includes(term) ||
-            b.id.toLowerCase().includes(term)
-        );
-
-        if (categoryFilter !== 'All') {
-            filtered = filtered.filter(b => {
-                const types = new Set(b.items.map(i => i.type));
-                
-                if (categoryFilter === 'Consultation') {
-                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.every(i => i.name.toLowerCase().includes('consultation'));
-                }
-                if (categoryFilter === 'Procedure') {
-                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.some(i => !i.name.toLowerCase().includes('consultation'));
-                }
-                if (categoryFilter === 'Pharmacy') {
-                    return types.has('pharmacy') && !types.has('procedure') && !types.has('custom');
-                }
-                if (categoryFilter === 'Mixed') {
-                    return (types.has('pharmacy') && types.has('procedure')) || types.has('custom');
-                }
-                return true;
-            });
-        }
-
-        return filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }, [billingRecords, billingSearch, categoryFilter]);
 
     return (
-        <div className="flex flex-col h-full p-4 space-y-6">
-            <div className="flex justify-between items-center bg-background p-4 rounded-xl border border-dashed shadow-sm">
-                <div>
-                    <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
-                        <CircleDollarSign className="h-6 w-6 text-primary" /> Billing & Invoicing
-                    </h2>
-                    <p className="text-muted-foreground text-sm">Manage patient billing, generate invoices and track payment history.</p>
-                </div>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-[400px]">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="new-bill" className="gap-2"><Plus className="h-4 w-4" /> New Bill</TabsTrigger>
-                        <TabsTrigger value="all-invoices" className="gap-2"><History className="h-4 w-4" /> All Invoices</TabsTrigger>
-                    </TabsList>
-                </Tabs>
-            </div>
+        <div className="flex flex-col md:flex-row gap-6 h-full p-4 print:p-0">
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col">
-                <TabsContent value="new-bill" className="flex-1 mt-0 outline-none">
-                    <div className="flex flex-col md:flex-row gap-6 h-full print:p-0">
-                        {/* LEFT COLUMN: CONTROLS (Hidden when printing) */}
-                        <div className="w-full md:w-1/2 lg:w-[45%] flex flex-col gap-6 print:hidden">
-                            {editingBillId && (
-                                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 animate-in fade-in slide-in-from-top-2">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                                <RefreshCcw className="h-4 w-4 text-primary animate-spin-slow" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-bold text-primary">Editing Existing Bill</p>
-                                                <p className="text-xs text-primary/70">Changes will overwrite the original record.</p>
-                                            </div>
-                                        </div>
-                                        <Button variant="ghost" size="sm" onClick={handleClear} className="text-primary hover:bg-primary/20"><X className="h-4 w-4 mr-1"/> Cancel</Button>
-                                    </div>
-                                    <div className="space-y-1.5 border-t border-primary/10 pt-3">
-                                        <Label className="text-xs font-bold text-primary flex items-center gap-1.5">
-                                            <AlertCircle className="h-3 w-3" /> Reason for Update <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input 
-                                            placeholder="Enter reason for modification (required)..." 
-                                            className="h-9 border-primary/20 bg-background/50 text-sm focus-visible:ring-primary"
-                                            value={editReason}
-                                            onChange={(e) => setEditReason(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            )}
+            {/* LEFT COLUMN: CONTROLS (Hidden when printing) */}
+            <div className="w-full md:w-1/2 lg:w-[45%] flex flex-col gap-6 print:hidden space-y-4">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Billing & Invoicing</h2>
+                    <p className="text-muted-foreground">Search patient and add items to generate a bill.</p>
+                </div>
 
                 {/* Patient Selection */}
                 <Card>
@@ -655,7 +459,7 @@ export default function BillingPage() {
                     </CardContent>
                 </Card>
 
-                {/* Item Addition — locked until patient is selected */}
+                {/* Item Addition ΓÇö locked until patient is selected */}
                 <Card className="flex-1">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-lg flex items-center gap-2">
@@ -1039,186 +843,11 @@ export default function BillingPage() {
                     </CardContent>
 
                     <CardFooter className="bg-muted/30 pt-4 print:hidden flex justify-between">
-                        <div className="flex gap-2">
-                            {editingBillId && (
-                                <Button variant="outline" onClick={handleClear} className="border-red-200 text-red-600 hover:bg-red-50">Clear</Button>
-                            )}
-                            <Button variant="outline" onClick={handleSaveBill} disabled={!selectedPatient || !paymentMethod || billItems.length === 0}>
-                                <CheckCircle2 className="mr-2 h-4 w-4" /> {editingBillId ? 'Update Record' : 'Save Record'}
-                            </Button>
-                        </div>
+                        <Button variant="outline" onClick={handleSaveBill} disabled={!selectedPatient || !paymentMethod || billItems.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" /> Save Record</Button>
                         <Button onClick={handlePrint} disabled={!paymentMethod || billItems.length === 0} className="w-32"><Printer className="mr-2 h-4 w-4" /> Print Bill</Button>
                     </CardFooter>
                 </Card>
             </div>
-        </div>
-    </TabsContent>
-
-                <TabsContent value="all-invoices" className="flex-1 mt-0 outline-none">
-                    <Card className="h-full flex flex-col overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                            <div>
-                                <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                    <History className="h-5 w-5" /> Recent Billing Records
-                                </CardTitle>
-                                <CardDescription>Search and manage all past invoices generated.</CardDescription>
-                            </div>
-                            <div className="flex flex-col gap-3">
-                                <div className="relative w-64 self-end">
-                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Search name, mobile, id..."
-                                        className="pl-9 h-9"
-                                        value={billingSearch}
-                                        onChange={(e) => setBillingSearch(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex bg-muted/30 p-1 rounded-md border text-sm w-fit self-end">
-                                    {['All', 'Consultation', 'Procedure', 'Pharmacy', 'Mixed'].map(cat => (
-                                        <button
-                                            key={cat}
-                                            onClick={() => setCategoryFilter(cat)}
-                                            className={cn(
-                                                "px-3 py-1 rounded-sm transition-all text-xs font-semibold",
-                                                categoryFilter === cat ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                            )}
-                                        >
-                                            {cat}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex-1 overflow-auto p-0 border-t">
-                            {isBillingLoading ? (
-                                <div className="flex flex-col items-center justify-center h-64 gap-3">
-                                    <RefreshCcw className="h-8 w-8 text-primary animate-spin" />
-                                    <p className="text-muted-foreground text-sm">Loading records...</p>
-                                </div>
-                            ) : filteredRecords.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-                                    <AlertCircle className="h-8 w-8 opacity-20" />
-                                    <p className="text-sm">No billing records found.</p>
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader className="bg-muted/50">
-                                        <TableRow>
-                                            <TableHead className="w-[180px]">Date & ID</TableHead>
-                                            <TableHead>Patient Details</TableHead>
-                                            <TableHead>Items Summary</TableHead>
-                                            <TableHead className="text-right">Amount</TableHead>
-                                            <TableHead>Method</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-center">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredRecords.map((bill) => (
-                                            <TableRow key={bill.id} className="group hover:bg-muted/30 transition-colors">
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-semibold text-xs flex items-center gap-1">
-                                                            <CalendarIcon className="h-3 w-3 opacity-60" />
-                                                            {format(new Date(bill.timestamp), 'MMM dd, yyyy')}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground font-mono">#{bill.id.slice(0, 8)}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm">{bill.patientName}</span>
-                                                        <span className="text-xs text-muted-foreground">{bill.patientMobile}</span>
-                                                        {bill.editReason && (
-                                                            <div className="mt-1 flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 w-fit">
-                                                                <AlertCircle className="h-2.5 w-2.5" /> 
-                                                                <span className="italic">"{bill.editReason}"</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-wrap gap-1 max-w-[300px]">
-                                                        {bill.items.slice(0, 2).map((item, idx) => (
-                                                            <span key={idx} className="bg-primary/5 text-primary text-[10px] px-1.5 py-0.5 rounded-full border border-primary/10">
-                                                                {item.name} {item.qty > 1 ? `x${item.qty}` : ''}
-                                                            </span>
-                                                        ))}
-                                                        {bill.items.length > 2 && (
-                                                            <span className="text-[10px] text-muted-foreground">+ {bill.items.length - 2} more</span>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <span className="font-black text-sm">{bill.grandTotal.toLocaleString()} Rs</span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className={cn(
-                                                        "text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border",
-                                                        bill.paymentMethod === 'Cash' ? "bg-green-50 text-green-700 border-green-200" :
-                                                        bill.paymentMethod === 'Card' ? "bg-blue-50 text-blue-700 border-blue-200" :
-                                                        "bg-amber-50 text-amber-700 border-amber-200"
-                                                    )}>
-                                                        {bill.paymentMethod}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className={cn(
-                                                        "text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border text-center w-full inline-block",
-                                                        bill.status === 'Paid' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                                        "bg-rose-50 text-rose-700 border-rose-200"
-                                                    )}>
-                                                        {bill.status}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex justify-center items-center gap-1">
-                                                        {bill.status !== 'Paid' && (
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="sm" 
-                                                                className="h-8 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold px-2"
-                                                                onClick={() => handleMarkAsPaid(bill.id)}
-                                                            >
-                                                                Mark Paid
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={() => handleEditBill(bill)} title="Edit Bill">
-                                                            <Edit className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-red-500" onClick={() => handleDeleteBill(bill.id)} title="Delete Bill">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 hover:text-amber-600"
-                                                            onClick={() => {
-                                                                // Load temporarily for print
-                                                                const patient = patients?.find(p => p.id === bill.patientId);
-                                                                setSelectedPatient(patient || { id: bill.patientId, name: bill.patientName, mobileNumber: bill.patientMobile } as any);
-                                                                setBillItems(bill.items);
-                                                                setReimbursements(bill.reimbursements || []);
-                                                                setDiscountType(bill.discountType);
-                                                                setDiscountValue(bill.discountValue);
-                                                                setPaymentMethod(bill.paymentMethod as any);
-                                                                setTimeout(handlePrint, 100);
-                                                            }}
-                                                            title="Print Bill"
-                                                        >
-                                                            <Printer className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
         </div>
     );
 }

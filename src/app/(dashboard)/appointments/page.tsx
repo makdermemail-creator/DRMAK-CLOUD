@@ -251,6 +251,13 @@ const AppointmentsCalendarView = ({ appointments, week, onSlotClick, draftTime, 
         const top = (hour - 8) * 80 + (aptDate.getMinutes() / 60) * 80;
         const left = dayIndex * (100 / 7);
 
+        const customStyles = {
+            top: `${top}px`,
+            left: `calc(${left}% + 4px)`,
+            width: 'calc(100% / 7 - 8px)',
+            height: '50px'
+        };
+
         return (
             <div
                 key={isDraft ? 'draft' : apt.id}
@@ -258,7 +265,7 @@ const AppointmentsCalendarView = ({ appointments, week, onSlotClick, draftTime, 
                     ? 'bg-primary/20 border-2 border-primary border-dashed text-primary animate-pulse z-20'
                     : 'bg-primary text-primary-foreground z-10'
                     }`}
-                style={{ top: `${top}px`, left: `calc(${left}% + 4px)`, width: 'calc(100% / 7 - 8px)', height: '50px' }}
+                style={customStyles}
             >
                 <p className="text-xs font-bold truncate">{isDraft ? 'Draft Appointment' : apt.patient?.name}</p>
                 <p className="text-xs truncate">{format(aptDate, 'h:mm a')}</p>
