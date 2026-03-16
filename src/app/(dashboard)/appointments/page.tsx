@@ -71,13 +71,13 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
     const filteredPatients = React.useMemo(() => {
         if (!patients) return [];
         const term = (patientSearch || '').toLowerCase().trim();
-        if (!term) return patients.slice(0, 50); // Show first 50 only initially
+        if (!term) return patients;
 
         return patients.filter(p => {
             const name = (p.name || '').toLowerCase();
             const phone = (p.mobileNumber || '').toLowerCase();
             return name.includes(term) || phone.includes(term);
-        }).slice(0, 50); // Limit to top 50 results for performance
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }, [patients, patientSearch]);
 
     const selectedPatientData = React.useMemo(() => {
@@ -175,11 +175,6 @@ const BookAppointmentDialog = ({ open, onOpenChange, selectedDate, onAppointment
                                                     autoFocus
                                                 />
                                             </div>
-                                            {patientSearch && (
-                                                <div className="mt-2 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold px-0.5">
-                                                    Showing top 50 matches
-                                                </div>
-                                            )}
                                         </div>
                                         <div className="flex-1 overflow-y-auto p-1 scrollbar-thin">
                                             {filteredPatients.length === 0 ? (

@@ -144,7 +144,7 @@ export default function BillingPage() {
         return patients.filter(p =>
             p.name.toLowerCase().includes(term) ||
             p.mobileNumber.includes(term)
-        ).slice(0, 5); // Limit suggestions
+        );
     }, [patients, patientSearch]);
 
     const addProcedure = (procId: string) => {

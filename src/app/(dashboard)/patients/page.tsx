@@ -307,10 +307,15 @@ function PatientsContent() {
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <div>
+            <div className="flex items-center gap-2">
               <CardTitle>Patients</CardTitle>
-              <CardDescription>
-                Manage your clinic's patient records.
-              </CardDescription>
+              <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs font-bold bg-primary/10 text-primary border-primary/20">
+                {patients?.length || 0} Total
+              </Badge>
+            </div>
+            <CardDescription>
+              Manage your clinic's patient records.
+            </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" className="gap-1" onClick={() => setIsImportOpen(true)}>

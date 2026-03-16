@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
 import type { Patient } from '@/lib/types';
 import * as XLSX from 'xlsx';
@@ -47,75 +47,79 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
         }
     };
 
-    const processExcel = async (file: File) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+    const processExcel = async (file: File, existingMobiles: Set<string>) => {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-                const patients: Partial<Patient>[] = jsonData.map((row: any) => {
-                    // Extract name
-                    const name = row['Patient Name'] || row.Name || row.name || '';
+            const seenInFile = new Set<string>();
+            const patients: Partial<Patient>[] = [];
 
-                    // Extract and sanitize mobile number
-                    const mobileRaw = row.Phone || row.phone || row.Mobile || row.mobile || '';
-                    const mobileNumber = String(mobileRaw).replace(/\D/g, '');
+            jsonData.forEach((row: any) => {
+                // Extract name
+                const name = row['Patient Name'] || row.Name || row.name || '';
 
-                    // Extract age (handles "22 Years" -> 22)
-                    const ageRaw = row.Age || row.age || row.AGE || '';
-                    const age = typeof ageRaw === 'number' ? ageRaw : parseInt(String(ageRaw).replace(/\D/g, ''), 10) || 0;
+                // Extract and sanitize mobile number
+                const mobileRaw = row.Phone || row.phone || row.Mobile || row.mobile || '';
+                const mobileNumber = String(mobileRaw).replace(/\D/g, '');
 
-                    // Extract gender
-                    const genderRaw = String(row.Gender || row.gender || 'Other').toLowerCase();
-                    const gender = genderRaw.startsWith('m') ? 'Male' : genderRaw.startsWith('f') ? 'Female' : 'Other';
-
-                    // Parse Registration Date (supports DD/MM/YYYY or standard JS dates)
-                    let registrationDate = new Date().toISOString();
-                    const dateRaw = row['REGISTRATION DATE'] || row['Registration Date'] || row['registration date'] || row.date || row.Date;
-                    if (dateRaw) {
-                        if (typeof dateRaw === 'string' && dateRaw.includes('/')) {
-                            const [day, month, year] = dateRaw.split('/');
-                            const parsedDate = new Date(`${year}-${month}-${day}`);
-                            if (!isNaN(parsedDate.getTime())) {
-                                registrationDate = parsedDate.toISOString();
-                            }
-                        } else if (!isNaN(new Date(dateRaw).getTime())) {
-                            registrationDate = new Date(dateRaw).toISOString();
-                        }
-                    }
-
-                    return {
-                        name,
-                        mobileNumber,
-                        age,
-                        gender: gender as Patient['gender'],
-                        address: row.Address || row.address || '',
-                        registrationDate,
-                        status: (row.Status || row.status || 'Active') as Patient['status'],
-                        avatarUrl: '',
-                    };
-                }).filter(p => p.name && p.mobileNumber);
-
-                if (patients.length === 0) {
-                    setError('No valid patient data found. Ensure "Name" and "Mobile" columns exist.');
-                } else {
-                    setPreviewData(patients);
+                // Skip if invalid or duplicate
+                if (!name || !mobileNumber || existingMobiles.has(mobileNumber) || seenInFile.has(mobileNumber)) {
+                    return;
                 }
-            } catch (err) {
-                console.error('Excel processing error:', err);
-                setError('Failed to process Excel file.');
-            } finally {
-                setIsProcessing(false);
+
+                // Extract age (handles "22 Years" -> 22)
+                const ageRaw = row.Age || row.age || row.AGE || '';
+                const age = typeof ageRaw === 'number' ? ageRaw : parseInt(String(ageRaw).replace(/\D/g, ''), 10) || 0;
+
+                // Extract gender
+                const genderRaw = String(row.Gender || row.gender || 'Other').toLowerCase();
+                const gender = genderRaw.startsWith('m') ? 'Male' : genderRaw.startsWith('f') ? 'Female' : 'Other';
+
+                // Parse Registration Date
+                let registrationDate = new Date().toISOString();
+                const dateRaw = row['REGISTRATION DATE'] || row['Registration Date'] || row['registration date'] || row.date || row.Date;
+                if (dateRaw) {
+                    if (typeof dateRaw === 'string' && dateRaw.includes('/')) {
+                        const [day, month, year] = dateRaw.split('/');
+                        const parsedDate = new Date(`${year}-${month}-${day}`);
+                        if (!isNaN(parsedDate.getTime())) {
+                            registrationDate = parsedDate.toISOString();
+                        }
+                    } else if (!isNaN(new Date(dateRaw).getTime())) {
+                        registrationDate = new Date(dateRaw).toISOString();
+                    }
+                }
+
+                patients.push({
+                    name,
+                    mobileNumber,
+                    age,
+                    gender: gender as Patient['gender'],
+                    address: row.Address || row.address || '',
+                    registrationDate,
+                    status: (row.Status || row.status || 'Active') as Patient['status'],
+                    avatarUrl: '',
+                });
+                seenInFile.add(mobileNumber);
+            });
+
+            if (patients.length === 0) {
+                setError('No new unique patients found in the file.');
+            } else {
+                setPreviewData(patients);
             }
-        };
-        reader.readAsArrayBuffer(file);
+        } catch (err) {
+            console.error('Excel processing error:', err);
+            setError('Failed to process Excel file.');
+        }
     };
 
-    const processPDF = async (file: File) => {
+    const processPDF = async (file: File, existingMobiles: Set<string>) => {
         try {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -128,20 +132,17 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                 fullText += pageText + '\n';
             }
 
-            // Simple regex-based parsing for name, mobile, age
-            // Expecting format like: "Name: John Doe, Mobile: 03001234567, Age: 30"
-            // Or one per line: "John Doe 03001234567 30 Male"
             const lines = fullText.split('\n');
+            const seenInFile = new Set<string>();
             const patients: Partial<Patient>[] = [];
 
             lines.forEach(line => {
-                // Look for phone numbers (approx 10-11 digits)
                 const phoneMatch = line.match(/(03\d{9}|92\d{10})/);
                 if (phoneMatch) {
                     const mobile = phoneMatch[0];
-                    // Try to extract name (everything before the phone number)
+                    if (existingMobiles.has(mobile) || seenInFile.has(mobile)) return;
+
                     const namePart = line.split(mobile)[0].trim();
-                    // Try to extract age (first number after mobile or elsewhere)
                     const ageMatch = line.match(/\b\d{1,2}\b/);
 
                     if (namePart) {
@@ -154,12 +155,13 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                             status: 'Active' as Patient['status'],
                             avatarUrl: '',
                         });
+                        seenInFile.add(mobile);
                     }
                 }
             });
 
             if (patients.length === 0) {
-                setError('Could not automatically detect patient patterns in PDF. Try Excel for better results.');
+                setError('No new unique patients found in PDF.');
             } else {
                 setPreviewData(patients);
             }
@@ -171,18 +173,29 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
         }
     };
 
-    const handleProcess = () => {
-        if (!file) return;
+    const handleProcess = async () => {
+        if (!file || !firestore) return;
         setIsProcessing(true);
         setError(null);
 
-        const extension = file.name.split('.').pop()?.toLowerCase();
-        if (extension === 'xlsx' || extension === 'xls' || extension === 'csv') {
-            processExcel(file);
-        } else if (extension === 'pdf') {
-            processPDF(file);
-        } else {
-            setError('Unsupported file type. Please use Excel (.xlsx, .xls, .csv) or PDF.');
+        try {
+            // Fetch existing patient mobile numbers for deduplication
+            const patientsCollection = collection(firestore, 'patients');
+            const querySnapshot = await getDocs(patientsCollection);
+            const existingMobiles = new Set(querySnapshot.docs.map(doc => doc.id));
+
+            const extension = file.name.split('.').pop()?.toLowerCase();
+            if (extension === 'xlsx' || extension === 'xls' || extension === 'csv') {
+                await processExcel(file, existingMobiles);
+            } else if (extension === 'pdf') {
+                await processPDF(file, existingMobiles);
+            } else {
+                setError('Unsupported file type. Please use Excel (.xlsx, .xls, .csv) or PDF.');
+            }
+        } catch (err) {
+            console.error('Processing error:', err);
+            setError('An error occurred while preparing the import.');
+        } finally {
             setIsProcessing(false);
         }
     };
