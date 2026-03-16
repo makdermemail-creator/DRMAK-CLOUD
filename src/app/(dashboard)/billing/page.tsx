@@ -98,6 +98,7 @@ interface BillingRecord {
     timestamp: string;
     status: string;
     editReason?: string;
+    dailyInvoiceNumber?: number;
 }
 
 export default function BillingPage() {
@@ -279,6 +280,30 @@ export default function BillingPage() {
     const taxAmount = taxableAmount * taxRate;
     const grandTotal = Math.max(0, taxableAmount + taxAmount);
 
+    const getDailyInvoiceNumber = (billId?: string) => {
+        if (billId && billingRecords) {
+            const existing = billingRecords.find(b => b.id === billId);
+            if (existing && existing.dailyInvoiceNumber) return existing.dailyInvoiceNumber;
+        }
+        if (!billingRecords) return 1;
+
+        // Base the calculation on the timestamp of the record if editing, otherwise today
+        let targetDate = new Date();
+        if (billId) {
+             const existing = billingRecords.find(b => b.id === billId);
+             if (existing) targetDate = new Date(existing.timestamp);
+        }
+        
+        const targetDateString = targetDate.toLocaleDateString();
+        const daysRecords = billingRecords.filter(b => new Date(b.timestamp).toLocaleDateString() === targetDateString);
+        
+        const maxNumber = daysRecords.reduce((max, record) => {
+            return Math.max(max, record.dailyInvoiceNumber || 0);
+        }, 0);
+
+        return maxNumber + 1;
+    };
+
     const handlePrint = () => {
         if (billItems.length === 0) {
             toast({ variant: 'destructive', title: 'No Items', description: 'Please add at least one item to the bill before printing.' });
@@ -330,9 +355,10 @@ export default function BillingPage() {
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; padding: 32px; max-width: 600px; margin: 0 auto; }
-                    .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 20px; }
+                    .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 20px; position: relative; }
                     .header h1 { font-size: 22px; font-weight: bold; }
                     .header p { color: #555; font-size: 12px; margin-top: 4px; }
+                    .receipt-no { position: absolute; top: 0; right: 0; font-size: 14px; font-weight: bold; background: #f0f0f0; padding: 4px 8px; border-radius: 4px; border: 1px solid #ddd; }
                     .patient-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 14px; margin-bottom: 20px; }
                     .patient-grid .label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.05em; }
                     .patient-grid .value { font-weight: 600; margin-top: 2px; }
@@ -350,6 +376,7 @@ export default function BillingPage() {
             </head>
             <body>
                 <div class="header">
+                    <div class="receipt-no">Token: #${getDailyInvoiceNumber(editingBillId || undefined)}</div>
                     <h1>SkinSmith Clinic</h1>
                     <p>Payment Receipt</p>
                     <p style="margin-top:6px;">Date: ${new Date().toLocaleDateString('en-PK', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -436,7 +463,12 @@ export default function BillingPage() {
             paymentMethod,
             timestamp: editingBillId ? (billingRecords?.find(b => b.id === editingBillId)?.timestamp || new Date().toISOString()) : new Date().toISOString(),
             status: 'Paid',
-            ...(editingBillId && { editReason })
+            ...(editingBillId ? {
+                editReason,
+                dailyInvoiceNumber: billingRecords?.find(b => b.id === editingBillId)?.dailyInvoiceNumber || getDailyInvoiceNumber(editingBillId)
+            } : {
+                dailyInvoiceNumber: getDailyInvoiceNumber()
+            })
         };
 
         if (editingBillId) {
