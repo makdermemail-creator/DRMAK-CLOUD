@@ -406,6 +406,8 @@ export type SupplierProduct = {
   id: string;
   name: string;
   price: number;
+  quantity: number;
+  minThreshold: number;
 };
 
 export type Supplier = {

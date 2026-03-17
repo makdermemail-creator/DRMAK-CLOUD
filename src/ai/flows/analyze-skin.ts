@@ -54,12 +54,12 @@ export const analyzeSkinFlow = ai.defineFlow(
             .join('\n\n');
 
         const result = await ai.generate({
-            model: 'googleai/gemini-1.5-flash',
+            model: 'googleai/gemini-2.5-flash',
             prompt: [
                 {
                     media: {
-                        url: `data:image/jpeg;base64,${input.imageBase64}`,
-                        contentType: 'image/jpeg',
+                        url: `data:${input.imageBase64.includes('png') ? 'image/png' : 'image/jpeg'};base64,${input.imageBase64.replace(/^data:image\/\w+;base64,/, '')}`,
+                        contentType: input.imageBase64.includes('png') ? 'image/png' : 'image/jpeg',
                     },
                 },
                 {
@@ -80,7 +80,7 @@ export const analyzeSkinFlow = ai.defineFlow(
       Training Materials:
       ${trainingContext}
       
-      Output your response as JSON matching the schema provided.`,
+      IMPORTANT: You MUST respond strictly in valid JSON format matching the schema provided. Do not include markdown code blocks in your response.`,
                 },
             ],
             output: { schema: AnalyzeSkinOutputSchema },

@@ -72,6 +72,7 @@ import {
     Receipt,
     Store,
     Factory,
+    Activity,
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
@@ -234,7 +235,7 @@ export default function SupplierPage() {
     const addProduct = () => {
         setFormData(prev => ({
             ...prev,
-            products: [...(prev.products || []), { id: Date.now().toString(), name: '', price: 0 }]
+            products: [...(prev.products || []), { id: Date.now().toString(), name: '', price: 0, quantity: 0, minThreshold: 0 }]
         }));
     };
 
@@ -250,7 +251,7 @@ export default function SupplierPage() {
             ...prev,
             products: prev.products?.map((p, i) => {
                 if (i !== idx) return p;
-                if (field === 'price') {
+                if (field === 'price' || field === 'quantity' || field === 'minThreshold') {
                     const numVal = typeof value === 'string' ? (value === '' ? 0 : parseFloat(value)) : value;
                     return { ...p, [field]: isNaN(numVal as number) ? 0 : numVal };
                 }
@@ -683,9 +684,9 @@ export default function SupplierPage() {
                                                     "col-span-1 flex items-center justify-center font-black",
                                                     formData.type === 'Vendor' ? "text-indigo-200" : "text-emerald-200"
                                                 )}>{i + 1}</div>
-                                                <div className="col-span-7">
+                                                <div className="col-span-4">
                                                     <Input
-                                                        placeholder="Product/Item Name"
+                                                        placeholder="Product Name"
                                                         className={cn(
                                                             "border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
                                                             formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
@@ -701,13 +702,45 @@ export default function SupplierPage() {
                                                     )} />
                                                     <Input
                                                         type="number"
-                                                        placeholder="Base Price"
+                                                        placeholder="Price"
                                                         className={cn(
                                                             "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
                                                             formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
                                                         )}
                                                         value={p.price || ''}
                                                         onChange={e => updateProduct(i, 'price', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-span-2 relative">
+                                                    <Package className={cn(
+                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
+                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
+                                                    )} />
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Qty"
+                                                        className={cn(
+                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
+                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
+                                                        )}
+                                                        value={p.quantity || ''}
+                                                        onChange={e => updateProduct(i, 'quantity', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-span-2 relative">
+                                                    <Activity className={cn(
+                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
+                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
+                                                    )} />
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Min"
+                                                        className={cn(
+                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
+                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
+                                                        )}
+                                                        value={p.minThreshold || ''}
+                                                        onChange={e => updateProduct(i, 'minThreshold', e.target.value)}
                                                     />
                                                 </div>
                                                 <div className="col-span-1 flex justify-end">

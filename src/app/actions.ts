@@ -22,8 +22,8 @@ export async function analyzeSkinAction(input: AnalyzeSkinInput) {
   try {
     const result = await analyzeSkin(input);
     return { success: true, data: result };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in skin analysis action:', error);
-    return { success: false, error: 'Failed to analyze skin image.' };
+    return { success: false, error: error.message || 'Failed to analyze skin image.' };
   }
 }
