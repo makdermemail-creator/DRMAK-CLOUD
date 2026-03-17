@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useRouter } from 'next/navigation';
 import type { User, Lead, DailyPosting, DailyReport, DailyTask, SalesTraining, SalesTrainingCompletion } from '@/lib/types';
 import { LeadFormDialog } from '@/components/leads/LeadFormDialog';
 import { collection, query, where, orderBy, limit, doc, getDoc, addDoc, setDoc } from 'firebase/firestore';
@@ -18,6 +19,7 @@ import { Eye } from 'lucide-react';
 export default function SalesDashboardPage() {
     const firestore = useFirestore();
     const { user, isUserLoading: userLoading } = useUser();
+    const router = useRouter();
     const { toast } = useToast();
     const [isSyncing, setIsSyncing] = React.useState(false);
     const [sheetUrl, setSheetUrl] = React.useState<string | null>(null);
@@ -193,6 +195,13 @@ export default function SalesDashboardPage() {
         return completions?.some(c => c.trainingId === trainingId);
     };
 
+    // Redirect users that are not on the Sales team away from this page
+    React.useEffect(() => {
+        if (!userLoading && user && user.role !== 'Sales') {
+            router.replace('/');
+        }
+    }, [user, userLoading, router]);
+
     if (!mounted || userLoading || leadsLoading || postingsLoading || reportsLoading || tasksLoading || trainingsLoading || completionsLoading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -201,10 +210,10 @@ export default function SalesDashboardPage() {
         );
     }
 
-    if (!user) {
+    if (!user || user.role !== 'Sales') {
         return (
-            <div className="p-8 text-center">
-                <p className="text-muted-foreground">Please sign in to view your dashboard.</p>
+            <div className="flex justify-center items-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
     }

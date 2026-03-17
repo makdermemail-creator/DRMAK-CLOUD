@@ -265,6 +265,8 @@ const NavContent = () => {
     const isMainAdmin = React.useMemo(() => {
         const isTrueAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.role === 'Admin';
         const hasAnyManagementFlag = userProfile?.featureAccess?.['mgmt_clinic'] || userProfile?.featureAccess?.['mgmt_organization'] || userProfile?.featureAccess?.['mgmt_reports'];
+        // Operations Manager should NOT be treated as a grouped Main Admin to keep their sidebar focused
+        if (userProfile?.role === 'Operations Manager') return false;
         return isTrueAdmin || !!hasAnyManagementFlag;
     }, [userProfile]);
 
@@ -287,6 +289,15 @@ const NavContent = () => {
             baseAccessIds = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
+        } else if (userProfile?.role === 'Operations Manager') {
+            // Core Operations + Pharmacy + Reports + AI Tools
+            baseAccessIds = [
+                'dashboard', 
+                'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary',
+                'pharmacy.full', 
+                'reports.full', 
+                'aiTools'
+            ];
         } else if (userProfile) {
             baseAccessIds = ['dashboard', 'settings']; // Default
         }
@@ -336,42 +347,48 @@ const NavContent = () => {
         const activeGroups = viewMode === 'clinic' ? clinicGroups : (viewMode === 'reports' ? reportsGroups : organizationGroups);
 
         return (
-            <div className="space-y-4">
+            <div className="space-y-6">
                 {activeGroups.map((group) => {
                     const groupItems = allMenuItems.filter(item => group.ids.includes(item.id));
                     if (groupItems.length === 0) return null;
 
                     return (
-                        <SidebarGroup key={group.label} className="px-0">
-                            <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-4 mb-1">
+                        <SidebarGroup key={group.label} className="px-2">
+                            <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/40 px-4 mb-2">
                                 {group.label}
                             </SidebarGroupLabel>
                             <SidebarGroupContent>
-                                <SidebarMenu>
-                                    {groupItems.map((item) => (
-                                        item.isMenu ? (
+                                <SidebarMenu className="gap-1">
+                                    {groupItems.map((item) => {
+                                        const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                                        return item.isMenu ? (
                                             <DropdownMenu key={item.id}>
                                                 <SidebarMenuItem>
                                                     <Link href={item.href}>
                                                         <DropdownMenuTrigger asChild>
                                                             <SidebarMenuButton
-                                                                isActive={pathname.startsWith(item.href)}
+                                                                isActive={isActive}
                                                                 tooltip={item.label}
-                                                                className="w-full justify-between"
+                                                                className={cn(
+                                                                    "w-full justify-between transition-all duration-300 rounded-xl px-4 h-11",
+                                                                    isActive 
+                                                                        ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold" 
+                                                                        : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                                                )}
                                                             >
-                                                                <div className="flex items-center gap-2">
-                                                                    {item.icon && <item.icon />}
-                                                                    <span>{item.label}</span>
+                                                                <div className="flex items-center gap-3">
+                                                                    {item.icon && <item.icon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                                    <span className="text-sm tracking-tight">{item.label}</span>
                                                                 </div>
-                                                                {state === 'expanded' && <ChevronDown className="h-4 w-4" />}
+                                                                {state === 'expanded' && <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", isActive ? "text-white/70" : "text-slate-400")} />}
                                                             </SidebarMenuButton>
                                                         </DropdownMenuTrigger>
                                                     </Link>
                                                 </SidebarMenuItem>
-                                                <DropdownMenuContent side="right" align="start" className={cn(state === 'collapsed' ? "ml-1" : "ml-8")}>
+                                                <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                                                     {item.subItems?.map(subItem => (
-                                                        <DropdownMenuItem key={subItem.href} asChild>
-                                                            <Link href={subItem.href} className={cn(pathname === subItem.href && 'bg-accent')}>{subItem.label}</Link>
+                                                        <DropdownMenuItem key={subItem.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
+                                                            <Link href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
                                                         </DropdownMenuItem>
                                                     ))}
                                                 </DropdownMenuContent>
@@ -380,16 +397,23 @@ const NavContent = () => {
                                             <SidebarMenuItem key={item.id}>
                                                 <Link href={item.href}>
                                                     <SidebarMenuButton
-                                                        isActive={pathname === item.href}
+                                                        isActive={isActive}
                                                         tooltip={item.label}
+                                                        className={cn(
+                                                            "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
+                                                            isActive 
+                                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
+                                                                : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                                        )}
                                                     >
-                                                        {item.icon && <item.icon />}
-                                                        <span>{item.label}</span>
+                                                        {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                        <span className="text-sm tracking-tight">{item.label}</span>
+                                                        {isActive && <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                                                     </SidebarMenuButton>
                                                 </Link>
                                             </SidebarMenuItem>
-                                        )
-                                    ))}
+                                        );
+                                    })}
                                 </SidebarMenu>
                             </SidebarGroupContent>
                         </SidebarGroup>
@@ -413,17 +437,22 @@ const NavContent = () => {
         const insightItems = allMenuItems.filter(item => insightIds.includes(item.id));
 
         return (
-            <div className="space-y-4">
-                <SidebarGroup>
-                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4">Main</SidebarGroupLabel>
+            <div className="space-y-6">
+                <SidebarGroup className="px-2">
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/40 px-4 mb-2">Main</SidebarGroupLabel>
                     <SidebarGroupContent>
-                        <SidebarMenu>
+                        <SidebarMenu className="gap-1">
                             {overviewItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
-                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
-                                            {item.icon && <item.icon />}
-                                            <span>{item.label}</span>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
+                                            "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
+                                            pathname === item.href 
+                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
+                                                : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                        )}>
+                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                            <span className="text-sm tracking-tight">{item.label}</span>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -432,16 +461,21 @@ const NavContent = () => {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500 px-4">Quick Tools</SidebarGroupLabel>
+                <SidebarGroup className="px-2">
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500/60 px-4 mb-2">Quick Tools</SidebarGroupLabel>
                     <SidebarGroupContent>
-                        <SidebarMenu>
+                        <SidebarMenu className="gap-1">
                             {toolItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
-                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
-                                            {item.icon && <item.icon className="text-indigo-600" />}
-                                            <span className="font-bold text-slate-700">{item.label}</span>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
+                                            "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
+                                            pathname === item.href 
+                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
+                                                : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                        )}>
+                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-indigo-600")} />}
+                                            <span className="text-sm tracking-tight">{item.label}</span>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -450,16 +484,21 @@ const NavContent = () => {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4">Insights & Assignment</SidebarGroupLabel>
+                <SidebarGroup className="px-2">
+                    <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/40 px-4 mb-2">Insights & Assignment</SidebarGroupLabel>
                     <SidebarGroupContent>
-                        <SidebarMenu>
+                        <SidebarMenu className="gap-1">
                             {insightItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
                                     <Link href={item.href}>
-                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label}>
-                                            {item.icon && <item.icon />}
-                                            <span>{item.label}</span>
+                                        <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
+                                            "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
+                                            pathname === item.href 
+                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
+                                                : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                        )}>
+                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                            <span className="text-sm tracking-tight">{item.label}</span>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -472,31 +511,37 @@ const NavContent = () => {
     }
 
     return (
-        <SidebarMenu>
-            {mainMenuItems.map((item) =>
-                item.isMenu ? (
+        <SidebarMenu className="gap-1 px-1">
+            {mainMenuItems.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                return item.isMenu ? (
                     <DropdownMenu key={item.id}>
                         <SidebarMenuItem>
                             <Link href={item.href}>
                                 <DropdownMenuTrigger asChild>
                                     <SidebarMenuButton
-                                        isActive={pathname.startsWith(item.href)}
+                                        isActive={isActive}
                                         tooltip={item.label}
-                                        className="w-full justify-between"
+                                        className={cn(
+                                            "w-full justify-between transition-all duration-300 rounded-xl px-4 h-11",
+                                            isActive 
+                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold" 
+                                                : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                        )}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            {item.icon && <item.icon />}
-                                            <span>{item.label}</span>
+                                        <div className="flex items-center gap-3">
+                                            {item.icon && <item.icon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                            <span className="text-sm tracking-tight">{item.label}</span>
                                         </div>
-                                        {state === 'expanded' && <ChevronDown className="h-4 w-4" />}
+                                        {state === 'expanded' && <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", isActive ? "text-white/70" : "text-slate-400")} />}
                                     </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                             </Link>
                         </SidebarMenuItem>
-                        <DropdownMenuContent side="right" align="start" className={cn(state === 'collapsed' ? "ml-1" : "ml-8")}>
+                        <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                             {item.subItems?.map(subItem => (
-                                <DropdownMenuItem key={subItem.href} asChild>
-                                    <Link href={subItem.href} className={cn(pathname === subItem.href && 'bg-accent')}>{subItem.label}</Link>
+                                <DropdownMenuItem key={subItem.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
+                                    <Link href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
                                 </DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>
@@ -505,16 +550,23 @@ const NavContent = () => {
                     <SidebarMenuItem key={item.id}>
                         <Link href={item.href}>
                             <SidebarMenuButton
-                                isActive={pathname === item.href}
+                                isActive={isActive}
                                 tooltip={item.label}
+                                className={cn(
+                                    "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
+                                    isActive 
+                                        ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
+                                        : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
+                                )}
                             >
-                                {item.icon && <item.icon />}
-                                <span>{item.label}</span>
+                                {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                <span className="text-sm tracking-tight">{item.label}</span>
+                                {isActive && <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                             </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
-                )
-            )}
+                );
+            })}
 
             {moreMenuItems.length > 0 && (
                 <DropdownMenu>
@@ -523,27 +575,27 @@ const NavContent = () => {
                             <SidebarMenuButton
                                 isActive={pathname.startsWith('/more')}
                                 tooltip="More"
-                                className="w-full justify-between"
+                                className="w-full justify-between transition-all duration-300 rounded-xl px-4 h-11 hover:bg-indigo-50/50 text-slate-600"
                             >
-                                <div className="flex items-center gap-2">
-                                    <MoreHorizontal />
-                                    <span>More</span>
+                                <div className="flex items-center gap-3">
+                                    <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                                    <span className="text-sm tracking-tight">More</span>
                                 </div>
-                                {state === 'expanded' && <ChevronDown className="h-4 w-4" />}
+                                {state === 'expanded' && <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
                             </SidebarMenuButton>
                         </DropdownMenuTrigger>
                     </SidebarMenuItem>
-                    <DropdownMenuContent side="right" align="start" className={cn(state === 'collapsed' ? "ml-1" : "ml-8")}>
+                    <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                         {moreMenuItems.map(item => (
-                            <DropdownMenuItem key={item.href} asChild>
-                                <Link href={item.href} className={cn(pathname === item.href && 'bg-accent')}>{item.label}</Link>
+                            <DropdownMenuItem key={item.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
+                                <Link href={item.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === item.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{item.label}</Link>
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
         </SidebarMenu>
-    )
+    );
 }
 
 export default function Nav() {
@@ -555,38 +607,47 @@ export default function Nav() {
     };
 
     return (
-        <>
-            <SidebarHeader>
-                <div className="flex items-center gap-2 p-2">
-                    <Icon className="w-8 h-8 text-primary" />
+        <div className="flex flex-col h-full bg-white/40 dark:bg-slate-950/40 backdrop-blur-xl border-r border-indigo-100/50 dark:border-slate-800/50">
+            <SidebarHeader className="border-b border-indigo-50/50 dark:border-slate-800/50">
+                <div className="flex items-center gap-3 p-4">
+                    <div className="bg-gradient-to-tr from-indigo-600 to-violet-600 p-2 rounded-2xl shadow-indigo-200 shadow-lg dark:shadow-none">
+                        <Icon className="w-6 h-6 text-white" />
+                    </div>
                     {state === 'expanded' && (
-                        <h1 className="font-bold text-lg font-headline">SkinSmith</h1>
+                        <div className="flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-2 duration-500">
+                            <h1 className="font-black text-xl font-headline tracking-tighter text-slate-800 dark:text-white">SkinSmith</h1>
+                            <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-500/70 -mt-1 leading-none">Clinic Manager</span>
+                        </div>
                     )}
                 </div>
             </SidebarHeader>
 
-            <SidebarContent className="p-2">
+            <SidebarContent className="p-3 scrollbar-hide">
                 <NavContent />
             </SidebarContent>
 
-            <SidebarFooter className="p-2">
-                <SidebarMenu>
+            <SidebarFooter className="p-3 border-t border-indigo-50/50 dark:border-slate-800/50 bg-indigo-50/20 dark:bg-slate-900/20">
+                <SidebarMenu className="gap-1">
                     <SidebarMenuItem>
                         <Link href="/settings">
-                            <SidebarMenuButton tooltip="Settings">
-                                <Settings />
-                                <span>Settings</span>
+                            <SidebarMenuButton className="h-10 rounded-xl hover:bg-white dark:hover:bg-slate-800 transition-all duration-300 group" tooltip="Settings">
+                                <Settings className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+                                <span className="text-sm font-medium text-slate-600 group-hover:text-slate-900 dark:group-hover:text-slate-200">Settings</span>
                             </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <SidebarMenuButton tooltip="Logout" onClick={handleLogout}>
-                            <LogOut />
-                            <span>Logout</span>
+                        <SidebarMenuButton 
+                            className="h-10 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-300 group" 
+                            tooltip="Logout" 
+                            onClick={handleLogout}
+                        >
+                            <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                            <span className="text-sm font-medium text-slate-600 group-hover:text-red-600 dark:group-hover:text-red-400">Logout</span>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
-        </>
+        </div>
     );
 }

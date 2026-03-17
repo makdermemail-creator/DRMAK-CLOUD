@@ -38,25 +38,28 @@ export interface PharmacyItem {
     name: string;
     sellingPrice: number;
     quantity: number;
-    rack?: 'A' | 'B' | 'C' | 'D' | 'E';
+    rack?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
 }
 
 export default function InventoryPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { searchTerm, setSearchTerm } = useSearch();
+    const [rackFilter, setRackFilter] = React.useState<string>('');
     const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
     const { data: inventoryItems, isLoading } = useCollection<PharmacyItem>(pharmacyRef);
 
     const filteredItems = React.useMemo(() => {
         if (!inventoryItems) return [];
         const term = searchTerm.toLowerCase().trim();
-        if (!term) return inventoryItems;
-        return inventoryItems.filter(item =>
-            item.name.toLowerCase().includes(term) ||
-            (item.rack && item.rack.toLowerCase().includes(term))
-        );
-    }, [inventoryItems, searchTerm]);
+        return inventoryItems.filter(item => {
+            const matchesSearch = !term ||
+                item.name.toLowerCase().includes(term) ||
+                (item.rack && item.rack.toLowerCase().includes(term));
+            const matchesRack = !rackFilter || item.rack === rackFilter;
+            return matchesSearch && matchesRack;
+        });
+    }, [inventoryItems, searchTerm, rackFilter]);
 
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
     const [editingItem, setEditingItem] = React.useState<PharmacyItem | null>(null);
@@ -127,17 +130,34 @@ export default function InventoryPage() {
                     </h2>
                     <p className="text-muted-foreground">Manage physical stock, pharmacy items, and material pricing.</p>
                 </div>
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                    <div className="relative w-full md:w-72">
+                <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+                    <div className="relative w-full md:w-60">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             type="search"
-                            placeholder="Search inventory..."
+                            placeholder="Search by name..."
                             className="pl-8 w-full"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    <Select value={rackFilter} onValueChange={setRackFilter}>
+                        <SelectTrigger className="w-36 shrink-0">
+                            <SelectValue placeholder="All Racks" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">All Racks</SelectItem>
+                            <SelectItem value="A">Rack A</SelectItem>
+                            <SelectItem value="B">Rack B</SelectItem>
+                            <SelectItem value="C">Rack C</SelectItem>
+                            <SelectItem value="D">Rack D</SelectItem>
+                            <SelectItem value="E">Rack E</SelectItem>
+                            <SelectItem value="F">Rack F</SelectItem>
+                            <SelectItem value="G">Rack G</SelectItem>
+                            <SelectItem value="H">Rack H</SelectItem>
+                            <SelectItem value="I">Rack I</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Button onClick={() => handleOpenDialog()} className="shrink-0">
                         <Plus className="h-4 w-4 mr-2" /> Add Item
                     </Button>
@@ -253,6 +273,10 @@ export default function InventoryPage() {
                                     <SelectItem value="C">Rack C</SelectItem>
                                     <SelectItem value="D">Rack D</SelectItem>
                                     <SelectItem value="E">Rack E</SelectItem>
+                                    <SelectItem value="F">Rack F</SelectItem>
+                                    <SelectItem value="G">Rack G</SelectItem>
+                                    <SelectItem value="H">Rack H</SelectItem>
+                                    <SelectItem value="I">Rack I</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

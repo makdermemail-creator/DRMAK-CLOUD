@@ -89,7 +89,7 @@ import {
     doc,
     setDoc
 } from 'firebase/firestore';
-import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork } from '@/lib/types';
+import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay } from 'date-fns';
@@ -442,7 +442,7 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
                                                         className="relative bg-card text-card-foreground border rounded-lg shadow-sm p-3 hover:shadow-md transition-shadow cursor-default overflow-hidden group/card"
                                                     >
                                                         {/* Status Color Strip */}
-                                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusStyles[apt.status as AppointmentStatus].split(' ')[0]}`} />
+                                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${(statusStyles[apt.status as AppointmentStatus] || 'bg-gray-400').split(' ')[0]}`} />
 
                                                         <div className="pl-2 flex items-start justify-between">
                                                             <div>
@@ -453,7 +453,7 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
                                                             </div>
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
-                                                                    <Badge className={`font-semibold text-[0.65rem] uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${statusStyles[apt.status as AppointmentStatus]}`}>
+                                                                    <Badge className={`font-semibold text-[0.65rem] uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${statusStyles[apt.status as AppointmentStatus] || 'bg-gray-100 text-gray-800'}`}>
                                                                         {apt.status}
                                                                     </Badge>
                                                                 </DropdownMenuTrigger>
@@ -782,7 +782,7 @@ const AdminDashboard = () => {
             billingRecords.forEach(record => {
                 const recordDate = startOfDay(new Date(record.billingDate));
                 if (recordDate.getTime() === selectedDayStart.getTime()) {
-                    revenue += (record.consultationCharges || 0) + (record.procedureCharges || 0) + (record.medicineCharges || 0);
+                    revenue += record.grandTotal || record.totalAmount || ((record.consultationCharges || 0) + (record.procedureCharges || 0) + (record.medicineCharges || 0));
                 }
             });
         }
@@ -1240,12 +1240,15 @@ const ReportsDashboard = () => {
 
     const financialStats = React.useMemo(() => {
         if (!billingRecords) return { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 };
-        return billingRecords.reduce((acc, curr) => ({
-            totalRevenue: acc.totalRevenue + (curr.totalAmount || 0),
-            consultation: acc.consultation + (curr.consultationCharges || 0),
-            procedures: acc.procedures + (curr.procedureCharges || 0),
-            medicines: acc.medicines + (curr.medicineCharges || 0),
-        }), { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 });
+        return billingRecords.reduce((acc, curr) => {
+            const billTotal = curr.grandTotal || curr.totalAmount || ((curr.consultationCharges || 0) + (curr.procedureCharges || 0) + (curr.medicineCharges || 0));
+            return {
+                totalRevenue: acc.totalRevenue + billTotal,
+                consultation: acc.consultation + (curr.consultationCharges || 0),
+                procedures: acc.procedures + (curr.procedureCharges || 0),
+                medicines: acc.medicines + (curr.medicineCharges || 0),
+            };
+        }, { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 });
     }, [billingRecords]);
 
     const employeePerformance = React.useMemo(() => {
@@ -1538,17 +1541,25 @@ export default function Dashboard() {
         [user]);
 
     React.useEffect(() => {
-        if (!isUserLoading && user && !isSuperUser && viewMode === 'none') {
-            const hasOrg = !!user.featureAccess?.['mgmt_organization'];
-            const hasClinic = !!user.featureAccess?.['mgmt_clinic'];
-            const hasReports = !!user.featureAccess?.['mgmt_reports'];
-
-            if (hasClinic && !hasOrg && !hasReports) {
+        if (!isUserLoading && user && viewMode === 'none') {
+            // Operations Manager always goes straight to the organization dashboard
+            if (user.role === 'Operations Manager') {
                 setViewMode('clinic');
-            } else if (hasOrg && !hasClinic && !hasReports) {
-                setViewMode('organization');
-            } else if (hasReports && !hasOrg && !hasClinic) {
-                setViewMode('reports');
+                return;
+            }
+
+            if (!isSuperUser) {
+                const hasOrg = !!user.featureAccess?.['mgmt_organization'];
+                const hasClinic = !!user.featureAccess?.['mgmt_clinic'];
+                const hasReports = !!user.featureAccess?.['mgmt_reports'];
+
+                if (hasClinic && !hasOrg && !hasReports) {
+                    setViewMode('clinic');
+                } else if (hasOrg && !hasClinic && !hasReports) {
+                    setViewMode('organization');
+                } else if (hasReports && !hasOrg && !hasClinic) {
+                    setViewMode('reports');
+                }
             }
         }
     }, [isUserLoading, user, isSuperUser, viewMode, setViewMode]);
@@ -1592,9 +1603,7 @@ export default function Dashboard() {
         </div>;
     }
 
-    if (user?.role === 'Operations Manager') {
-        // Fall through to Main Admin Logic for workspace selection
-    }
+    if (user?.role === 'Operations Manager') return <AdminDashboard />;
 
     // Main Admin Logic
     if (isMainAdmin) {

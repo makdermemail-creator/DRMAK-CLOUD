@@ -127,7 +127,7 @@ export type PharmacyItem = {
   quantity: number;
   expiryDate: string; // ISO string
   active: boolean;
-  rack?: 'A' | 'B' | 'C' | 'D' | 'E';
+  rack?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
 };
 
 export type Visit = {
@@ -144,9 +144,11 @@ export type Visit = {
 export type BillingRecord = {
   id: string;
   patientMobileNumber: string;
-  consultationCharges: number;
-  procedureCharges: number;
-  medicineCharges: number;
+  consultationCharges?: number;
+  procedureCharges?: number;
+  medicineCharges?: number;
+  grandTotal?: number;
+  totalAmount?: number;
   paymentMethod: string;
   billingDate: string; // ISO String
 }
