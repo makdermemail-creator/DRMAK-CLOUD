@@ -290,12 +290,10 @@ const NavContent = () => {
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
-            // Core Operations + Pharmacy + Reports + AI Tools
+            // Core Operations + AI Tools (Removed Pharmacy and Reports)
             baseAccessIds = [
                 'dashboard', 
                 'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary',
-                'pharmacy.full', 
-                'reports.full', 
                 'aiTools'
             ];
         } else if (userProfile) {

@@ -16,16 +16,40 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, PlusCircle, Download, Printer, Eye, Edit, Trash2, ClipboardList } from 'lucide-react';
+import { Search, PlusCircle, Download, Printer, Eye, Edit, Trash2, ClipboardList, History as HistoryIcon } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { collection, doc, query, where } from 'firebase/firestore';
+import type { Supplier } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, DollarSign } from 'lucide-react';
 
 const COLORS = ['hsl(var(--primary))'];
 
 
 export default function AccountsPage() {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const [selectedDistributorId, setSelectedDistributorId] = React.useState<string>('');
+    const [paymentAmount, setPaymentAmount] = React.useState<number>(0);
+    const [isSubmittingPayment, setIsSubmittingPayment] = React.useState(false);
+
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+    const { data: allSuppliers } = useCollection<Supplier>(suppliersRef);
+
+    const distributors = React.useMemo(() => {
+        if (!allSuppliers) return [];
+        return allSuppliers.filter(s => s.type === 'Distributor');
+    }, [allSuppliers]);
+
+    const selectedDistributor = React.useMemo(() => {
+        return distributors.find(d => d.id === selectedDistributorId);
+    }, [distributors, selectedDistributorId]);
 
     const expenseData: any[] = [];
     const pieData = [{ name: 'Office Supplies', value: 0 }];
@@ -169,57 +193,159 @@ export default function AccountsPage() {
                 </div>
             </TabsContent>
             <TabsContent value="bill-payments" className="pt-6">
-                 <div className="space-y-6">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <Select><SelectTrigger className="w-[280px]"><SelectValue placeholder="Select Supplier" /></SelectTrigger><SelectContent/></Select>
-                        <DatePickerWithRange />
-                    </div>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>DOCUMENT NO.</TableHead>
-                                <TableHead>SUPPLIER</TableHead>
-                                <TableHead>STOCK DATE</TableHead>
-                                <TableHead>SUPPLIER INVOICE#</TableHead>
-                                <TableHead>SUPPLIER INVOICE DATE</TableHead>
-                                <TableHead>GRAND TOTAL</TableHead>
-                                <TableHead>AMOUNT DUE</TableHead>
-                                <TableHead>TOTAL PAID</TableHead>
-                                <TableHead>ACTION</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                             <TableRow>
-                                <TableCell colSpan={9} className="h-48 text-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <ClipboardList className="h-16 w-16 text-muted-foreground" />
-                                        <p className="font-semibold">There is no stock payment to collect.</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        </TableBody>
-                    </Table>
+                     <div className="space-y-6">
+                        <div className="flex flex-wrap items-center gap-4 p-4 bg-muted/30 rounded-2xl">
+                            <div className="space-y-1">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">Select Active Distributor</Label>
+                                <Select value={selectedDistributorId} onValueChange={setSelectedDistributorId}>
+                                    <SelectTrigger className="w-[300px] h-12 rounded-xl bg-background border-none shadow-sm font-bold">
+                                        <SelectValue placeholder="Select Supplier" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {distributors.map(d => (
+                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <DatePickerWithRange />
+                        </div>
 
-                    <div>
-                        <h3 className="text-lg font-semibold mb-2">Opening Balance Payments</h3>
+                        {selectedDistributor ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-4">
+                                <Card className="border-none shadow-lg bg-red-50 dark:bg-red-950/10">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-bold text-red-600 uppercase tracking-widest">Total Liability</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="text-3xl font-black text-red-700">PKR {selectedDistributor.currentBalance?.toLocaleString()}</div>
+                                        <p className="text-xs text-red-600/70 mt-1 font-medium">Outstanding amount due</p>
+                                    </CardContent>
+                                </Card>
+                                <Card className="border-none shadow-lg bg-blue-50 dark:bg-blue-950/10">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-bold text-blue-600 uppercase tracking-widest">Credit Threshold</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="text-3xl font-black text-blue-700">PKR {selectedDistributor.creditLimit?.toLocaleString()}</div>
+                                        <p className="text-xs text-blue-600/70 mt-1 font-medium">Safe operating limit</p>
+                                    </CardContent>
+                                </Card>
+                                <Card className="border-none shadow-lg bg-emerald-50 dark:bg-emerald-950/10 md:col-span-2 lg:col-span-1">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-bold text-emerald-600 uppercase tracking-widest">Make Payment</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex items-center gap-3">
+                                        <div className="relative flex-1">
+                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+                                            <Input 
+                                                type="number" 
+                                                placeholder="Enter Amount" 
+                                                className="h-12 pl-9 rounded-xl border-none bg-background shadow-inner font-black text-lg"
+                                                value={paymentAmount || ''}
+                                                onChange={e => {
+                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                    setPaymentAmount(isNaN(val) ? 0 : val);
+                                                }}
+                                            />
+                                        </div>
+                                        <Button 
+                                            onClick={async () => {
+                                                if (!firestore || !selectedDistributorId || paymentAmount <= 0) return;
+                                                setIsSubmittingPayment(true);
+                                                try {
+                                                    const newBalance = (selectedDistributor.currentBalance || 0) - paymentAmount;
+                                                    await updateDocumentNonBlocking(doc(firestore, 'suppliers', selectedDistributorId), {
+                                                        currentBalance: newBalance
+                                                    });
+                                                    await addDocumentNonBlocking(collection(firestore, 'supplierPayments'), {
+                                                        supplierId: selectedDistributorId,
+                                                        supplierName: selectedDistributor.name,
+                                                        amount: paymentAmount,
+                                                        date: new Date().toISOString(),
+                                                        type: 'Bill Payment'
+                                                    });
+                                                    toast({ title: 'Payment Recorded', description: `Successfully paid PKR ${paymentAmount.toLocaleString()} to ${selectedDistributor.name}.` });
+                                                    setPaymentAmount(0);
+                                                } finally {
+                                                    setIsSubmittingPayment(false);
+                                                }
+                                            }}
+                                            disabled={isSubmittingPayment || paymentAmount <= 0}
+                                            className="h-12 px-6 rounded-xl font-black bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200"
+                                        >
+                                            {isSubmittingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Pay'}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        ) : (
+                            <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed rounded-3xl text-muted-foreground gap-3">
+                                <ClipboardList className="h-12 w-12 opacity-20" />
+                                <p className="font-bold">Select a distributor to manage financial operations.</p>
+                            </div>
+                        )}
+
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>DOCUMENT NO.</TableHead>
                                     <TableHead>SUPPLIER</TableHead>
-                                    <TableHead>DUE AMOUNT</TableHead>
+                                    <TableHead>STOCK DATE</TableHead>
+                                    <TableHead>SUPPLIER INVOICE#</TableHead>
+                                    <TableHead>SUPPLIER INVOICE DATE</TableHead>
+                                    <TableHead>GRAND TOTAL</TableHead>
+                                    <TableHead>AMOUNT DUE</TableHead>
+                                    <TableHead>TOTAL PAID</TableHead>
                                     <TableHead>ACTION</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 <TableRow>
-                                    <TableCell>Rs.</TableCell>
-                                    <TableCell>0.0</TableCell>
-                                    <TableCell><Button>Supplier Payment</Button></TableCell>
+                                    <TableCell colSpan={9} className="h-48 text-center">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <ClipboardList className="h-16 w-16 text-muted-foreground" />
+                                            <p className="font-semibold text-muted-foreground/60">No pending stock invoices for selected parameters.</p>
+                                        </div>
+                                    </TableCell>
                                 </TableRow>
                             </TableBody>
                         </Table>
-                    </div>
-                 </div>
+
+                        {selectedDistributor && (
+                            <div className="p-6 rounded-3xl bg-muted/10 border border-muted/20">
+                                <h3 className="text-xl font-black mb-4 flex items-center gap-2">
+                                    <HistoryIcon className="h-6 w-6 text-primary" /> Payment & Opening Balance History
+                                </h3>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>DESCRIPTION</TableHead>
+                                            <TableHead>INITIAL DUE</TableHead>
+                                            <TableHead>CURRENT LIABILITY</TableHead>
+                                            <TableHead>STATUS</TableHead>
+                                            <TableHead className="text-right">ACTION</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        <TableRow className="group">
+                                            <TableCell className="font-bold">Legacy Opening Balance</TableCell>
+                                            <TableCell>Rs. {selectedDistributor.openingBalance?.toLocaleString()}</TableCell>
+                                            <TableCell className="text-red-600 font-bold">Rs. {selectedDistributor.currentBalance?.toLocaleString()}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={selectedDistributor.currentBalance! > 0 ? "destructive" : "default"}>
+                                                    {selectedDistributor.currentBalance! > 0 ? "Pending" : "Cleared"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" variant="outline" className="rounded-xl font-bold">View Ledger</Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                     </div>
             </TabsContent>
             <TabsContent value="doctor-shares" className="pt-6">
                  <div className="space-y-6">

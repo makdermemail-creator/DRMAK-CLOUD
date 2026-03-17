@@ -128,6 +128,7 @@ export type PharmacyItem = {
   expiryDate: string; // ISO string
   active: boolean;
   rack?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
+  supplierId?: string;
 };
 
 export type Visit = {
@@ -163,6 +164,7 @@ export type PharmacyRack = {
 export type StockEntry = {
   id: string;
   supplier: string;
+  supplierId?: string;
   document: string;
   sku: number;
   createdAt: string;
@@ -397,3 +399,32 @@ export type FollowUp = {
   status: 'Pending' | 'Completed' | 'Cancelled';
   createdAt: string; // ISO string
 }
+
+export type SupplierType = 'Vendor' | 'Distributor';
+
+export type SupplierProduct = {
+  id: string;
+  name: string;
+  price: number;
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  category: string;
+  status: 'Active' | 'Inactive';
+  notes: string;
+  createdAt: string;
+  type: SupplierType;
+  // Vendor specific (Product-to-Product)
+  products?: SupplierProduct[];
+  // Distributor specific (Bill-to-Bill)
+  openingBalance?: number;
+  currentBalance?: number;
+  creditLimit?: number;
+};

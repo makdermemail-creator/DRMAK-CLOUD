@@ -44,6 +44,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from '@/components/ui/tabs';
+import {
     Truck,
     Plus,
     Search,
@@ -58,24 +64,20 @@ import {
     CheckCircle2,
     XCircle,
     Loader2,
+    PlusCircle,
+    DollarSign,
+    Package,
+    History,
+    FileText,
+    Receipt,
+    Store,
+    Factory,
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-
-interface Supplier {
-    id: string;
-    name: string;
-    contactPerson: string;
-    phone: string;
-    email: string;
-    address: string;
-    city: string;
-    category: string;  // e.g. 'Pharmaceutical', 'Medical Equipment', 'Cosmetics', etc.
-    status: 'Active' | 'Inactive';
-    notes: string;
-    createdAt: string;
-}
+import type { Supplier, SupplierProduct, SupplierType } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const SUPPLIER_CATEGORIES = [
     'Pharmaceutical',
@@ -93,9 +95,14 @@ const emptyForm = (): Omit<Supplier, 'id' | 'createdAt'> => ({
     email: '',
     address: '',
     city: '',
-    category: '',
+    category: 'Pharmaceutical',
     status: 'Active',
     notes: '',
+    type: 'Vendor',
+    products: [],
+    openingBalance: 0,
+    currentBalance: 0,
+    creditLimit: 0,
 });
 
 export default function SupplierPage() {
@@ -113,6 +120,7 @@ export default function SupplierPage() {
     const [search, setSearch] = React.useState('');
     const [filterCategory, setFilterCategory] = React.useState('all');
     const [filterStatus, setFilterStatus] = React.useState('all');
+    const [filterType, setFilterType] = React.useState('all');
 
     // Dialog State
     const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -135,9 +143,10 @@ export default function SupplierPage() {
                 (s.city || '').toLowerCase().includes(search.toLowerCase());
             const matchesCategory = filterCategory === 'all' || s.category === filterCategory;
             const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
-            return matchesSearch && matchesCategory && matchesStatus;
+            const matchesType = filterType === 'all' || s.type === filterType;
+            return matchesSearch && matchesCategory && matchesStatus && matchesType;
         });
-    }, [suppliers, search, filterCategory, filterStatus]);
+    }, [suppliers, search, filterCategory, filterStatus, filterType]);
 
     const stats = React.useMemo(() => {
         const total = suppliers?.length || 0;
@@ -164,6 +173,11 @@ export default function SupplierPage() {
             category: supplier.category || '',
             status: supplier.status || 'Active',
             notes: supplier.notes || '',
+            type: supplier.type || 'Vendor',
+            products: supplier.products || [],
+            openingBalance: supplier.openingBalance || 0,
+            currentBalance: supplier.currentBalance || 0,
+            creditLimit: supplier.creditLimit || 0,
         });
         setDialogOpen(true);
     };
@@ -194,109 +208,277 @@ export default function SupplierPage() {
 
     const handleDelete = async () => {
         if (!firestore || !deleteTarget) return;
-        await deleteDocumentNonBlocking(doc(firestore, 'suppliers', deleteTarget.id));
-        toast({ title: 'Supplier Deleted', description: `${deleteTarget.name} has been removed.` });
+        const targetId = deleteTarget.id;
+        const targetName = deleteTarget.name;
+
+        // 1. Close dialog immediately to restore UI interactivity
         setDeleteDialogOpen(false);
-        setDeleteTarget(null);
+
+        // 2. Perform deletion
+        try {
+            await deleteDocumentNonBlocking(doc(firestore, 'suppliers', targetId));
+            toast({ title: 'Supplier Deleted', description: `${targetName} has been removed.` });
+        } catch (error) {
+            console.error("Deletion error:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete supplier.' });
+        } finally {
+            // 3. Clear target state after animation buffer
+            setTimeout(() => setDeleteTarget(null), 100);
+        }
     };
 
-    const handleChange = (field: string, value: string) => {
+    const handleChange = (field: string, value: string | number) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
+    const addProduct = () => {
+        setFormData(prev => ({
+            ...prev,
+            products: [...(prev.products || []), { id: Date.now().toString(), name: '', price: 0 }]
+        }));
+    };
+
+    const removeProduct = (idx: number) => {
+        setFormData(prev => ({
+            ...prev,
+            products: prev.products?.filter((_, i) => i !== idx)
+        }));
+    };
+
+    const updateProduct = (idx: number, field: keyof SupplierProduct, value: string | number) => {
+        setFormData(prev => ({
+            ...prev,
+            products: prev.products?.map((p, i) => {
+                if (i !== idx) return p;
+                if (field === 'price') {
+                    const numVal = typeof value === 'string' ? (value === '' ? 0 : parseFloat(value)) : value;
+                    return { ...p, [field]: isNaN(numVal as number) ? 0 : numVal };
+                }
+                return { ...p, [field]: value };
+            })
+        }));
+    };
+
+    const renderSupplierTable = (data: Supplier[]) => (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Contact Info</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Clearing Logic</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {data.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                            <div className="flex flex-col items-center gap-2">
+                                <Truck className="h-8 w-8 opacity-30" />
+                                <p className="font-medium">No suppliers found</p>
+                                <p className="text-xs">Add your first supplier to get started.</p>
+                            </div>
+                        </TableCell>
+                    </TableRow>
+                ) : (
+                    data.map(supplier => (
+                        <TableRow key={supplier.id} className="group hover:bg-muted/50 transition-colors">
+                            <TableCell>
+                                <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm transition-transform group-hover:scale-105",
+                                        supplier.type === 'Vendor' ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-950/30" : "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30"
+                                    )}>
+                                        {supplier.type === 'Vendor' ? <Store className="h-5 w-5" /> : <Truck className="h-5 w-5" />}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-base leading-none mb-1">{supplier.name}</p>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Users2 className="h-3 w-3" /> {supplier.contactPerson || 'No contact person'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </TableCell>
+                            <TableCell>
+                                <Badge variant="secondary" className={cn(
+                                    "font-semibold",
+                                    supplier.type === 'Vendor' ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20"
+                                )}>
+                                    {supplier.type}
+                                </Badge>
+                            </TableCell>
+                            <TableCell>
+                                <div className="space-y-1">
+                                    {supplier.phone && (
+                                        <div className="flex items-center gap-1.5 text-xs font-medium">
+                                            <Phone className="h-3 w-3 text-primary" />
+                                            {supplier.phone}
+                                        </div>
+                                    )}
+                                    {supplier.email && (
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <Mail className="h-3 w-3" />
+                                            {supplier.email}
+                                        </div>
+                                    )}
+                                </div>
+                            </TableCell>
+                            <TableCell>
+                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-bold">
+                                    {supplier.category}
+                                </Badge>
+                            </TableCell>
+                            <TableCell>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <History className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-xs font-semibold">
+                                            {supplier.type === 'Vendor' ? 'Product-to-Product' : 'Bill-to-Bill'}
+                                        </span>
+                                    </div>
+                                    {supplier.type === 'Distributor' && supplier.currentBalance !== undefined && (
+                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                            <DollarSign className="h-2.5 w-2.5" />
+                                            Balance: <span className={cn(supplier.currentBalance > 0 ? "text-red-500 font-bold" : "text-green-600 font-bold")}>
+                                                PKR {supplier.currentBalance.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {supplier.type === 'Vendor' && supplier.products && (
+                                        <div className="text-[10px] text-muted-foreground">
+                                            {supplier.products.length} products listed
+                                        </div>
+                                    )}
+                                </div>
+                            </TableCell>
+                            <TableCell>
+                                <Badge
+                                    variant={supplier.status === 'Active' ? 'default' : 'outline'}
+                                    className={cn(
+                                        "rounded-full px-3",
+                                        supplier.status === 'Active' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 shadow-sm' : 'text-muted-foreground'
+                                    )}
+                                >
+                                    {supplier.status}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48 shadow-xl">
+                                        <DropdownMenuItem onClick={() => openEditDialog(supplier)} className="cursor-pointer">
+                                            <Pencil className="mr-2 h-4 w-4 text-primary" />
+                                            Edit Details
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            className="text-red-600 focus:text-red-600 cursor-pointer"
+                                            onClick={() => { setDeleteTarget(supplier); setDeleteDialogOpen(true); }}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Remove Supplier
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
+                        </TableRow>
+                    ))
+                )}
+            </TableBody>
+        </Table>
+    );
+
     if (isLoading) {
         return (
-            <div className="flex min-h-[60vh] items-center justify-center">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div className="flex min-h-[60vh] items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                    <p className="text-sm font-medium animate-pulse">Loading Suppliers...</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 p-1">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                        <Truck className="h-8 w-8 text-primary" />
-                        Supplier Management
-                    </h1>
-                    <p className="text-muted-foreground mt-1">
-                        Manage all clinic vendors and supply partners.
-                    </p>
+        <div className="space-y-8 p-4 md:p-8 bg-muted/10 min-h-screen">
+            {/* Header Redesign */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-primary/10 rounded-2xl">
+                            <Truck className="h-8 w-8 text-primary" />
+                        </div>
+                        <div>
+                            <h1 className="text-4xl font-extrabold tracking-tight">Supplier Ecosystem</h1>
+                            <p className="text-muted-foreground text-lg">
+                                Orchestrate your Vendors and Distributors with precision.
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <Button onClick={openAddDialog} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add Supplier
+                <Button onClick={openAddDialog} className="h-14 px-8 gap-2 rounded-2xl shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all text-lg font-bold">
+                    <PlusCircle className="h-6 w-6" />
+                    Board New Partner
                 </Button>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Suppliers</CardTitle>
-                        <Users2 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.total}</div>
-                        <p className="text-xs text-muted-foreground">Registered vendors</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active</CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-                        <p className="text-xs text-muted-foreground">Currently active</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Inactive</CardTitle>
-                        <XCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-muted-foreground">{stats.inactive}</div>
-                        <p className="text-xs text-muted-foreground">Paused or discontinued</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Categories</CardTitle>
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.categories}</div>
-                        <p className="text-xs text-muted-foreground">Distinct supply types</p>
-                    </CardContent>
-                </Card>
+            {/* Premium Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                    { label: 'Total Partners', val: stats.total, icon: Users2, color: 'text-blue-500', bg: 'bg-blue-50', sub: 'Active directory' },
+                    { label: 'Active Status', val: stats.active, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50', sub: 'Operating ready' },
+                    { label: 'Inactive/Paused', val: stats.inactive, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', sub: 'Need review' },
+                    { label: 'Total Categories', val: stats.categories, icon: Building2, color: 'text-amber-500', bg: 'bg-amber-50', sub: 'Supply diversity' },
+                ].map((stat, i) => (
+                    <Card key={i} className="border-none shadow-md bg-gradient-to-br from-card to-muted/30 overflow-hidden relative group hover:scale-[1.02] transition-transform">
+                        <div className={cn("absolute top-0 right-0 p-8 opacity-5 transition-opacity group-hover:opacity-10", stat.bg)}>
+                            <stat.icon size={120} />
+                        </div>
+                        <CardHeader className="pb-2">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
+                                <div className={cn("p-2 rounded-lg", stat.bg)}>
+                                    <stat.icon className={cn("h-5 w-5", stat.color)} />
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-black">{stat.val}</div>
+                            <p className="text-xs text-muted-foreground mt-1 font-medium">{stat.sub}</p>
+                        </CardContent>
+                    </Card>
+                ))}
             </div>
 
-            {/* Table Card */}
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {/* Main Content with Tabs */}
+            <Card className="border-none shadow-xl bg-card/60 backdrop-blur-xl">
+                <CardHeader className="border-b bg-muted/10">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         <div>
-                            <CardTitle>Supplier Directory</CardTitle>
-                            <CardDescription>
-                                {filteredSuppliers.length} supplier{filteredSuppliers.length !== 1 ? 's' : ''} found
+                            <CardTitle className="text-2xl font-black">Supplier Directory</CardTitle>
+                            <CardDescription className="text-base">
+                                Filter and manage your supply chain partners.
                             </CardDescription>
                         </div>
-                        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                            <div className="relative flex-1 sm:flex-none">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                 <Input
-                                    placeholder="Search name, city, phone..."
-                                    className="pl-9 w-full sm:w-56"
+                                    placeholder="Search ecosystem..."
+                                    className="pl-10 w-full sm:w-80 h-12 rounded-xl bg-background shadow-inner"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                 />
                             </div>
                             <Select value={filterCategory} onValueChange={setFilterCategory}>
-                                <SelectTrigger className="w-[160px]">
+                                <SelectTrigger className="w-[180px] h-12 rounded-xl bg-background">
                                     <SelectValue placeholder="All Categories" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -307,7 +489,7 @@ export default function SupplierPage() {
                                 </SelectContent>
                             </Select>
                             <Select value={filterStatus} onValueChange={setFilterStatus}>
-                                <SelectTrigger className="w-[130px]">
+                                <SelectTrigger className="w-[140px] h-12 rounded-xl bg-background">
                                     <SelectValue placeholder="All Status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -316,264 +498,386 @@ export default function SupplierPage() {
                                     <SelectItem value="Inactive">Inactive</SelectItem>
                                 </SelectContent>
                             </Select>
+                            <Select value={filterType} onValueChange={setFilterType}>
+                                <SelectTrigger className="w-[160px] h-12 rounded-xl bg-background border-primary/20">
+                                    <SelectValue placeholder="Partner Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Every Type</SelectItem>
+                                    <SelectItem value="Vendor">Vendors Only</SelectItem>
+                                    <SelectItem value="Distributor">Distributors Only</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Supplier</TableHead>
-                                <TableHead>Contact Person</TableHead>
-                                <TableHead>Contact Info</TableHead>
-                                <TableHead>Location</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredSuppliers.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <Truck className="h-8 w-8 opacity-30" />
-                                            <p className="font-medium">No suppliers found</p>
-                                            <p className="text-xs">Add your first supplier to get started.</p>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredSuppliers.map(supplier => (
-                                    <TableRow key={supplier.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                                    <Truck className="h-4 w-4 text-primary" />
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold">{supplier.name}</p>
-                                                    {supplier.notes && (
-                                                        <p className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">{supplier.notes}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="text-sm">{supplier.contactPerson || '—'}</span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="space-y-0.5">
-                                                {supplier.phone && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                        <Phone className="h-3 w-3" />
-                                                        {supplier.phone}
-                                                    </div>
-                                                )}
-                                                {supplier.email && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                        <Mail className="h-3 w-3" />
-                                                        {supplier.email}
-                                                    </div>
-                                                )}
-                                                {!supplier.phone && !supplier.email && <span className="text-xs text-muted-foreground">—</span>}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {supplier.city ? (
-                                                <div className="flex items-center gap-1.5 text-sm">
-                                                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    {supplier.city}
-                                                </div>
-                                            ) : <span className="text-muted-foreground text-xs">—</span>}
-                                        </TableCell>
-                                        <TableCell>
-                                            {supplier.category ? (
-                                                <Badge variant="secondary" className="text-xs font-medium">
-                                                    {supplier.category}
-                                                </Badge>
-                                            ) : <span className="text-muted-foreground text-xs">—</span>}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                variant={supplier.status === 'Active' ? 'default' : 'outline'}
-                                                className={supplier.status === 'Active' ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-100' : 'text-muted-foreground'}
-                                            >
-                                                {supplier.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => openEditDialog(supplier)}>
-                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                        Edit Supplier
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        className="text-red-600 focus:text-red-600"
-                                                        onClick={() => { setDeleteTarget(supplier); setDeleteDialogOpen(true); }}
-                                                    >
-                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                        Delete Supplier
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                <CardContent className="p-0">
+                    <Tabs defaultValue="all" className="w-full">
+                        <div className="px-6 py-4 border-b bg-muted/5">
+                            <TabsList className="bg-muted/20 h-12 p-1.5 rounded-xl gap-2">
+                                <TabsTrigger value="all" className="rounded-lg px-6 font-bold flex items-center gap-2">
+                                    <Building2 className="h-4 w-4" /> All
+                                </TabsTrigger>
+                                <TabsTrigger value="Vendor" className="rounded-lg px-6 font-bold flex items-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white transition-colors">
+                                    <Store className="h-4 w-4" /> Vendors (Procedural)
+                                </TabsTrigger>
+                                <TabsTrigger value="Distributor" className="rounded-lg px-6 font-bold flex items-center gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white transition-colors">
+                                    <Truck className="h-4 w-4" /> Distributors (Pharmacy)
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
+                        <TabsContent value="all" className="m-0 focus-visible:outline-none">
+                            {renderSupplierTable(filteredSuppliers)}
+                        </TabsContent>
+                        <TabsContent value="Vendor" className="m-0 focus-visible:outline-none">
+                            {renderSupplierTable(filteredSuppliers.filter(s => s.type === 'Vendor'))}
+                        </TabsContent>
+                        <TabsContent value="Distributor" className="m-0 focus-visible:outline-none">
+                            {renderSupplierTable(filteredSuppliers.filter(s => s.type === 'Distributor'))}
+                        </TabsContent>
+                    </Tabs>
                 </CardContent>
             </Card>
 
-            {/* Add / Edit Dialog */}
+            {/* Redesigned Add / Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Truck className="h-5 w-5 text-primary" />
-                            {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {editingSupplier
-                                ? `Update details for ${editingSupplier.name}.`
-                                : 'Fill in the supplier details to add them to your directory.'}
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
+                    <div className="bg-gradient-to-r from-primary/10 to-transparent p-8 border-b">
+                        <DialogHeader>
+                            <DialogTitle className="text-3xl font-black flex items-center gap-3">
+                                {editingSupplier ? <Pencil className="h-8 w-8 text-primary" /> : <PlusCircle className="h-8 w-8 text-primary" />}
+                                {editingSupplier ? 'Redesign Partner' : 'Onboard New Partner'}
+                            </DialogTitle>
+                            <DialogDescription className="text-base font-medium">
+                                {editingSupplier
+                                    ? `Update organizational details for ${editingSupplier.name}.`
+                                    : 'Establish a new relationship within your supply ecosystem.'}
+                            </DialogDescription>
+                        </DialogHeader>
+                    </div>
 
-                    <div className="grid gap-4 py-4">
-                        {/* Basic Info */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="sm:col-span-2 space-y-1.5">
-                                <Label htmlFor="sup-name">
-                                    Supplier / Company Name <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="sup-name"
-                                    placeholder="e.g., MedPlus Pharmaceuticals"
-                                    value={formData.name}
-                                    onChange={e => handleChange('name', e.target.value)}
-                                />
+                    <div className="p-8 max-h-[70vh] overflow-y-auto space-y-8">
+                        {/* Type Selection */}
+                        <div className="space-y-4">
+                            <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground px-1">Relationship Type</Label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div
+                                    className={cn(
+                                        "relative p-6 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center gap-3 text-center group",
+                                        formData.type === 'Vendor' ? "border-indigo-500 bg-indigo-50/50 shadow-md" : "border-muted-foreground/10 hover:border-indigo-200"
+                                    )}
+                                    onClick={() => handleChange('type', 'Vendor')}
+                                >
+                                    <div className={cn("p-4 rounded-xl transition-all group-hover:scale-110", formData.type === 'Vendor' ? "bg-indigo-500 text-white" : "bg-muted text-muted-foreground")}>
+                                        <Store size={32} />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-lg">Vendor</p>
+                                        <p className="text-xs text-muted-foreground mt-1 text-balance">Direct procedural products. Product-to-Product logic.</p>
+                                    </div>
+                                    {formData.type === 'Vendor' && <CheckCircle2 className="absolute top-4 right-4 text-indigo-500 h-6 w-6" />}
+                                </div>
+                                <div
+                                    className={cn(
+                                        "relative p-6 rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center gap-3 text-center group",
+                                        formData.type === 'Distributor' ? "border-emerald-500 bg-emerald-50/50 shadow-md" : "border-muted-foreground/10 hover:border-indigo-200"
+                                    )}
+                                    onClick={() => handleChange('type', 'Distributor')}
+                                >
+                                    <div className={cn("p-4 rounded-xl transition-all group-hover:scale-110", formData.type === 'Distributor' ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground")}>
+                                        <Truck size={32} />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-lg">Distributor</p>
+                                        <p className="text-xs text-muted-foreground mt-1 text-balance">Wholesale pharmacy supply. Bill-to-Bill logic.</p>
+                                    </div>
+                                    {formData.type === 'Distributor' && <CheckCircle2 className="absolute top-4 right-4 text-emerald-500 h-6 w-6" />}
+                                </div>
                             </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="sup-contact">Contact Person</Label>
-                                <Input
-                                    id="sup-contact"
-                                    placeholder="e.g., Ali Raza"
-                                    value={formData.contactPerson}
-                                    onChange={e => handleChange('contactPerson', e.target.value)}
-                                />
+                        </div>
+
+                        <div className="space-y-6">
+                            <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground px-1">Foundation Details</Label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label htmlFor="sup-name" className="px-1 text-sm font-bold">Organization Name</Label>
+                                    <Input
+                                        id="sup-name"
+                                        placeholder="Enter company or partner name"
+                                        className="h-12 rounded-xl bg-muted/20 border-none shadow-inner text-lg font-medium focus-visible:ring-primary"
+                                        value={formData.name}
+                                        onChange={e => handleChange('name', e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="sup-contact" className="px-1 text-sm font-bold">Lead Contact Person</Label>
+                                    <Input
+                                        id="sup-contact"
+                                        placeholder="Full name of representative"
+                                        className="h-12 rounded-xl bg-muted/20 border-none shadow-inner"
+                                        value={formData.contactPerson}
+                                        onChange={e => handleChange('contactPerson', e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="sup-phone" className="px-1 text-sm font-bold">Contact Sequence (Phone)</Label>
+                                    <Input
+                                        id="sup-phone"
+                                        placeholder="WhatsApp or Direct Line"
+                                        className="h-12 rounded-xl bg-muted/20 border-none shadow-inner"
+                                        value={formData.phone}
+                                        onChange={e => handleChange('phone', e.target.value)}
+                                    />
+                                </div>
                             </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="sup-phone">Phone Number</Label>
-                                <Input
-                                    id="sup-phone"
-                                    placeholder="e.g., +92 300 1234567"
-                                    value={formData.phone}
-                                    onChange={e => handleChange('phone', e.target.value)}
-                                />
+                        </div>
+
+                        {/* Shared Pricing & Catalog Section */}
+                        <div className={cn(
+                            "space-y-6 p-6 rounded-3xl border-2 transition-colors",
+                            formData.type === 'Vendor' ? "bg-indigo-50/50 border-indigo-100" : "bg-emerald-50/50 border-emerald-100"
+                        )}>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className={cn(
+                                        "text-xl font-black flex items-center gap-2",
+                                        formData.type === 'Vendor' ? "text-indigo-900" : "text-emerald-900"
+                                    )}>
+                                        <Store className="h-6 w-6" /> Pricing & Catalog <span className="text-xs font-medium opacity-60 ml-2 italic">(Optional)</span>
+                                    </h3>
+                                    <p className={cn(
+                                        "text-sm font-medium",
+                                        formData.type === 'Vendor' ? "text-indigo-700/70" : "text-emerald-700/70"
+                                    )}>Define core supply products and their default base pricing.</p>
+                                </div>
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={addProduct} 
+                                    className={cn(
+                                        "bg-white transition-colors gap-2 rounded-xl h-10 px-4 font-bold border-2",
+                                        formData.type === 'Vendor' ? "hover:bg-indigo-600 hover:text-white border-indigo-200" : "hover:bg-emerald-600 hover:text-white border-emerald-200"
+                                    )}
+                                >
+                                    <Plus className="h-4 w-4" /> Add Line Item
+                                </Button>
                             </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="sup-email">Email Address</Label>
-                                <Input
-                                    id="sup-email"
-                                    type="email"
-                                    placeholder="e.g., supplier@medplus.com"
-                                    value={formData.email}
-                                    onChange={e => handleChange('email', e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="sup-city">City</Label>
-                                <Input
-                                    id="sup-city"
-                                    placeholder="e.g., Lahore"
-                                    value={formData.city}
-                                    onChange={e => handleChange('city', e.target.value)}
-                                />
-                            </div>
-                            <div className="sm:col-span-2 space-y-1.5">
-                                <Label htmlFor="sup-address">Full Address</Label>
-                                <Input
-                                    id="sup-address"
-                                    placeholder="e.g., 42 Medical Complex, Gulberg III"
-                                    value={formData.address}
-                                    onChange={e => handleChange('address', e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label>Category</Label>
-                                <Select value={formData.category} onValueChange={v => handleChange('category', v)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select a category..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {SUPPLIER_CATEGORIES.map(c => (
-                                            <SelectItem key={c} value={c}>{c}</SelectItem>
+
+                            <div className="space-y-4">
+                                {formData.products?.length === 0 ? (
+                                    <div className={cn(
+                                        "py-8 text-center border-2 border-dashed rounded-2xl bg-white/50",
+                                        formData.type === 'Vendor' ? "border-indigo-200 text-indigo-400" : "border-emerald-200 text-emerald-400"
+                                    )}>
+                                        <p className="text-sm font-bold">No items listed. You can skip this and add them later.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-3">
+                                        {formData.products?.map((p, i) => (
+                                            <div key={p.id} className={cn(
+                                                "grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-2xl shadow-sm border animate-in fade-in slide-in-from-top-2",
+                                                formData.type === 'Vendor' ? "border-indigo-100" : "border-emerald-100"
+                                            )}>
+                                                <div className={cn(
+                                                    "col-span-1 flex items-center justify-center font-black",
+                                                    formData.type === 'Vendor' ? "text-indigo-200" : "text-emerald-200"
+                                                )}>{i + 1}</div>
+                                                <div className="col-span-7">
+                                                    <Input
+                                                        placeholder="Product/Item Name"
+                                                        className={cn(
+                                                            "border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
+                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
+                                                        )}
+                                                        value={p.name}
+                                                        onChange={e => updateProduct(i, 'name', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-span-3 relative">
+                                                    <DollarSign className={cn(
+                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
+                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
+                                                    )} />
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Base Price"
+                                                        className={cn(
+                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
+                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
+                                                        )}
+                                                        value={p.price || ''}
+                                                        onChange={e => updateProduct(i, 'price', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 flex justify-end">
+                                                    <Button variant="ghost" size="icon" onClick={() => removeProduct(i)} className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                                        <Trash2 size={16} />
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         ))}
-                                    </SelectContent>
-                                </Select>
+                                    </div>
+                                )}
                             </div>
-                            <div className="space-y-1.5">
-                                <Label>Status</Label>
-                                <Select value={formData.status} onValueChange={v => handleChange('status', v)}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Active">Active</SelectItem>
-                                        <SelectItem value="Inactive">Inactive</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                        </div>
+
+                        {formData.type === 'Distributor' && (
+                            <div className="space-y-6 p-6 rounded-3xl bg-emerald-50/50 border-2 border-emerald-100">
+                                <div>
+                                    <h3 className="text-xl font-black text-emerald-900 flex items-center gap-2">
+                                        <Receipt className="h-6 w-6" /> Financial Matrix
+                                    </h3>
+                                    <p className="text-sm text-emerald-700/70 font-medium">Configure bill-to-bill credit parameters.</p>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <div className="space-y-2">
+                                        <Label className="px-1 text-sm font-bold text-emerald-800">Opening Balance</Label>
+                                        <div className="relative">
+                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                                            <Input
+                                                type="number"
+                                                className="pl-9 h-12 rounded-xl border-none bg-white shadow-sm focus-visible:ring-emerald-500 font-bold"
+                                                value={formData.openingBalance || ''}
+                                                onChange={e => handleChange('openingBalance', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="px-1 text-sm font-bold text-emerald-800">Current Liability</Label>
+                                        <div className="relative">
+                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                                            <Input
+                                                type="number"
+                                                className="pl-9 h-12 rounded-xl border-none bg-white shadow-sm focus-visible:ring-emerald-500 font-bold"
+                                                value={formData.currentBalance || ''}
+                                                onChange={e => handleChange('currentBalance', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="px-1 text-sm font-bold text-emerald-800">Credit Threshold</Label>
+                                        <div className="relative">
+                                            <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                                            <Input
+                                                type="number"
+                                                className="pl-9 h-12 rounded-xl border-none bg-white shadow-sm focus-visible:ring-emerald-500 font-bold"
+                                                value={formData.creditLimit || ''}
+                                                onChange={e => handleChange('creditLimit', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="sm:col-span-2 space-y-1.5">
-                                <Label htmlFor="sup-notes">Notes</Label>
+                        )}
+
+                        {/* Meta & Location */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground px-1">Location Data</Label>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sup-city" className="px-1 text-xs font-bold uppercase">City</Label>
+                                        <Input
+                                            id="sup-city"
+                                            placeholder="Current HQ city"
+                                            className="h-12 rounded-xl bg-muted/20 border-none shadow-inner"
+                                            value={formData.city}
+                                            onChange={e => handleChange('city', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sup-address" className="px-1 text-xs font-bold uppercase">Physical Address</Label>
+                                        <Textarea
+                                            id="sup-address"
+                                            placeholder="Precise warehouse or office location"
+                                            className="rounded-xl bg-muted/20 border-none shadow-inner resize-none h-24 p-4"
+                                            value={formData.address}
+                                            onChange={e => handleChange('address', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground px-1">Governance & Logistics</Label>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label className="px-1 text-xs font-bold uppercase">Classification Category</Label>
+                                        <Select value={formData.category} onValueChange={v => handleChange('category', v)}>
+                                            <SelectTrigger className="h-12 rounded-xl bg-muted/20 border-none shadow-inner">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SUPPLIER_CATEGORIES.map(c => (
+                                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="px-1 text-xs font-bold uppercase">Operational Status</Label>
+                                        <Select value={formData.status} onValueChange={v => handleChange('status', v)}>
+                                            <SelectTrigger className="h-12 rounded-xl bg-muted/20 border-none shadow-inner">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Active">Active & Transacting</SelectItem>
+                                                <SelectItem value="Inactive">Paused / Archived</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-2 space-y-2">
+                                <Label htmlFor="sup-notes" className="px-1 text-sm font-bold uppercase tracking-widest text-muted-foreground">Internal Partner Intelligence (Notes)</Label>
                                 <Textarea
                                     id="sup-notes"
-                                    placeholder="e.g., Preferred supplier for skincare products. 30-day net payment terms."
+                                    placeholder="Key insights, delivery patterns, or legacy performance notes..."
+                                    className="rounded-2xl bg-muted/20 border-none shadow-inner resize-none h-32 p-4 text-base"
                                     value={formData.notes}
                                     onChange={e => handleChange('notes', e.target.value)}
-                                    rows={3}
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                        <Button onClick={handleSave} disabled={isSaving}>
-                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            {editingSupplier ? 'Save Changes' : 'Add Supplier'}
+                    <div className="bg-muted/10 p-8 flex justify-end gap-3 border-t">
+                        <Button variant="ghost" onClick={() => setDialogOpen(false)} className="h-14 px-8 rounded-2xl font-bold">
+                            Abort
                         </Button>
-                    </DialogFooter>
+                        <Button onClick={handleSave} disabled={isSaving} className="h-14 px-12 gap-2 rounded-2xl shadow-xl shadow-primary/20 hover:shadow-primary/40 transition-all text-lg font-black">
+                            {isSaving ? <Loader2 className="h-6 w-6 animate-spin" /> : null}
+                            {editingSupplier ? 'Secure Changes' : 'Finalize Onboarding'}
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation Dialog */}
+            {/* Delete Confirmation Dialog Redesign */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-600">
-                            <Trash2 className="h-5 w-5" />
-                            Delete Supplier
+                <DialogContent className="sm:max-w-[500px] p-8 rounded-3xl border-none shadow-2xl overflow-hidden">
+                    <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
+                        <Trash2 size={180} className="text-red-500" />
+                    </div>
+                    <DialogHeader className="relative">
+                        <div className="h-16 w-16 rounded-2xl bg-red-100 flex items-center justify-center mb-6">
+                            <Trash2 className="h-8 w-8 text-red-600" />
+                        </div>
+                        <DialogTitle className="text-3xl font-black text-red-900 leading-tight">
+                            Dissolve Partnership?
                         </DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to permanently delete{' '}
-                            <strong>{deleteTarget?.name}</strong>? This action cannot be undone.
+                        <DialogDescription className="text-lg font-medium text-red-700/70 pt-2 leading-relaxed">
+                            You are about to permanently remove <span className="text-red-900 font-bold underline underline-offset-4 decoration-2">{deleteTarget?.name}</span> from your ecosystem. All associated metadata will be liquidated.
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-                        <Button variant="destructive" onClick={handleDelete}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
+                    <DialogFooter className="mt-10 gap-3 relative">
+                        <Button variant="ghost" onClick={() => setDeleteDialogOpen(false)} className="h-14 flex-1 rounded-2xl font-bold">
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete} className="h-14 flex-1 gap-2 rounded-2xl shadow-xl shadow-red-500/20 hover:shadow-red-500/40 transition-all text-lg font-black">
+                            Liquidate Partner
                         </Button>
                     </DialogFooter>
                 </DialogContent>

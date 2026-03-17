@@ -30,15 +30,18 @@ import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, u
 import type { PharmacyItem } from '@/lib/types';
 import { collection, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import type { Supplier } from '@/lib/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { useSearch } from '@/context/SearchProvider';
 import { DatePicker } from '@/components/DatePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean, onOpenChange: (open: boolean) => void, item?: PharmacyItem, mode: 'add' | 'edit' | 'stock' }) => {
+const PharmacyFormDialog = ({ open, onOpenChange, item, mode, suppliers }: { open: boolean, onOpenChange: (open: boolean) => void, item?: PharmacyItem, mode: 'add' | 'edit' | 'stock', suppliers?: Supplier[] | null }) => {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [formData, setFormData] = React.useState<Partial<PharmacyItem>>({});
@@ -68,6 +71,11 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
         const collectionRef = collection(firestore, 'pharmacyItems');
 
         if (isStockMode && item?.id) {
+            const supplier = suppliers?.find(s => s.id === item.supplierId);
+            if (supplier && (supplier.currentBalance || 0) > 0) {
+                toast({ variant: 'destructive', title: 'Action Blocked', description: 'Cannot update stock for a supplier with outstanding liability.' });
+                return;
+            }
             const newQuantity = (item.quantity || 0) + stockChange;
             updateDocumentNonBlocking(doc(collectionRef, item.id), { quantity: newQuantity });
             toast({ title: 'Stock Updated', description: `Stock for ${item.productName} is now ${newQuantity}.` });
@@ -96,6 +104,18 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                         {isStockMode ? `Current quantity: ${item?.quantity}` : 'Fill in the product details below.'}
                     </DialogDescription>
                 </DialogHeader>
+
+                {isStockMode && suppliers?.find(s => s.id === item?.supplierId)?.currentBalance! > 0 && (
+                     <div className="px-6 py-2">
+                        <Alert variant="destructive" className="rounded-2xl border-none bg-red-50 dark:bg-red-950/20">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle className="font-black text-xs uppercase">Vendor/Distributor Blocking Alert</AlertTitle>
+                            <AlertDescription className="text-xs font-semibold">
+                                This partner has uncleared dues. New stock updates are restricted until the balance is cleared.
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+                )}
 
                 {isStockMode ? (
                     <div className="grid gap-4 py-4">
@@ -127,8 +147,27 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode }: { open: boolean,
                             <Input id="manufacturer" value={formData.manufacturer || ''} onChange={handleChange} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="supplier">Supplier</Label>
-                            <Input id="supplier" value={formData.supplier || ''} onChange={handleChange} />
+                            <Label htmlFor="supplierId">Supplier</Label>
+                            <Select 
+                                onValueChange={(value) => {
+                                    const selected = mode === 'add' || mode === 'edit' ? suppliers?.find(s => s.id === value) : null;
+                                    setFormData(prev => ({ 
+                                        ...prev, 
+                                        supplierId: value,
+                                        supplier: selected?.name || prev.supplier 
+                                    }));
+                                }} 
+                                value={formData.supplierId || ''}
+                            >
+                                <SelectTrigger id="supplierId">
+                                    <SelectValue placeholder="Select Supplier" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {suppliers?.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name} ({s.type})</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="purchasePrice">Purchase Price (Rs)</Label>
@@ -187,6 +226,9 @@ export default function PharmacyItemsPage() {
     const { searchTerm, setSearchTerm } = useSearch();
     const pharmacyQuery = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
     const { data: pharmacyItems, isLoading } = useCollection<PharmacyItem>(pharmacyQuery);
+    
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+    const { data: allSuppliers } = useCollection<Supplier>(suppliersRef);
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [isBulkOpen, setIsBulkOpen] = React.useState(false);
@@ -397,7 +439,7 @@ export default function PharmacyItemsPage() {
                     )}
                 </CardContent>
             </Card>
-            <PharmacyFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} item={selectedItem} mode={formMode} />
+            <PharmacyFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} item={selectedItem} mode={formMode} suppliers={allSuppliers} />
             <BulkAddDialog open={isBulkOpen} onOpenChange={setIsBulkOpen} />
         </>
     );

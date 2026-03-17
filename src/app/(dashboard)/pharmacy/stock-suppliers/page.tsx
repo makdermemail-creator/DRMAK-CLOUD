@@ -20,7 +20,8 @@ import { PlusCircle, Search, FileText, Pencil, Eye, Phone, Loader2 } from 'lucid
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { PharmacyItem } from '@/lib/types';
+import type { PharmacyItem, Supplier } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 
 export default function StockSuppliersPage() {
@@ -28,29 +29,13 @@ export default function StockSuppliersPage() {
     const pharmacyQuery = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
     const { data: pharmacyItems, isLoading } = useCollection<PharmacyItem>(pharmacyQuery);
 
-    const suppliersData = React.useMemo(() => {
-        if (!pharmacyItems) return [];
-        const supplierMap = new Map<string, any>();
-        pharmacyItems.forEach(item => {
-            if(item.supplier && !supplierMap.has(item.supplier)) {
-                 supplierMap.set(item.supplier, {
-                    supplier: item.supplier,
-                    ntn: '',
-                    stn: '',
-                    phone: '',
-                    address: '',
-                    primaryContactPerson: '',
-                    primaryContactPhone: '',
-                    openingBalance: '0.0',
-                    slaDate: '',
-                    totalAmount: '0.00',
-                    amountDue: '0.00',
-                    createdAt: ''
-                });
-            }
-        });
-        return Array.from(supplierMap.values());
-    }, [pharmacyItems]);
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+    const { data: allSuppliers, isLoading: isSuppliersLoading } = useCollection<Supplier>(suppliersRef);
+
+    const distributors = React.useMemo(() => {
+        if (!allSuppliers) return [];
+        return allSuppliers.filter(s => s.type === 'Distributor');
+    }, [allSuppliers]);
 
   return (
     <div className="space-y-6">
@@ -68,17 +53,17 @@ export default function StockSuppliersPage() {
               <Input placeholder="Search By Name, Phone or Address..." className="w-full sm:w-64" />
               <Select>
                 <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Select Supplier" />
+                    <SelectValue placeholder="Select Distributor" />
                 </SelectTrigger>
                 <SelectContent>
-                    {suppliersData.map((s,i) => <SelectItem key={i} value={s.supplier}>{s.supplier}</SelectItem>)}
+                    {distributors.map((s,i) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Button><Search className="mr-2 h-4 w-4" /> Search</Button>
           </div>
         </CardHeader>
         <CardContent>
-            {isLoading ? (
+            {isSuppliersLoading ? (
                 <div className="flex justify-center items-center h-48">
                     <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
@@ -87,34 +72,34 @@ export default function StockSuppliersPage() {
                 <TableHeader>
                     <TableRow>
                         <TableHead>SUPPLIER</TableHead>
-                        <TableHead>NTN</TableHead>
-                        <TableHead>STN</TableHead>
+                        <TableHead>CATEGORY</TableHead>
+                        <TableHead>STN/NTN</TableHead>
                         <TableHead>PHONE</TableHead>
                         <TableHead>ADDRESS</TableHead>
-                        <TableHead>PRIMARY CONTACT PERSON</TableHead>
-                        <TableHead>PRIMARY CONTACT PHONE</TableHead>
+                        <TableHead>CONTACT PERSON</TableHead>
+                        <TableHead>CONTACT PHONE</TableHead>
                         <TableHead>OPENING BALANCE</TableHead>
                         <TableHead>SLA DATE</TableHead>
-                        <TableHead>TOTAL AMOUNT</TableHead>
-                        <TableHead>AMOUNT DUE</TableHead>
-                        <TableHead>CREATED AT</TableHead>
+                        <TableHead>CURRENT LIABILITY</TableHead>
+                        <TableHead>CREDIT LIMIT</TableHead>
+                        <TableHead>ONBOARDED</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {suppliersData.map((supplier, index) => (
-                         <TableRow key={index}>
-                            <TableCell>{supplier.supplier}</TableCell>
-                            <TableCell>{supplier.ntn}</TableCell>
-                            <TableCell>{supplier.stn}</TableCell>
+                    {distributors.map((supplier, index) => (
+                         <TableRow key={supplier.id}>
+                            <TableCell className="font-bold">{supplier.name}</TableCell>
+                            <TableCell>{supplier.category}</TableCell>
+                            <TableCell>—</TableCell>
                             <TableCell>{supplier.phone}</TableCell>
                             <TableCell>{supplier.address}</TableCell>
-                            <TableCell>{supplier.primaryContactPerson}</TableCell>
-                            <TableCell>{supplier.primaryContactPhone}</TableCell>
-                            <TableCell>{supplier.openingBalance}</TableCell>
-                            <TableCell>{supplier.slaDate}</TableCell>
-                            <TableCell>{supplier.totalAmount}</TableCell>
-                            <TableCell>{supplier.amountDue}</TableCell>
-                            <TableCell>{supplier.createdAt}</TableCell>
+                            <TableCell>{supplier.contactPerson}</TableCell>
+                            <TableCell>{supplier.phone}</TableCell>
+                            <TableCell className="font-bold">Rs {supplier.openingBalance?.toLocaleString()}</TableCell>
+                            <TableCell>—</TableCell>
+                            <TableCell className="text-red-600 font-bold">Rs {supplier.currentBalance?.toLocaleString()}</TableCell>
+                            <TableCell className="font-bold text-emerald-600">Rs {supplier.creditLimit?.toLocaleString()}</TableCell>
+                            <TableCell>{new Date(supplier.createdAt || '').toLocaleDateString()}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>

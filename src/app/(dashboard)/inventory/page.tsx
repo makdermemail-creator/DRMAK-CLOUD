@@ -45,7 +45,7 @@ export default function InventoryPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { searchTerm, setSearchTerm } = useSearch();
-    const [rackFilter, setRackFilter] = React.useState<string>('');
+    const [rackFilter, setRackFilter] = React.useState<string>('all');
     const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
     const { data: inventoryItems, isLoading } = useCollection<PharmacyItem>(pharmacyRef);
 
@@ -59,7 +59,7 @@ export default function InventoryPage() {
             const matchesSearch = !term ||
                 itemName.includes(term) ||
                 itemRack.includes(term);
-            const matchesRack = !rackFilter || item.rack === rackFilter;
+            const matchesRack = rackFilter === 'all' || item.rack === rackFilter;
             return matchesSearch && matchesRack;
         });
     }, [inventoryItems, searchTerm, rackFilter]);
@@ -149,7 +149,7 @@ export default function InventoryPage() {
                             <SelectValue placeholder="All Racks" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Racks</SelectItem>
+                            <SelectItem value="all">All Racks</SelectItem>
                             <SelectItem value="A">Rack A</SelectItem>
                             <SelectItem value="B">Rack B</SelectItem>
                             <SelectItem value="C">Rack C</SelectItem>
