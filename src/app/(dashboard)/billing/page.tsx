@@ -144,8 +144,8 @@ export default function BillingPage() {
         if (!patients || !patientSearch) return [];
         const term = patientSearch.toLowerCase();
         return patients.filter(p =>
-            p.name.toLowerCase().includes(term) ||
-            p.mobileNumber.includes(term)
+            (p.name || '').toLowerCase().includes(term) ||
+            (p.mobileNumber || '').includes(term)
         );
     }, [patients, patientSearch]);
 
@@ -180,7 +180,7 @@ export default function BillingPage() {
                     }
                     return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
                 }
-                return [...prev, { id: item.id, name: item.name, type: 'pharmacy', price: Number(item.sellingPrice) || 0, qty: 1 }];
+                return [...prev, { id: item.id, name: item.name || (item as any).productName || 'Unnamed Item', type: 'pharmacy', price: Number(item.sellingPrice) || 0, qty: 1 }];
             });
         }
     };
@@ -264,7 +264,7 @@ export default function BillingPage() {
         if (item) {
             setReimbursements(prev => [...prev, {
                 id: `reimb-pharm-${Date.now()}`,
-                description: item.name,
+                description: item.name || (item as any).productName || 'Unnamed Item',
                 amount: Number(item.sellingPrice) || 0
             }]);
         }
@@ -564,9 +564,9 @@ export default function BillingPage() {
         const term = billingSearch.toLowerCase();
         
         let filtered = billingRecords.filter(b => 
-            b.patientName.toLowerCase().includes(term) ||
-            b.patientMobile.includes(term) ||
-            b.id.toLowerCase().includes(term)
+            (b.patientName || '').toLowerCase().includes(term) ||
+            (b.patientMobile || '').includes(term) ||
+            (b.id || '').toLowerCase().includes(term)
         );
 
         if (categoryFilter !== 'All') {
@@ -574,10 +574,10 @@ export default function BillingPage() {
                 const types = new Set(b.items.map(i => i.type));
                 
                 if (categoryFilter === 'Consultation') {
-                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.every(i => i.name.toLowerCase().includes('consultation'));
+                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.every(i => (i.name || '').toLowerCase().includes('consultation'));
                 }
                 if (categoryFilter === 'Procedure') {
-                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.some(i => !i.name.toLowerCase().includes('consultation'));
+                    return types.has('procedure') && !types.has('pharmacy') && !types.has('custom') && b.items.some(i => !(i.name || '').toLowerCase().includes('consultation'));
                 }
                 if (categoryFilter === 'Pharmacy') {
                     return types.has('pharmacy') && !types.has('procedure') && !types.has('custom');

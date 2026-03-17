@@ -316,8 +316,8 @@ export default function UserManagementPage() {
     const term = searchTerm.toLowerCase();
     if (!term) return users;
     return users.filter(u =>
-      (u.name && u.name.toLowerCase().includes(term)) ||
-      (u.email && u.email.toLowerCase().includes(term)) ||
+      ((u.name || '').toLowerCase().includes(term)) ||
+      ((u.email || '').toLowerCase().includes(term)) ||
       (u.role && u.role.toLowerCase().includes(term))
     );
   }, [users, searchTerm]);

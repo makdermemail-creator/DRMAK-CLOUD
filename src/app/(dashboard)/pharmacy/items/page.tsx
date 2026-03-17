@@ -241,11 +241,11 @@ export default function PharmacyItemsPage() {
         const term = searchTerm.toLowerCase();
         return pharmacyItems.filter(item => {
             const matchesSearch = !term ||
-                item.productName.toLowerCase().includes(term) ||
-                (item.genericName && item.genericName.toLowerCase().includes(term)) ||
-                (item.barcode && item.barcode.toLowerCase().includes(term)) ||
-                item.category.toLowerCase().includes(term) ||
-                item.supplier.toLowerCase().includes(term);
+                (item.productName || '').toLowerCase().includes(term) ||
+                (item.genericName && (item.genericName || '').toLowerCase().includes(term)) ||
+                (item.barcode && (item.barcode || '').toLowerCase().includes(term)) ||
+                (item.category || '').toLowerCase().includes(term) ||
+                (item.supplier || '').toLowerCase().includes(term);
 
             const matchesSupplier = selectedSupplier === 'all' || item.supplier === selectedSupplier;
             const matchesManufacturer = selectedManufacturer === 'all' || item.manufacturer === selectedManufacturer;

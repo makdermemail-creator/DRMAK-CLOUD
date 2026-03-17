@@ -53,14 +53,14 @@ export default function POSPage() {
     const filteredPatients = React.useMemo(() => {
         if (!patientSearch) return [];
         return patients?.filter(p => 
-            p.name.toLowerCase().includes(patientSearch.toLowerCase()) || 
-            p.mobileNumber.includes(patientSearch)
+            (p.name || '').toLowerCase().includes(patientSearch.toLowerCase()) || 
+            (p.mobileNumber || '').includes(patientSearch)
         ) || [];
     }, [patients, patientSearch]);
 
     const filteredItems = React.useMemo(() => {
         if (!itemSearch) return [];
-        return pharmacyItems?.filter(i => i.productName.toLowerCase().includes(itemSearch.toLowerCase())) || [];
+        return pharmacyItems?.filter(i => (i.productName || (i as any).name || '').toLowerCase().includes(itemSearch.toLowerCase())) || [];
     }, [pharmacyItems, itemSearch]);
     
     const handleSelectPatient = (patient: Patient) => {

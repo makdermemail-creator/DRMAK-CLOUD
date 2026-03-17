@@ -437,9 +437,9 @@ export default function LeadsPage() {
     const term = searchTerm.toLowerCase();
     if (term) {
       result = result.filter(l =>
-        l.name.toLowerCase().includes(term) ||
-        l.email.toLowerCase().includes(term) ||
-        l.status.toLowerCase().includes(term)
+        (l.name || '').toLowerCase().includes(term) ||
+        (l.email || '').toLowerCase().includes(term) ||
+        (l.status || '').toLowerCase().includes(term)
       );
     }
     return result;

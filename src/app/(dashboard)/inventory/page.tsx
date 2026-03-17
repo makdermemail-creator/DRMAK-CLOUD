@@ -53,9 +53,12 @@ export default function InventoryPage() {
         if (!inventoryItems) return [];
         const term = searchTerm.toLowerCase().trim();
         return inventoryItems.filter(item => {
+            const itemName = (item.name || (item as any).productName || '').toLowerCase();
+            const itemRack = (item.rack || '').toLowerCase();
+            
             const matchesSearch = !term ||
-                item.name.toLowerCase().includes(term) ||
-                (item.rack && item.rack.toLowerCase().includes(term));
+                itemName.includes(term) ||
+                itemRack.includes(term);
             const matchesRack = !rackFilter || item.rack === rackFilter;
             return matchesSearch && matchesRack;
         });
@@ -195,7 +198,7 @@ export default function InventoryPage() {
                                 ) : (
                                     filteredItems.map((item) => (
                                         <TableRow key={item.id}>
-                                            <TableCell className="font-medium">{item.name}</TableCell>
+                                            <TableCell className="font-medium">{item.name || (item as any).productName || 'Unnamed Item'}</TableCell>
                                             <TableCell>
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-muted border uppercase tracking-wider">
                                                     Rack {item.rack || '—'}

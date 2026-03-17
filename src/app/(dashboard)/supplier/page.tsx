@@ -129,10 +129,10 @@ export default function SupplierPage() {
         return suppliers.filter(s => {
             const matchesSearch =
                 !search ||
-                s.name.toLowerCase().includes(search.toLowerCase()) ||
-                s.contactPerson?.toLowerCase().includes(search.toLowerCase()) ||
-                s.phone?.includes(search) ||
-                s.city?.toLowerCase().includes(search.toLowerCase());
+                (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+                (s.contactPerson || '').toLowerCase().includes(search.toLowerCase()) ||
+                (s.phone || '').includes(search) ||
+                (s.city || '').toLowerCase().includes(search.toLowerCase());
             const matchesCategory = filterCategory === 'all' || s.category === filterCategory;
             const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
             return matchesSearch && matchesCategory && matchesStatus;

@@ -198,7 +198,7 @@ export default function SocialInboxPage() {
 
     const filteredUsers = usersList?.filter(u =>
         u.id !== currentUser?.id &&
-        u.name.toLowerCase().includes(userSearch.toLowerCase())
+        (u.name || '').toLowerCase().includes(userSearch.toLowerCase())
     );
 
     const scrollRef = React.useRef<HTMLDivElement>(null);
