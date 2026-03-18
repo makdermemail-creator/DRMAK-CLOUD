@@ -405,9 +405,12 @@ export type SupplierType = 'Vendor' | 'Distributor';
 export type SupplierProduct = {
   id: string;
   name: string;
-  price: number;
+  price: number; // Purchase Price
+  sellingPrice: number;
   quantity: number;
   minThreshold: number;
+  rack?: string;
+  expiryDate?: string;
 };
 
 export type Supplier = {

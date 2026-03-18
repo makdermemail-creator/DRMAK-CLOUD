@@ -235,7 +235,19 @@ export default function SupplierPage() {
     const addProduct = () => {
         setFormData(prev => ({
             ...prev,
-            products: [...(prev.products || []), { id: Date.now().toString(), name: '', price: 0, quantity: 0, minThreshold: 0 }]
+            products: [
+                ...(prev.products || []),
+                { 
+                    id: Math.random().toString(36).substr(2, 9), 
+                    name: '', 
+                    price: 0, 
+                    sellingPrice: 0, 
+                    quantity: 0, 
+                    minThreshold: 0,
+                    rack: '',
+                    expiryDate: ''
+                }
+            ]
         }));
     };
 
@@ -741,6 +753,34 @@ export default function SupplierPage() {
                                                         )}
                                                         value={p.minThreshold || ''}
                                                         onChange={e => updateProduct(i, 'minThreshold', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 space-y-1">
+                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Sale (Rs)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Sale"
+                                                        value={p.sellingPrice}
+                                                        onChange={(e) => updateProduct(i, 'sellingPrice', e.target.value)}
+                                                        className="h-8 text-[10px]"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 space-y-1">
+                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Rack</Label>
+                                                    <Input
+                                                        placeholder="Rack"
+                                                        value={p.rack}
+                                                        onChange={(e) => updateProduct(i, 'rack', e.target.value)}
+                                                        className="h-8 text-[10px]"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1 space-y-1">
+                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Expiry</Label>
+                                                    <Input
+                                                        type="date"
+                                                        value={p.expiryDate}
+                                                        onChange={(e) => updateProduct(i, 'expiryDate', e.target.value)}
+                                                        className="h-8 text-[10px] px-1"
                                                     />
                                                 </div>
                                                 <div className="col-span-1 flex justify-end">

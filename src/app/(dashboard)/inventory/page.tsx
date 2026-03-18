@@ -32,6 +32,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useSearch } from '@/context/SearchProvider';
+import { Supplier, SupplierProduct } from '@/lib/types';
+import Link from 'next/link';
 
 export interface PharmacyItem {
     id: string;
@@ -46,68 +48,79 @@ export default function InventoryPage() {
     const firestore = useFirestore();
     const { searchTerm, setSearchTerm } = useSearch();
     const [rackFilter, setRackFilter] = React.useState<string>('all');
-    const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
-    const { data: inventoryItems, isLoading } = useCollection<PharmacyItem>(pharmacyRef);
+    
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+    const { data: suppliers, isLoading } = useCollection<Supplier>(suppliersRef);
+
+    const inventoryItems = React.useMemo(() => {
+        if (!suppliers) return [];
+        const items: (SupplierProduct & { supplierName: string; supplierId: string })[] = [];
+        suppliers.forEach(s => {
+            s.products?.forEach(p => {
+                items.push({ ...p, supplierName: s.name, supplierId: s.id });
+            });
+        });
+        return items;
+    }, [suppliers]);
 
     const filteredItems = React.useMemo(() => {
         if (!inventoryItems) return [];
         const term = searchTerm.toLowerCase().trim();
         return inventoryItems.filter(item => {
-            const itemName = (item.name || (item as any).productName || '').toLowerCase();
+            const itemName = (item.name || '').toLowerCase();
             const itemRack = (item.rack || '').toLowerCase();
+            const sName = (item.supplierName || '').toLowerCase();
             
             const matchesSearch = !term ||
                 itemName.includes(term) ||
-                itemRack.includes(term);
+                itemRack.includes(term) ||
+                sName.includes(term);
             const matchesRack = rackFilter === 'all' || item.rack === rackFilter;
             return matchesSearch && matchesRack;
         });
     }, [inventoryItems, searchTerm, rackFilter]);
 
     const [isDialogOpen, setIsDialogOpen] = React.useState(false);
-    const [editingItem, setEditingItem] = React.useState<PharmacyItem | null>(null);
+    const [editingItem, setEditingItem] = React.useState<(SupplierProduct & { supplierId: string; supplierName: string }) | null>(null);
 
-    // Form State
-    const [name, setName] = React.useState('');
+    // Form State (Simplified for quick updates)
     const [price, setPrice] = React.useState<number | string>('');
+    const [sellingPrice, setSellingPrice] = React.useState<number | string>('');
     const [quantity, setQuantity] = React.useState<number | string>('');
     const [rack, setRack] = React.useState<string>('');
 
-    const handleOpenDialog = (item?: PharmacyItem) => {
-        if (item) {
-            setEditingItem(item);
-            setName(item.name);
-            setPrice(item.sellingPrice);
-            setQuantity(item.quantity);
-            setRack(item.rack || '');
-        } else {
-            setEditingItem(null);
-            setName('');
-            setPrice('');
-            setQuantity('');
-            setRack('');
-        }
+    const handleOpenDialog = (item: SupplierProduct & { supplierId: string; supplierName: string }) => {
+        setEditingItem(item);
+        setPrice(item.price);
+        setSellingPrice(item.sellingPrice || 0);
+        setQuantity(item.quantity);
+        setRack(item.rack || '');
         setIsDialogOpen(true);
     };
 
     const handleSave = async () => {
-        if (!name.trim() || price === '' || isNaN(Number(price)) || quantity === '' || isNaN(Number(quantity))) {
+        if (price === '' || isNaN(Number(price)) || quantity === '' || isNaN(Number(quantity))) {
             toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please provide valid values for all fields.' });
             return;
         }
 
-        if (!firestore) return;
+        if (!firestore || !editingItem) return;
 
         try {
             const numPrice = Number(price);
+            const numSellingPrice = Number(sellingPrice);
             const numQty = Number(quantity);
 
-            if (editingItem) {
-                updateDocumentNonBlocking(doc(firestore, 'pharmacy', editingItem.id), { name, sellingPrice: numPrice, quantity: numQty, rack });
-                toast({ title: 'Item Updated', description: 'The inventory item has been updated successfully.' });
-            } else {
-                addDocumentNonBlocking(collection(firestore, 'pharmacy'), { name, sellingPrice: numPrice, quantity: numQty, rack, createdAt: new Date().toISOString() });
-                toast({ title: 'Item Added', description: 'The new item has been added to inventory.' });
+            const supplier = suppliers?.find(s => s.id === editingItem.supplierId);
+            if (supplier && supplier.products) {
+                const newProducts = supplier.products.map(p => {
+                    if (p.id === editingItem.id) {
+                        return { ...p, price: numPrice, sellingPrice: numSellingPrice, quantity: numQty, rack };
+                    }
+                    return p;
+                });
+                updateDocumentNonBlocking(doc(firestore, 'suppliers', supplier.id), { products: newProducts });
+                toast({ title: 'Inventory Updated', description: 'Changes synced to supplier records.' });
             }
             setIsDialogOpen(false);
         } catch (error: any) {
@@ -161,9 +174,11 @@ export default function InventoryPage() {
                             <SelectItem value="I">Rack I</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button onClick={() => handleOpenDialog()} className="shrink-0">
-                        <Plus className="h-4 w-4 mr-2" /> Add Item
-                    </Button>
+                    <Link href="/supplier">
+                        <Button className="shrink-0">
+                            <Plus className="h-4 w-4 mr-2" /> Manage Suppliers
+                        </Button>
+                    </Link>
                 </div>
             </div>
 
@@ -178,9 +193,11 @@ export default function InventoryPage() {
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     <TableHead>Item Name</TableHead>
+                                    <TableHead>Supplier</TableHead>
                                     <TableHead>Rack</TableHead>
-                                    <TableHead className="text-right">Selling Price (Rs)</TableHead>
-                                    <TableHead className="text-right">Current Stock Qty</TableHead>
+                                    <TableHead className="text-right">Cost (Rs)</TableHead>
+                                    <TableHead className="text-right">Sale (Rs)</TableHead>
+                                    <TableHead className="text-right">Quantity</TableHead>
                                     <TableHead className="w-[100px] text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -191,31 +208,37 @@ export default function InventoryPage() {
                                     </TableRow>
                                 ) : !filteredItems || filteredItems.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                                            {searchTerm ? 'No items match your search.' : 'No items found in inventory. Click "Add Item" to create one.'}
+                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground italic">
+                                            {searchTerm ? 'No items match your search.' : 'No items found. Add products in the Suppliers section.'}
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     filteredItems.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-medium">{item.name || (item as any).productName || 'Unnamed Item'}</TableCell>
+                                        <TableRow key={`${item.supplierId}_${item.id}`}>
+                                            <TableCell className="font-medium">
+                                                <div>
+                                                    <div className="font-bold">{item.name}</div>
+                                                    <div className="text-[10px] text-muted-foreground uppercase">{item.id}</div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-xs font-semibold text-primary">{item.supplierName}</div>
+                                            </TableCell>
                                             <TableCell>
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-muted border uppercase tracking-wider">
-                                                    Rack {item.rack || '—'}
+                                                    {item.rack || '—'}
                                                 </span>
                                             </TableCell>
-                                            <TableCell className="text-right font-medium">{Number(item.sellingPrice).toLocaleString()} Rs</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground">{item.price.toLocaleString()} Rs</TableCell>
+                                            <TableCell className="text-right font-black text-primary">{item.sellingPrice?.toLocaleString()} Rs</TableCell>
                                             <TableCell className="text-right">
-                                                <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${Number(item.quantity) <= 0 ? 'bg-red-100 text-red-800' : Number(item.quantity) < 5 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                                <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-black ${Number(item.quantity) <= (item.minThreshold || 0) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                                                     {item.quantity}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-right space-x-2">
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleOpenDialog(item)}>
                                                     <Pencil className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(item.id)}>
-                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -234,54 +257,50 @@ export default function InventoryPage() {
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="name">Item Name</Label>
-                            <Input
-                                id="name"
-                                placeholder="e.g., Vitamin C Serum, Painkillers..."
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                            />
+                            <Label>Item Name</Label>
+                            <div className="p-2 bg-muted rounded font-bold text-sm text-muted-foreground">
+                                {editingItem?.name} ({editingItem?.supplierName})
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="price">Selling Price (Rs)</Label>
+                                <Label htmlFor="price">Cost Price (Rs)</Label>
                                 <Input
                                     id="price"
                                     type="number"
-                                    placeholder="0"
                                     value={price}
                                     onChange={(e) => setPrice(e.target.value)}
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="quantity">Quantity in Stock</Label>
+                                <Label htmlFor="sellingPrice">Selling Price (Rs)</Label>
+                                <Input
+                                    id="sellingPrice"
+                                    type="number"
+                                    value={sellingPrice}
+                                    onChange={(e) => setSellingPrice(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="quantity">Stock Quantity</Label>
                                 <Input
                                     id="quantity"
                                     type="number"
-                                    placeholder="0"
                                     value={quantity}
                                     onChange={(e) => setQuantity(e.target.value)}
                                 />
                             </div>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Rack Assignment</Label>
-                            <Select onValueChange={setRack} value={rack}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a rack (A-E)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="A">Rack A</SelectItem>
-                                    <SelectItem value="B">Rack B</SelectItem>
-                                    <SelectItem value="C">Rack C</SelectItem>
-                                    <SelectItem value="D">Rack D</SelectItem>
-                                    <SelectItem value="E">Rack E</SelectItem>
-                                    <SelectItem value="F">Rack F</SelectItem>
-                                    <SelectItem value="G">Rack G</SelectItem>
-                                    <SelectItem value="H">Rack H</SelectItem>
-                                    <SelectItem value="I">Rack I</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <div className="grid gap-2">
+                                <Label htmlFor="rack">Rack Location</Label>
+                                <Input
+                                    id="rack"
+                                    placeholder="e.g. A1, B4..."
+                                    value={rack}
+                                    onChange={(e) => setRack(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

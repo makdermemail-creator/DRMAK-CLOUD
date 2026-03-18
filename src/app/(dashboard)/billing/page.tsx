@@ -15,8 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
-import type { Patient } from '@/lib/types';
-import { Search, Plus, Trash2, Printer, CheckCircle2, CircleDollarSign } from 'lucide-react';
+import type { Patient, Supplier, SupplierProduct } from '@/lib/types';
+import { Search, Plus, Trash2, Printer, CheckCircle2, CircleDollarSign, Bell, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
     Select,
@@ -57,11 +57,13 @@ interface PharmacyItem {
 }
 
 interface BillItem {
-    id: string;
+    id: string; // supplierId_productId
     name: string;
     type: 'procedure' | 'pharmacy' | 'custom';
     price: number;
     qty: number;
+    supplierId?: string;
+    productId?: string;
 }
 
 interface Reimbursement {
@@ -107,14 +109,25 @@ export default function BillingPage() {
 
     // Fetch Data
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
-    const pharmacyQuery = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacy') : null, [firestore]);
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
     const proceduresQuery = useMemoFirebase(() => firestore ? collection(firestore, 'procedures') : null, [firestore]);
     const billingRecordsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
 
     const { data: patients } = useCollection<Patient>(patientsQuery);
-    const { data: pharmacyItems } = useCollection<PharmacyItem>(pharmacyQuery);
+    const { data: suppliers } = useCollection<Supplier>(suppliersRef);
     const { data: dynamicProcedures } = useCollection<any>(proceduresQuery); // Using any temporarily to avoid circular deps with ProceduresPage
     const { data: billingRecords, isLoading: isBillingLoading } = useCollection<BillingRecord>(billingRecordsQuery);
+
+    const pharmacyItems = React.useMemo(() => {
+        if (!suppliers) return [];
+        const items: (SupplierProduct & { supplierName: string; supplierId: string })[] = [];
+        suppliers.forEach(s => {
+            s.products?.forEach(p => {
+                items.push({ ...p, supplierName: s.name, supplierId: s.id });
+            });
+        });
+        return items;
+    }, [suppliers]);
 
     // State
     const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
@@ -163,8 +176,8 @@ export default function BillingPage() {
         }
     };
 
-    const addPharmacyItem = (itemId: string) => {
-        const item = pharmacyItems?.find(p => p.id === itemId);
+    const addPharmacyItem = (compoundId: string) => {
+        const item = pharmacyItems?.find(p => `${p.supplierId}_${p.id}` === compoundId);
         if (item) {
             if (item.quantity <= 0) {
                 toast({ variant: 'destructive', title: 'Out of Stock', description: `${item.name} is currently out of stock.` });
@@ -172,15 +185,23 @@ export default function BillingPage() {
             }
 
             setBillItems(prev => {
-                const existing = prev.find(i => i.id === item.id);
+                const existing = prev.find(i => i.id === compoundId);
                 if (existing) {
                     if (existing.qty >= item.quantity) {
                         toast({ variant: 'destructive', title: 'Insufficient Stock', description: `Only ${item.quantity} units of ${item.name} are available.` });
                         return prev;
                     }
-                    return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
+                    return prev.map(i => i.id === compoundId ? { ...i, qty: i.qty + 1 } : i);
                 }
-                return [...prev, { id: item.id, name: item.name || (item as any).productName || 'Unnamed Item', type: 'pharmacy', price: Number(item.sellingPrice) || 0, qty: 1 }];
+                return [...prev, { 
+                    id: compoundId, 
+                    name: item.name, 
+                    type: 'pharmacy', 
+                    price: Number(item.sellingPrice) || 0, 
+                    qty: 1,
+                    supplierId: item.supplierId,
+                    productId: item.id
+                }];
             });
         }
     };
@@ -214,7 +235,7 @@ export default function BillingPage() {
 
             // Stock Validation for Pharmacy items
             if (itemToUpdate.type === 'pharmacy') {
-                const inventoryItem = pharmacyItems?.find(p => p.id === itemToUpdate.id);
+                const inventoryItem = pharmacyItems?.find(p => `${p.supplierId}_${p.id}` === id);
                 if (inventoryItem && newQty > inventoryItem.quantity) {
                     toast({ variant: 'destructive', title: 'Insufficient Stock', description: `Only ${inventoryItem.quantity} units of ${inventoryItem.name} are available in inventory.` });
                     newQty = inventoryItem.quantity; // Cap at max available
@@ -485,11 +506,16 @@ export default function BillingPage() {
         } else {
             // Deduct stock for pharmacy items only for new bills
             billItems.forEach(item => {
-                if (item.type === 'pharmacy') {
-                    const inventoryItem = pharmacyItems?.find(p => p.id === item.id);
-                    if (inventoryItem) {
-                        const newQuantity = Math.max(0, inventoryItem.quantity - item.qty);
-                        updateDocumentNonBlocking(doc(firestore, 'pharmacy', inventoryItem.id), { quantity: newQuantity });
+                if (item.type === 'pharmacy' && item.supplierId && item.productId) {
+                    const supplier = suppliers?.find(s => s.id === item.supplierId);
+                    if (supplier && supplier.products) {
+                        const newProducts = supplier.products.map(p => {
+                            if (p.id === item.productId) {
+                                return { ...p, quantity: Math.max(0, p.quantity - item.qty) };
+                            }
+                            return p;
+                        });
+                        updateDocumentNonBlocking(doc(firestore, 'suppliers', supplier.id), { products: newProducts });
                     }
                 }
             });
@@ -762,8 +788,8 @@ export default function BillingPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         {pharmacyItems?.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                                {p.rack ? `[Rack ${p.rack}]` : ''}{p.name} - {p.sellingPrice} Rs (Stock: {p.quantity})
+                                            <SelectItem key={`${p.supplierId}_${p.id}`} value={`${p.supplierId}_${p.id}`}>
+                                                {p.rack ? `[Rack ${p.rack}]` : ''}{p.name} (${p.supplierName}) - {p.sellingPrice} Rs (Stock: {p.quantity})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

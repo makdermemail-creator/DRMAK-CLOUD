@@ -42,7 +42,7 @@ import {
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import type { PharmacyItem } from '@/lib/types';
+import type { Supplier, SupplierProduct } from '@/lib/types';
 import { collection } from 'firebase/firestore';
 import { isAfter, parseISO } from 'date-fns';
 
@@ -55,8 +55,19 @@ const quickActions = [
 
 export default function PharmacyDashboard() {
     const firestore = useFirestore();
-    const pharmacyQuery = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
-    const { data: pharmacyItems, isLoading } = useCollection<PharmacyItem>(pharmacyQuery);
+    const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+    const { data: suppliers, isLoading } = useCollection<Supplier>(suppliersRef);
+
+    const pharmacyItems = React.useMemo(() => {
+        if (!suppliers) return [];
+        const items: (SupplierProduct & { supplierName: string; category: string })[] = [];
+        suppliers.forEach(s => {
+            s.products?.forEach(p => {
+                items.push({ ...p, supplierName: s.name, category: s.category });
+            });
+        });
+        return items;
+    }, [suppliers]);
 
     const stats = React.useMemo(() => {
         if (!pharmacyItems) {
@@ -64,12 +75,12 @@ export default function PharmacyDashboard() {
         }
         const today = new Date();
         const lowStockThreshold = 10;
-        const uniqueSuppliers = new Set(pharmacyItems.map(item => item.supplier));
+        const uniqueSuppliers = new Set(pharmacyItems.map(item => item.supplierName));
 
         return {
             totalProducts: pharmacyItems.length,
-            lowStock: pharmacyItems.filter(item => item.quantity < lowStockThreshold).length,
-            expiredStock: pharmacyItems.filter(item => isAfter(today, parseISO(item.expiryDate))).length,
+            lowStock: pharmacyItems.filter(item => item.quantity < (item.minThreshold || lowStockThreshold)).length,
+            expiredStock: pharmacyItems.filter(item => item.expiryDate && isAfter(today, parseISO(item.expiryDate))).length,
             totalSuppliers: uniqueSuppliers.size,
         };
     }, [pharmacyItems]);
@@ -206,11 +217,11 @@ export default function PharmacyDashboard() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {pharmacyItems?.slice(0, 5).map(item => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.productName}</TableCell>
+                            {pharmacyItems?.slice(0, 5).map((item, i) => (
+                                <TableRow key={i}>
+                                    <TableCell className="font-medium">{item.name}</TableCell>
                                     <TableCell>{item.category}</TableCell>
-                                    <TableCell>{item.supplier}</TableCell>
+                                    <TableCell>{item.supplierName}</TableCell>
                                     <TableCell>{item.quantity}</TableCell>
                                     <TableCell>{new Date().toLocaleDateString()}</TableCell>
                                 </TableRow>
