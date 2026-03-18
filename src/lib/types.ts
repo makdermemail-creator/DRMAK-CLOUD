@@ -18,6 +18,7 @@ export type User = {
   isMainAdmin?: boolean;
   featureAccess?: { [key: string]: boolean };
   icon?: string;
+  doctorId?: string; // Linked doctor profile ID
 };
 
 export type Doctor = {

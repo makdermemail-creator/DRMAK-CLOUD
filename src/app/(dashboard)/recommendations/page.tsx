@@ -137,7 +137,7 @@ export default function RecommendationsPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-primary to-indigo-600 bg-clip-text text-transparent flex items-center gap-3">
           <Sparkles className="h-10 w-10 text-primary" />
-          AI Skin Consultation
+          SkinSmith AI Skin Consultation
         </h1>
         <p className="text-muted-foreground text-lg">
           Upload a photo or use your camera to get an instant skin diagnosis and treatment suggestions.

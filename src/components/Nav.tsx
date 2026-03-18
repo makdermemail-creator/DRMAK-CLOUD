@@ -154,7 +154,7 @@ const allMenuItems = [
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
 
     // AI Tools at the very bottom
-    { id: 'aiTools', href: '/recommendations', label: 'AI Tools', icon: Sparkles },
+    { id: 'aiTools', href: '/recommendations', label: 'SkinSmith AI', icon: Sparkles },
 ];
 
 const clinicGroups = [
@@ -175,7 +175,7 @@ const clinicGroups = [
         ids: ["reports.full"]
     },
     {
-        label: "Advanced Tools",
+        label: "SkinSmith AI",
         ids: ["aiTools"]
     }
 ];
@@ -190,7 +190,7 @@ const reportsGroups = [
         ids: ["reports.full", "employeeReports", "analytics"]
     },
     {
-        label: "Advanced Tools",
+        label: "SkinSmith AI",
         ids: ["aiTools"]
     }
 ];
@@ -217,7 +217,7 @@ const organizationGroups = [
         ids: ["dailyPosting", "dailyTasks", "dailyProgress", "trainings_hub", "socialReporting", "contentPlanner", "analytics", "socialInbox", "reachTracker"]
     },
     {
-        label: "Advanced Tools",
+        label: "SkinSmith AI",
         ids: ["aiTools"]
     }
 ];

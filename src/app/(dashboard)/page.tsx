@@ -1081,7 +1081,7 @@ const DoctorDashboard = () => {
         if (!firestore || !user) return null;
         return query(
             collection(firestore, 'appointments'),
-            where('doctorId', '==', user.id)
+            where('doctorId', '==', user.doctorId || user.id)
         );
     }, [firestore, user]);
 

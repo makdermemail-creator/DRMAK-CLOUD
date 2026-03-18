@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useAuth, useUser, getSecondaryAuth } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import type { User } from '@/lib/types';
+import type { User, Doctor } from '@/lib/types';
 import { collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -63,6 +63,8 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
   const [formData, setFormData] = React.useState<Partial<User>>({});
   const [password, setPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+  const { data: doctors } = useCollection<Doctor>(doctorsRef);
 
   React.useEffect(() => {
     if (open) { // Reset form only when dialog opens
@@ -118,7 +120,8 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
         role: formData.role,
         isAdmin: isNowAdmin,
         avatarUrl: formData.avatarUrl,
-        featureAccess: formData.featureAccess
+        featureAccess: formData.featureAccess,
+        doctorId: formData.role === 'Doctor' ? formData.doctorId : undefined
       });
       toast({ title: "User Updated", description: "The user's details and permissions have been updated." });
       onOpenChange(false);
@@ -145,6 +148,7 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
           isAdmin: isNowAdmin,
           avatarUrl: formData.avatarUrl || '',
           featureAccess: formData.featureAccess,
+          doctorId: formData.role === 'Doctor' ? formData.doctorId : undefined,
         };
 
         // Use setDoc with the new user's UID as the document ID
@@ -220,6 +224,21 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
               </SelectContent>
             </Select>
           </div>
+          {formData.role === 'Doctor' && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="doctorId" className="text-right">Link Doctor Profile</Label>
+              <Select onValueChange={(val) => setFormData(prev => ({ ...prev, doctorId: val }))} value={formData.doctorId}>
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select doctor profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  {doctors?.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.fullName} ({d.specialization})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-4 items-start gap-4">
             <Label className="text-right pt-2 font-semibold">Feature Access</Label>
             <div className="col-span-3">
