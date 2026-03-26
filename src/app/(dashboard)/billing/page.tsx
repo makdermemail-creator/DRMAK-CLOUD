@@ -325,13 +325,32 @@ export default function BillingPage() {
         return maxNumber + 1;
     };
 
-    const handlePrint = () => {
-        if (billItems.length === 0) {
+    const handlePrint = (billOverride?: BillingRecord) => {
+        // Use override if provided, otherwise use current state
+        const itemsToPrint = billOverride ? billOverride.items : billItems;
+        const paymentMethodToPrint = billOverride ? billOverride.paymentMethod : paymentMethod;
+        const patientToPrintName = billOverride ? billOverride.patientName : selectedPatient?.name || 'Guest';
+        const patientToPrintMobile = billOverride ? billOverride.patientMobile : selectedPatient?.mobileNumber || '—';
+        const reimbursementsToPrint = billOverride ? (billOverride.reimbursements || []) : reimbursements;
+        
+        // Calculations for print
+        const printSubTotal = billOverride ? billOverride.subTotal : subTotal;
+        const printDiscountType = billOverride ? billOverride.discountType : discountType;
+        const printDiscountValue = billOverride ? billOverride.discountValue : discountValue;
+        const printDiscountAmount = billOverride ? billOverride.discountAmount : discountAmount;
+        const printReimbursementTotal = billOverride ? billOverride.reimbursementTotal : reimbursementTotal;
+        const printTaxRate = billOverride ? billOverride.taxRate : taxRate;
+        const printTaxAmount = billOverride ? billOverride.taxAmount : taxAmount;
+        const printGrandTotal = billOverride ? billOverride.grandTotal : grandTotal;
+        const printToken = billOverride ? billOverride.dailyInvoiceNumber : getDailyInvoiceNumber(editingBillId || undefined);
+        const printDate = billOverride ? new Date(billOverride.timestamp) : new Date();
+
+        if (itemsToPrint.length === 0) {
             toast({ variant: 'destructive', title: 'No Items', description: 'Please add at least one item to the bill before printing.' });
             return;
         }
 
-        if (!paymentMethod) {
+        if (!paymentMethodToPrint) {
             toast({ variant: 'destructive', title: 'Payment Method Required', description: 'Please select a payment method before printing.' });
             return;
         }
@@ -345,7 +364,7 @@ export default function BillingPage() {
         // Determine Stamp Layer
         let stampHtml = '';
         
-        const itemsRows = billItems.map(item => `
+        const itemsRows = itemsToPrint.map(item => `
             <tr>
                 <td style="padding:10px 8px; border-bottom:1px solid #eee;">
                     <div style="font-weight:600;">${item.name}</div>
@@ -356,7 +375,7 @@ export default function BillingPage() {
             </tr>
         `).join('');
 
-        const reimbursementRows = reimbursements.map(r => `
+        const reimbursementRows = reimbursementsToPrint.map(r => `
             <tr style="color: #c00;">
                 <td style="padding:10px 8px; border-bottom:1px solid #eee;">
                     <div style="font-weight:600;">RETURN: ${r.description}</div>
@@ -372,7 +391,7 @@ export default function BillingPage() {
             <html>
             <head>
                 <meta charset="utf-8" />
-                <title>Receipt - ${selectedPatient?.name || 'Guest'}</title>
+                <title>Receipt - ${patientToPrintName}</title>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background: #fff; padding: 32px; max-width: 600px; margin: 0 auto; }
@@ -397,20 +416,20 @@ export default function BillingPage() {
             </head>
             <body>
                 <div class="header">
-                    <div class="receipt-no">Token: #${getDailyInvoiceNumber(editingBillId || undefined)}</div>
+                    <div class="receipt-no">Token: #${printToken || 'N/A'}</div>
                     <h1>SkinSmith Clinic</h1>
                     <p>Payment Receipt</p>
-                    <p style="margin-top:6px;">Date: ${new Date().toLocaleDateString('en-PK', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p style="margin-top:6px;">Date: ${printDate.toLocaleDateString('en-PK', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
 
                 <div class="patient-grid">
                     <div>
                         <div class="label">Patient Name</div>
-                        <div class="value">${selectedPatient?.name || '—'}</div>
+                        <div class="value">${patientToPrintName}</div>
                     </div>
                     <div class="right">
                         <div class="label">Mobile Number</div>
-                        <div class="value">${selectedPatient?.mobileNumber || '—'}</div>
+                        <div class="value">${patientToPrintMobile}</div>
                     </div>
                 </div>
 
@@ -431,11 +450,11 @@ export default function BillingPage() {
                 </table>
 
                 <div class="totals">
-                    <div class="row"><span>Subtotal</span><span>${subTotal.toLocaleString()} Rs</span></div>
-                    ${discountValue > 0 ? `<div class="row"><span>Discount ${discountType === 'percentage' ? `(${discountValue}%)` : ''}</span><span>- ${discountAmount.toLocaleString()} Rs</span></div>` : ''}
-                    ${reimbursementTotal > 0 ? `<div class="row" style="color: #c00;"><span>Reimbursements</span><span>- ${reimbursementTotal.toLocaleString()} Rs</span></div>` : ''}
-                    <div class="row"><span>Tax (${paymentMethod} - ${(taxRate * 100).toFixed(0)}%)</span><span>${taxAmount.toLocaleString()} Rs</span></div>
-                    <div class="grand"><span>Total Amount</span><span>${grandTotal.toLocaleString()} Rs</span></div>
+                    <div class="row"><span>Subtotal</span><span>${printSubTotal.toLocaleString()} Rs</span></div>
+                    ${printDiscountValue > 0 ? `<div class="row"><span>Discount ${printDiscountType === 'percentage' ? `(${printDiscountValue}%)` : ''}</span><span>- ${printDiscountAmount.toLocaleString()} Rs</span></div>` : ''}
+                    ${printReimbursementTotal > 0 ? `<div class="row" style="color: #c00;"><span>Reimbursements</span><span>- ${printReimbursementTotal.toLocaleString()} Rs</span></div>` : ''}
+                    <div class="row"><span>Tax (${paymentMethodToPrint} - ${(printTaxRate * 100).toFixed(0)}%)</span><span>${printTaxAmount.toLocaleString()} Rs</span></div>
+                    <div class="grand"><span>Total Amount</span><span>${printGrandTotal.toLocaleString()} Rs</span></div>
                 </div>
 
                 <div class="footer">
@@ -1105,7 +1124,7 @@ export default function BillingPage() {
                                 <CheckCircle2 className="mr-2 h-4 w-4" /> {editingBillId ? 'Update Record' : 'Save Record'}
                             </Button>
                         </div>
-                        <Button onClick={handlePrint} disabled={!paymentMethod || billItems.length === 0} className="w-32"><Printer className="mr-2 h-4 w-4" /> Print Bill</Button>
+                        <Button onClick={() => handlePrint()} disabled={!paymentMethod || billItems.length === 0} className="w-32"><Printer className="mr-2 h-4 w-4" /> Print Bill</Button>
                     </CardFooter>
                 </Card>
             </div>
@@ -1252,15 +1271,7 @@ export default function BillingPage() {
                                                             size="icon"
                                                             className="h-8 w-8 hover:text-amber-600"
                                                             onClick={() => {
-                                                                // Load temporarily for print
-                                                                const patient = patients?.find(p => p.id === bill.patientId);
-                                                                setSelectedPatient(patient || { id: bill.patientId, name: bill.patientName, mobileNumber: bill.patientMobile } as any);
-                                                                setBillItems(bill.items);
-                                                                setReimbursements(bill.reimbursements || []);
-                                                                setDiscountType(bill.discountType);
-                                                                setDiscountValue(bill.discountValue);
-                                                                setPaymentMethod(bill.paymentMethod as any);
-                                                                setTimeout(handlePrint, 100);
+                                                                handlePrint(bill);
                                                             }}
                                                             title="Print Bill"
                                                         >
