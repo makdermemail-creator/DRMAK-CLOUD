@@ -6,7 +6,7 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Loader2, ChevronLeft, ChevronRight, Printer, Edit, MessageSquare, CheckCircle, Video, Search } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, ChevronLeft, ChevronRight, Printer, Edit, MessageSquare, CheckCircle, Video, Search, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -16,7 +16,7 @@ import {
     DropdownMenuLabel,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Appointment, Patient, Doctor } from '@/lib/types';
 import { collection, doc } from 'firebase/firestore';
 import {
@@ -376,7 +376,7 @@ const SendMessageDialog = ({ open, onOpenChange, patient }: { open: boolean, onO
     );
 }
 
-const DailyAppointmentList = ({ appointments, stats, onUpdateStatus, onMessage }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], stats: any, onUpdateStatus: (aptId: string, status: AppointmentStatus) => void, onMessage: (patient: Patient) => void }) => {
+const DailyAppointmentList = ({ appointments, stats, onUpdateStatus, onMessage, onDelete }: { appointments: (Appointment & { patient?: Patient, doctor?: Doctor })[], stats: any, onUpdateStatus: (aptId: string, status: AppointmentStatus) => void, onMessage: (patient: Patient) => void, onDelete: (aptId: string) => void }) => {
 
     return (
         <Tabs defaultValue="calendar-view">
@@ -441,6 +441,7 @@ const DailyAppointmentList = ({ appointments, stats, onUpdateStatus, onMessage }
                                                 <DropdownMenuItem onClick={() => onUpdateStatus(apt.id, 'Checked In')}><CheckCircle className="mr-2 h-4 w-4" /> Check In</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => apt.patient && onMessage(apt.patient)}><MessageSquare className="mr-2 h-4 w-4" /> Message</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => onUpdateStatus(apt.id, 'Completed')}><CheckCircle className="mr-2 h-4 w-4" /> Complete</DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(apt.id)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -553,6 +554,15 @@ export default function AppointmentsPage() {
         forceRerender();
     };
 
+    const handleDelete = (aptId: string) => {
+        if (!firestore) return;
+        if (confirm('Are you sure you want to delete this appointment?')) {
+            deleteDocumentNonBlocking(doc(firestore, 'appointments', aptId));
+            toast({ title: 'Appointment Deleted', description: 'The appointment has been removed.' });
+            forceRerender();
+        }
+    };
+
     const handleMessage = (patient: Patient) => {
         setSelectedPatientForMessage(patient);
         setIsMessageOpen(true);
@@ -633,6 +643,7 @@ export default function AppointmentsPage() {
                             stats={stats}
                             onUpdateStatus={handleUpdateStatus}
                             onMessage={handleMessage}
+                            onDelete={handleDelete}
                         />
                     </CardContent>
                 </Card>
