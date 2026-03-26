@@ -51,7 +51,8 @@ import {
     Compass,
     Mail,
     Network,
-    Truck
+    Truck,
+    Receipt
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -83,6 +84,7 @@ const allMenuItems = [
     { id: 'supplier', href: '/supplier', label: 'Suppliers', icon: Truck },
     { id: 'billing', href: '/billing', label: 'Billing', icon: CircleDollarSign },
     { id: 'todaySummary', href: '/today-summary', label: 'Today Summary', icon: TrendingUp },
+    { id: 'dailyExpenses', href: '/daily-expenses', label: 'Daily Expenses', icon: Receipt },
 
     // Pharmacy Sub-menu
     {
@@ -164,7 +166,7 @@ const clinicGroups = [
     },
     {
         label: "Core Operations",
-        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing", "todaySummary"]
+        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing", "todaySummary", "dailyExpenses"]
     },
     {
         label: "Medical & Pharmacy",
@@ -293,7 +295,7 @@ const NavContent = () => {
             // Core Operations + AI Tools (Removed Pharmacy and Reports)
             baseAccessIds = [
                 'dashboard', 
-                'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary',
+                'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
                 'aiTools'
             ];
         } else if (userProfile) {

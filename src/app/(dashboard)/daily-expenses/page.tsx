@@ -1,0 +1,517 @@
+'use client';
+
+import * as React from 'react';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogDescription,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import {
+    useCollection,
+    useFirestore,
+    useMemoFirebase,
+    useUser
+} from '@/firebase';
+import { collection, query, orderBy, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+    Receipt,
+    Plus,
+    Calendar,
+    DollarSign,
+    TrendingUp,
+    PieChart,
+    Loader2,
+    Trash2,
+    Edit2
+} from 'lucide-react';
+import { format, isToday, isThisMonth } from 'date-fns';
+
+interface Expense {
+    id?: string;
+    amount: number;
+    category: string;
+    description: string;
+    paymentMethod: string;
+    timestamp: string; 
+    addedBy: string; 
+}
+
+const CATEGORIES = [
+    "Supplies",
+    "Utilities",
+    "Maintenance",
+    "Salary",
+    "Marketing",
+    "Refund",
+    "Other"
+];
+
+const PAYMENT_METHODS = [
+    "Cash",
+    "Card",
+    "Bank Transfer",
+    "UPI"
+];
+
+export default function DailyExpensesPage() {
+    const firestore = useFirestore();
+    const { user } = useUser();
+    const { toast } = useToast();
+    
+    // Dialog state
+    const [isAddOpen, setIsAddOpen] = React.useState(false);
+    const [isEditOpen, setIsEditOpen] = React.useState(false);
+    const [editingId, setEditingId] = React.useState<string | null>(null);
+
+    // Form state
+    const [amount, setAmount] = React.useState<string>('');
+    const [category, setCategory] = React.useState<string>('Supplies');
+    const [description, setDescription] = React.useState<string>('');
+    const [paymentMethod, setPaymentMethod] = React.useState<string>('Cash');
+
+    const expensesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'expenses'), orderBy('timestamp', 'desc'));
+    }, [firestore]);
+
+    const { data: allExpenses, isLoading } = useCollection<Expense>(expensesQuery);
+
+    const stats = React.useMemo(() => {
+        if (!allExpenses) return { todayTotal: 0, monthTotal: 0, todayCount: 0, topCategory: 'N/A' };
+
+        let todayTotal = 0;
+        let monthTotal = 0;
+        let todayCount = 0;
+        const categoryMap: Record<string, number> = {};
+
+        allExpenses.forEach(expense => {
+            const expDate = new Date(expense.timestamp);
+            if (isToday(expDate)) {
+                todayTotal += expense.amount;
+                todayCount++;
+                categoryMap[expense.category] = (categoryMap[expense.category] || 0) + expense.amount;
+            }
+            if (isThisMonth(expDate)) {
+                monthTotal += expense.amount;
+            }
+        });
+
+        let topCategory = 'N/A';
+        let maxAmt = 0;
+        Object.entries(categoryMap).forEach(([cat, amt]) => {
+            if (amt > maxAmt) {
+                maxAmt = amt;
+                topCategory = cat;
+            }
+        });
+
+        return { todayTotal, monthTotal, todayCount, topCategory };
+    }, [allExpenses]);
+
+    const resetForm = () => {
+        setAmount('');
+        setCategory('Supplies');
+        setDescription('');
+        setPaymentMethod('Cash');
+        setEditingId(null);
+    };
+
+    const handleAddExpense = async () => {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+            toast({ title: 'Invalid Amount', description: 'Please enter a valid amount.', variant: 'destructive' });
+            return;
+        }
+        if (!description.trim()) {
+            toast({ title: 'Missing Details', description: 'Please enter a description.', variant: 'destructive' });
+            return;
+        }
+        if (!firestore) return;
+
+        try {
+            await addDoc(collection(firestore, 'expenses'), {
+                amount: Number(amount),
+                category,
+                description,
+                paymentMethod,
+                timestamp: new Date().toISOString(),
+                addedBy: user?.email || 'Unknown'
+            });
+            toast({ title: 'Success', description: 'Expense recorded successfully.' });
+            setIsAddOpen(false);
+            resetForm();
+        } catch (error: any) {
+            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        }
+    };
+
+    const openEditForm = (expense: Expense) => {
+        setAmount(expense.amount.toString());
+        setCategory(expense.category);
+        setDescription(expense.description);
+        setPaymentMethod(expense.paymentMethod);
+        setEditingId(expense.id!);
+        setIsEditOpen(true);
+    };
+
+    const handleEditExpense = async () => {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+            toast({ title: 'Invalid Amount', description: 'Please enter a valid amount.', variant: 'destructive' });
+            return;
+        }
+        if (!description.trim()) {
+            toast({ title: 'Missing Details', description: 'Please enter a description.', variant: 'destructive' });
+            return;
+        }
+        if (!firestore || !editingId) return;
+
+        try {
+            const expenseRef = doc(firestore, 'expenses', editingId);
+            await updateDoc(expenseRef, {
+                amount: Number(amount),
+                category,
+                description,
+                paymentMethod,
+            });
+            toast({ title: 'Success', description: 'Expense updated successfully.' });
+            setIsEditOpen(false);
+            resetForm();
+        } catch (error: any) {
+            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        }
+    };
+
+    const handleDeleteExpense = async (id: string) => {
+        if (!firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'expenses', id));
+            toast({ title: 'Deleted', description: 'Expense deleted successfully.' });
+        } catch (error: any) {
+            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[400px] gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse">Loading expenses...</p>
+            </div>
+        );
+    }
+
+    const todayExpensesList = allExpenses?.filter(e => isToday(new Date(e.timestamp))) || [];
+    const olderExpensesList = allExpenses?.filter(e => !isToday(new Date(e.timestamp))) || [];
+
+    return (
+        <div className="flex flex-col gap-6 p-4">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                        <Receipt className="h-8 w-8 text-primary" />
+                        Daily Expense Management
+                    </h2>
+                    <p className="text-muted-foreground">Track and manage outgoing clinic expenses.</p>
+                </div>
+                
+                <Dialog open={isAddOpen} onOpenChange={(open) => {
+                    setIsAddOpen(open);
+                    if (!open) resetForm();
+                }}>
+                    <DialogTrigger asChild>
+                        <Button className="gap-2">
+                            <Plus className="h-4 w-4" /> Add Expense
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Record New Expense</DialogTitle>
+                            <DialogDescription>Enter the details of the new expense below.</DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="amount">Amount (Rs)</Label>
+                                <Input id="amount" type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="category">Category</Label>
+                                <Select value={category} onValueChange={setCategory}>
+                                    <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                                    <SelectContent>
+                                        {CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="paymentMethod">Payment Method</Label>
+                                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                    <SelectTrigger><SelectValue placeholder="Select Method" /></SelectTrigger>
+                                    <SelectContent>
+                                        {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="description">Description (Reason/Note)</Label>
+                                <Textarea id="description" placeholder="E.g., Bought printer ink..." value={description} onChange={e => setDescription(e.target.value)} />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                            <Button onClick={handleAddExpense}>Save Expense</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-primary/5 border-primary/20">
+                    <CardHeader className="pb-2">
+                        <CardDescription className="text-primary font-semibold uppercase tracking-wider text-[10px]">Today's Expenses</CardDescription>
+                        <CardTitle className="text-3xl font-bold">{stats.todayTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <TrendingUp className="h-3 w-3" /> From {stats.todayCount} transactions
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">Highest Category Today</CardDescription>
+                        <CardTitle className="text-3xl font-bold">{stats.topCategory}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <PieChart className="h-3 w-3" /> Largest spending area
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">This Month's Expenses</CardDescription>
+                        <CardTitle className="text-3xl font-bold">{stats.monthTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3" /> Total outgoing this month
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Edit Dialog (Hidden) */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Expense</DialogTitle>
+                        <DialogDescription>Modify the details of this expense.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-amount">Amount (Rs)</Label>
+                            <Input id="edit-amount" type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-category">Category</Label>
+                            <Select value={category} onValueChange={setCategory}>
+                                <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                                <SelectContent>
+                                    {CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-paymentMethod">Payment Method</Label>
+                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                <SelectTrigger><SelectValue placeholder="Select Method" /></SelectTrigger>
+                                <SelectContent>
+                                    {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-description">Description</Label>
+                            <Textarea id="edit-description" value={description} onChange={e => setDescription(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+                        <Button onClick={handleEditExpense}>Update Expense</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Expenses List */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-red-500" />
+                        Today's Expenses Log
+                    </CardTitle>
+                    <CardDescription>All expenses recorded for today.</CardDescription>
+                </CardHeader>
+                <Separator />
+                <CardContent className="pt-4">
+                    {todayExpensesList.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
+                            <Receipt className="h-12 w-12 opacity-10 mb-2" />
+                            <p className="italic">No expenses recorded today.</p>
+                        </div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Time</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead>Payment</TableHead>
+                                    <TableHead className="text-right">Amount (Rs)</TableHead>
+                                    <TableHead className="w-[100px]"></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {todayExpensesList.map((expense) => (
+                                    <TableRow key={expense.id}>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {format(new Date(expense.timestamp), 'p')}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{expense.category}</Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-[200px] truncate" title={expense.description}>
+                                            {expense.description}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary" className="font-bold">{expense.paymentMethod}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold text-red-600">
+                                            - {expense.amount.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => openEditForm(expense)}>
+                                                    <Edit2 className="h-4 w-4" />
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete Expense?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This action cannot be undone. This will permanently delete the expense record for Rs {expense.amount}.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteExpense(expense.id!)}>Delete</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Previous Expenses Log (Optional visually separated section) */}
+            {olderExpensesList.length > 0 && (
+                <Card className="opacity-75">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Previous Expenses</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead>Payment</TableHead>
+                                    <TableHead className="text-right">Amount (Rs)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {olderExpensesList.slice(0, 50).map((expense) => ( // show only last 50
+                                    <TableRow key={expense.id}>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {format(new Date(expense.timestamp), 'PP')}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{expense.category}</Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-[200px] truncate" title={expense.description}>
+                                            {expense.description}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary" className="font-bold">{expense.paymentMethod}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold text-red-600">
+                                            - {expense.amount.toLocaleString()}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
+
+        </div>
+    );
+}
