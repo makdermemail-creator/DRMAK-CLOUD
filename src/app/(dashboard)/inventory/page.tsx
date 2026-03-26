@@ -88,6 +88,8 @@ export default function InventoryPage() {
     const [sellingPrice, setSellingPrice] = React.useState<number | string>('');
     const [quantity, setQuantity] = React.useState<number | string>('');
     const [rack, setRack] = React.useState<string>('');
+    const [alternatives, setAlternatives] = React.useState<string[]>([]);
+    const [altSearch, setAltSearch] = React.useState('');
 
     const handleOpenDialog = (item: SupplierProduct & { supplierId: string; supplierName: string }) => {
         setEditingItem(item);
@@ -95,6 +97,7 @@ export default function InventoryPage() {
         setSellingPrice(item.sellingPrice || 0);
         setQuantity(item.quantity);
         setRack(item.rack || '');
+        setAlternatives(item.alternatives || []);
         setIsDialogOpen(true);
     };
 
@@ -115,7 +118,7 @@ export default function InventoryPage() {
             if (supplier && supplier.products) {
                 const newProducts = supplier.products.map(p => {
                     if (p.id === editingItem.id) {
-                        return { ...p, price: numPrice, sellingPrice: numSellingPrice, quantity: numQty, rack };
+                        return { ...p, price: numPrice, sellingPrice: numSellingPrice, quantity: numQty, rack, alternatives };
                     }
                     return p;
                 });
@@ -219,6 +222,18 @@ export default function InventoryPage() {
                                                 <div>
                                                     <div className="font-bold">{item.name}</div>
                                                     <div className="text-[10px] text-muted-foreground uppercase">{item.id}</div>
+                                                    {item.alternatives && item.alternatives.length > 0 && (
+                                                        <div className="mt-1 flex flex-wrap gap-1">
+                                                            {item.alternatives.map(altId => {
+                                                                const alt = inventoryItems.find(i => i.id === altId);
+                                                                return alt ? (
+                                                                    <span key={altId} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[8px] rounded font-bold uppercase">
+                                                                        Alt: {alt.name}
+                                                                    </span>
+                                                                ) : null;
+                                                            })}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -294,12 +309,80 @@ export default function InventoryPage() {
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="rack">Rack Location</Label>
-                                <Input
-                                    id="rack"
-                                    placeholder="e.g. A1, B4..."
-                                    value={rack}
-                                    onChange={(e) => setRack(e.target.value)}
-                                />
+                                <Select value={rack} onValueChange={setRack}>
+                                    <SelectTrigger id="rack">
+                                        <SelectValue placeholder="Select Rack" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
+                                            <SelectItem key={r} value={r}>Rack {r}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {/* Alternatives Section */}
+                        <div className="space-y-3 pt-4 border-t">
+                            <Label className="text-sm font-bold flex items-center gap-2">
+                                <Plus className="h-4 w-4" /> Product Alternatives
+                            </Label>
+                            
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Find alternative product..."
+                                        className="pl-8 h-9 text-xs"
+                                        value={altSearch}
+                                        onChange={(e) => setAltSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {altSearch && (
+                                <div className="max-h-32 overflow-y-auto border rounded-md bg-muted/20 p-1 space-y-1">
+                                    {inventoryItems
+                                        .filter(i => 
+                                            i.id !== editingItem?.id && 
+                                            i.name.toLowerCase().includes(altSearch.toLowerCase()) &&
+                                            !alternatives.includes(i.id)
+                                        )
+                                        .map(item => (
+                                            <button
+                                                key={item.id}
+                                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-background rounded flex items-center justify-between group"
+                                                onClick={() => {
+                                                    setAlternatives(prev => [...prev, item.id]);
+                                                    setAltSearch('');
+                                                }}
+                                            >
+                                                <span>{item.name} <span className="text-[10px] opacity-50">({item.supplierName})</span></span>
+                                                <Plus className="h-3 w-3 opacity-0 group-hover:opacity-100" />
+                                            </button>
+                                        ))}
+                                </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-2">
+                                {alternatives.map(altId => {
+                                    const alt = inventoryItems.find(i => i.id === altId);
+                                    return alt ? (
+                                        <div key={altId} className="flex items-center gap-2 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs font-bold ring-1 ring-primary/20">
+                                            {alt.name}
+                                            <button 
+                                                onClick={() => setAlternatives(prev => prev.filter(id => id !== altId))}
+                                                className="hover:text-destructive transition-colors"
+                                                title="Remove alternative"
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    ) : null;
+                                })}
+                                {alternatives.length === 0 && !altSearch && (
+                                    <p className="text-xs text-muted-foreground italic">No alternatives set.</p>
+                                )}
                             </div>
                         </div>
                     </div>

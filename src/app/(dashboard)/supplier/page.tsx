@@ -766,14 +766,21 @@ export default function SupplierPage() {
                                                     />
                                                 </div>
                                                 <div className="col-span-1 space-y-1">
-                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Rack</Label>
-                                                    <Input
-                                                        placeholder="Rack"
-                                                        value={p.rack}
-                                                        onChange={(e) => updateProduct(i, 'rack', e.target.value)}
-                                                        className="h-8 text-[10px]"
-                                                    />
-                                                </div>
+                                                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Rack</Label>
+                                                     <Select 
+                                                        value={p.rack} 
+                                                        onValueChange={(val) => updateProduct(i, 'rack', val)}
+                                                     >
+                                                        <SelectTrigger className="h-8 text-[10px] px-1">
+                                                            <SelectValue placeholder="Rack" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
+                                                                <SelectItem key={r} value={r} className="text-[10px]">Rack {r}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                     </Select>
+                                                 </div>
                                                 <div className="col-span-1 space-y-1">
                                                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Expiry</Label>
                                                     <Input

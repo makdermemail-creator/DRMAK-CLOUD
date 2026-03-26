@@ -412,6 +412,7 @@ export type SupplierProduct = {
   minThreshold: number;
   rack?: string;
   expiryDate?: string;
+  alternatives?: string[]; // Array of product IDs
 };
 
 export type Supplier = {

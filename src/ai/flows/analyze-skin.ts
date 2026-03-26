@@ -21,6 +21,10 @@ const AnalyzeSkinInputSchema = z.object({
             content: z.string(),
         })
     ).describe('A list of training materials describing different skin conditions and their treatments.'),
+    markerPosition: z.object({
+        x: z.number().describe('The x coordinate as a percentage of the image width.'),
+        y: z.number().describe('The y coordinate as a percentage of the image height.'),
+    }).optional().describe('The specific coordinate to analyze (0-100). If omitted, the whole image is analyzed.'),
 });
 
 export type AnalyzeSkinInput = z.infer<typeof AnalyzeSkinInputSchema>;
@@ -74,11 +78,14 @@ export const analyzeSkinFlow = ai.defineFlow(
       If the image contains human skin:
       1. Set "isHumanSkin" to true.
       2. Identify potential skin issues (e.g., acne, hyperpigmentation, dryness, fine lines).
-      3. Provide a brief, professional diagnosis.
-      4. Based on our clinical training materials provided below, suggest the most suitable treatments or protocols.
+      ${input.markerPosition ? `3. FOCUS ANALYSIS ON THE SPOT AT COORDINATES (X: ${input.markerPosition.x}%, Y: ${input.markerPosition.y}%). The coordinates are relative to the top-left of the image.` : '3. Provide a general diagnosis of the entire image.'}
+      4. Provide a brief, professional diagnosis. ${input.markerPosition ? 'Be very specific about what is seen at the marked spot.' : ''}
+      5. Based on our clinical training materials provided below, suggest the most suitable treatments or protocols.
       
       Training Materials:
       ${trainingContext}
+      
+      ${input.markerPosition ? 'IMPORTANT: Since this is a spot-specific analysis, keep the diagnosis concise and directly related to the marked area.' : ''}
       
       IMPORTANT: You MUST respond strictly in valid JSON format matching the schema provided. Do not include markdown code blocks in your response.`,
                 },
