@@ -480,7 +480,7 @@ export default function BillingPage() {
                     <div class="row"><span>Subtotal</span><span>${printSubTotal.toLocaleString()} Rs</span></div>
                     ${printDiscountValue > 0 ? `<div class="row"><span>Discount ${printDiscountType === 'percentage' ? `(${printDiscountValue}%)` : ''}</span><span>- ${printDiscountAmount.toLocaleString()} Rs</span></div>` : ''}
                     ${printReimbursementTotal > 0 ? `<div class="row" style="color: #c00;"><span>Reimbursements</span><span>- ${printReimbursementTotal.toLocaleString()} Rs</span></div>` : ''}
-                    <div class="row"><span>Tax (${paymentMethodToPrint} - ${(printTaxRate * 100).toFixed(0)}%)</span><span>${printTaxAmount.toLocaleString()} Rs</span></div>
+                    <div class="row"><span>Tax (${paymentMethodToPrint} - ${(printTaxRate * 100).toFixed(0)}% excl. Pharmacy)</span><span>${printTaxAmount.toLocaleString()} Rs</span></div>
                     <div class="grand"><span>Total Amount</span><span>${printGrandTotal.toLocaleString()} Rs</span></div>
                 </div>
 
@@ -1157,7 +1157,7 @@ export default function BillingPage() {
 
                             {paymentMethod && (
                                 <div className="flex justify-between text-sm text-muted-foreground">
-                                    <span>Tax ({paymentMethod} - {(taxRate * 100).toFixed(0)}%)</span>
+                                    <span>Tax ({paymentMethod} - {(taxRate * 100).toFixed(0)}% excl. Pharmacy)</span>
                                     <span>{taxAmount.toLocaleString()} Rs</span>
                                 </div>
                             )}
