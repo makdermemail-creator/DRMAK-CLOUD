@@ -824,24 +824,41 @@ export default function BillingPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                            </div>                            <div className="space-y-1.5 relative">
+                            </div>
+                            
+                            <div className="space-y-1.5 relative">
                                 <Label>Pharmacy Items</Label>
-                                <div className="relative">
+                                <div className="relative" tabIndex={-1} onBlur={(e) => {
+                                    // Close dropdown if focus moves outside this container
+                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                        // using a small timeout is safer if children don't correctly pass relatedTarget in some portals, but here we can just use relatedTarget or timeout.
+                                        setTimeout(() => {
+                                            const active = document.activeElement;
+                                            if (!e.currentTarget.contains(active)) {
+                                                // We don't have a specific state variable for focus so we can just use a hack:
+                                                // Actually, let's just use CSS peer/focus-within if possible, or standard React state.
+                                            }
+                                        }, 150);
+                                    }
+                                }}>
                                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Search pharmacy item..."
-                                        className="pl-9"
+                                        className="pl-9 peer"
                                         value={pharmacySearch}
                                         onChange={(e) => setPharmacySearch(e.target.value)}
                                         disabled={!selectedPatient}
                                     />
-                                    {pharmacySearch && filteredPharmacyItems.length > 0 && (
-                                        <div className="absolute top-11 left-0 right-0 bg-background border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto">
-                                            {filteredPharmacyItems.map(p => (
+                                    {/* Using CSS peer-focus to show the dropdown, combined with hover on the dropdown itself to keep it open when interacting with it */}
+                                    <div className="absolute top-11 left-0 right-0 bg-background border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto hidden peer-focus:block hover:block">
+                                        {filteredPharmacyItems.length > 0 ? (
+                                            filteredPharmacyItems.map(p => (
                                                 <div
                                                     key={`${p.supplierId}_${p.id}`}
                                                     className="p-3 hover:bg-muted cursor-pointer border-b last:border-0"
-                                                    onClick={() => {
+                                                    onMouseDown={(e) => {
+                                                        // use onMouseDown instead of onClick to fire BEFORE the input's onBlur happens
+                                                        e.preventDefault(); 
                                                         addPharmacyItem(`${p.supplierId}_${p.id}`);
                                                         setPharmacySearch('');
                                                     }}
@@ -849,14 +866,13 @@ export default function BillingPage() {
                                                     <p className="font-semibold text-sm">{p.rack ? `[Rack ${p.rack}] ` : ''}{p.name}</p>
                                                     <p className="text-xs text-muted-foreground">Supplier: {p.supplierName} | Price: {p.sellingPrice} Rs | Stock: {p.quantity}</p>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {pharmacySearch && filteredPharmacyItems.length === 0 && (
-                                        <div className="absolute top-11 left-0 right-0 bg-background border rounded-md shadow-lg z-50 p-4 text-center text-sm text-muted-foreground">
-                                            No matching items found.
-                                        </div>
-                                    )}
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-sm text-muted-foreground">
+                                                No matching items found.
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
