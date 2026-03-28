@@ -132,6 +132,7 @@ export default function BillingPage() {
     // State
     const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
     const [patientSearch, setPatientSearch] = React.useState('');
+    const [pharmacySearch, setPharmacySearch] = React.useState('');
 
     const [billItems, setBillItems] = React.useState<BillItem[]>([]);
     const [reimbursements, setReimbursements] = React.useState<Reimbursement[]>([]);
@@ -161,6 +162,15 @@ export default function BillingPage() {
             (p.mobileNumber || '').includes(term)
         );
     }, [patients, patientSearch]);
+
+    const filteredPharmacyItems = React.useMemo(() => {
+        if (!pharmacyItems || !pharmacySearch) return [];
+        const term = pharmacySearch.toLowerCase();
+        return pharmacyItems.filter(p => 
+            (p.name || '').toLowerCase().includes(term) ||
+            (p.supplierName || '').toLowerCase().includes(term)
+        );
+    }, [pharmacyItems, pharmacySearch]);
 
     const addProcedure = (procId: string) => {
         // Check dynamic procedures first, then fallback to common (for legacy support during transition if needed, but we'll prioritize dynamic)
@@ -293,13 +303,30 @@ export default function BillingPage() {
 
     // Calculations
     const subTotal = billItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    
+    // Calculate how much of the subtotal comes from non-pharmacy
+    const nonPharmacySubTotal = billItems.filter(i => i.type !== 'pharmacy').reduce((sum, item) => sum + (item.price * item.qty), 0);
+
     const discountAmount = discountType === 'percentage' ? (subTotal * (discountValue / 100)) : discountValue;
     const reimbursementTotal = reimbursements.reduce((sum, r) => sum + r.amount, 0);
-    const taxableAmount = Math.max(0, subTotal - discountAmount - reimbursementTotal);
+
+    // Apply discount and reimbursements proportionally to non-pharmacy items for tax calculation
+    const nonPharmacyDiscount = discountType === 'percentage' 
+        ? (nonPharmacySubTotal * (discountValue / 100)) 
+        : (discountValue * (nonPharmacySubTotal / (subTotal || 1)));
+        
+    const nonPharmacyReimbursement = reimbursementTotal * (nonPharmacySubTotal / (subTotal || 1));
+
+    // Taxable amount is strictly the non-pharmacy portion after its share of deductions
+    const taxableAmount = Math.max(0, nonPharmacySubTotal - nonPharmacyDiscount - nonPharmacyReimbursement);
+
     const taxRate = paymentMethod === 'Cash' ? 0.18 : (paymentMethod === 'Card' || paymentMethod === 'Online') ? 0.05 : 0;
     // Note: paymentMethod === 'Nill' or '' will result in taxRate 0
     const taxAmount = taxableAmount * taxRate;
-    const grandTotal = Math.max(0, taxableAmount + taxAmount);
+    
+    // Total cost after all global deductions, plus the tax calculated ONLY on non-pharmacy items
+    const totalAfterDeductions = Math.max(0, subTotal - discountAmount - reimbursementTotal);
+    const grandTotal = Math.max(0, totalAfterDeductions + taxAmount);
 
     const getDailyInvoiceNumber = (billId?: string) => {
         if (billId && billingRecords) {
@@ -797,22 +824,40 @@ export default function BillingPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                            </div>
-
-                            <div className="space-y-1.5">
+                            </div>                            <div className="space-y-1.5 relative">
                                 <Label>Pharmacy Items</Label>
-                                <Select onValueChange={addPharmacyItem} value="" disabled={!selectedPatient}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select pharmacy item..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {pharmacyItems?.map(p => (
-                                            <SelectItem key={`${p.supplierId}_${p.id}`} value={`${p.supplierId}_${p.id}`}>
-                                                {p.rack ? `[Rack ${p.rack}]` : ''}{p.name} (${p.supplierName}) - {p.sellingPrice} Rs (Stock: {p.quantity})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search pharmacy item..."
+                                        className="pl-9"
+                                        value={pharmacySearch}
+                                        onChange={(e) => setPharmacySearch(e.target.value)}
+                                        disabled={!selectedPatient}
+                                    />
+                                    {pharmacySearch && filteredPharmacyItems.length > 0 && (
+                                        <div className="absolute top-11 left-0 right-0 bg-background border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                                            {filteredPharmacyItems.map(p => (
+                                                <div
+                                                    key={`${p.supplierId}_${p.id}`}
+                                                    className="p-3 hover:bg-muted cursor-pointer border-b last:border-0"
+                                                    onClick={() => {
+                                                        addPharmacyItem(`${p.supplierId}_${p.id}`);
+                                                        setPharmacySearch('');
+                                                    }}
+                                                >
+                                                    <p className="font-semibold text-sm">{p.rack ? `[Rack ${p.rack}] ` : ''}{p.name}</p>
+                                                    <p className="text-xs text-muted-foreground">Supplier: {p.supplierName} | Price: {p.sellingPrice} Rs | Stock: {p.quantity}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {pharmacySearch && filteredPharmacyItems.length === 0 && (
+                                        <div className="absolute top-11 left-0 right-0 bg-background border rounded-md shadow-lg z-50 p-4 text-center text-sm text-muted-foreground">
+                                            No matching items found.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <Separator className="my-4" />
