@@ -1077,13 +1077,35 @@ const DoctorDashboard = () => {
         setTodayStr(format(new Date(), 'yyyy-MM-dd'));
     }, []);
 
+    const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+    const { data: doctors } = useCollection<Doctor>(doctorsRef);
+
     const appointmentsQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
+        
+        let targetDoctorId = user.doctorId || user.id;
+
+        // Auto-resolve if user.doctorId is missing but we can match by name
+        if (!user.doctorId && doctors && user.name) {
+            const normalizedUserName = user.name.toLowerCase().replace(/^dr\.?\s+/g, '').trim();
+            const matchedDoctor = doctors.find(d => {
+                if (!d.fullName) return false;
+                const normalizedDocName = d.fullName.toLowerCase().replace(/^dr\.?\s+/g, '').trim();
+                return normalizedDocName === normalizedUserName || 
+                       normalizedDocName.includes(normalizedUserName) || 
+                       normalizedUserName.includes(normalizedDocName);
+            });
+            
+            if (matchedDoctor) {
+                targetDoctorId = matchedDoctor.id;
+            }
+        }
+
         return query(
             collection(firestore, 'appointments'),
-            where('doctorId', '==', user.doctorId || user.id)
+            where('doctorId', '==', targetDoctorId)
         );
-    }, [firestore, user]);
+    }, [firestore, user, doctors]);
 
     const { data: rawAppointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsQuery);
 
