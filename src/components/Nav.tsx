@@ -308,6 +308,9 @@ const NavContent = () => {
                 'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
                 'aiTools'
             ];
+        } else if (userProfile?.role === 'Doctor') {
+            // Doctor gets core clinical tools but NOT Health Records (admin-managed)
+            baseAccessIds = ['dashboard', 'patients', 'doctors', 'procedures', 'ePrescription', 'aiTools'];
         } else if (userProfile) {
             baseAccessIds = ['dashboard', 'settings']; // Default
         }
