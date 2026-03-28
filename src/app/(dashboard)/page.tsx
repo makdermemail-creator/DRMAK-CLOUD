@@ -1101,17 +1101,6 @@ const DoctorDashboard = () => {
             }
         }
 
-        // --- DEBUG INFO ---
-        if (typeof window !== 'undefined') {
-            (window as any).__doctorDebug = {
-                userName: user.name,
-                userDoctorId: user.doctorId,
-                userId: user.id,
-                targetDoctorId,
-                availableDoctors: doctors?.map(d => ({ id: d.id, fullName: d.fullName }))
-            };
-        }
-
         return query(
             collection(firestore, 'appointments'),
             where('doctorId', '==', targetDoctorId)
@@ -1160,17 +1149,6 @@ const DoctorDashboard = () => {
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
-            {/* DEBUG BANNER FOR IDENTIFYING MISMATCH */}
-            <div className="bg-red-100 text-red-900 border border-red-300 p-4 rounded-md text-xs font-mono mb-4">
-                <strong>DEBUG DOCTOR MATCHING:</strong><br/>
-                User Name: "{user?.name}"<br/>
-                Resolved Target Doctor ID: {typeof window !== 'undefined' ? (window as any).__doctorDebug?.targetDoctorId : ''}<br/>
-                Available Doctors in DB:<br/>
-                {doctors?.map(d => (
-                    <div key={d.id}>- {d.fullName} (ID: {d.id})</div>
-                ))}
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1228,7 +1206,7 @@ const DoctorDashboard = () => {
                                         <TableCell>{apt.patient?.name || 'Unknown Patient'}</TableCell>
                                         <TableCell><Badge variant={apt.status === 'Completed' ? 'secondary' : 'default'}>{apt.status}</Badge></TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" onClick={() => router.push(`/patients`)}>View Record</Button>
+                                            <Button variant="outline" size="sm" onClick={() => router.push(apt.patient?.id ? `/patients/details?id=${apt.patient.id}` : `/patients`)}>View Record</Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}

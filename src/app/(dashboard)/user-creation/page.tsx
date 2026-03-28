@@ -115,14 +115,19 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
       // NOTE: Updating user email/password in Auth requires re-authentication and is a complex flow.
       // For this version, we will only update the Firestore document data (like name and role).
       const docRef = doc(collectionRef, user.id);
-      await updateDocumentNonBlocking(docRef, {
+      const updateData: any = {
         name: formData.name,
         role: formData.role,
         isAdmin: isNowAdmin,
         avatarUrl: formData.avatarUrl,
         featureAccess: formData.featureAccess,
-        doctorId: formData.role === 'Doctor' ? formData.doctorId : undefined
-      });
+      };
+      
+      if (formData.role === 'Doctor' && formData.doctorId) {
+          updateData.doctorId = formData.doctorId;
+      }
+
+      await updateDocumentNonBlocking(docRef, updateData);
       toast({ title: "User Updated", description: "The user's details and permissions have been updated." });
       onOpenChange(false);
     } else {
@@ -148,8 +153,11 @@ const UserFormDialog = ({ open, onOpenChange, user }: { open: boolean, onOpenCha
           isAdmin: isNowAdmin,
           avatarUrl: formData.avatarUrl || '',
           featureAccess: formData.featureAccess,
-          doctorId: formData.role === 'Doctor' ? formData.doctorId : undefined,
         };
+        
+        if (formData.role === 'Doctor' && formData.doctorId) {
+          newUserDoc.doctorId = formData.doctorId;
+        }
 
         // Use setDoc with the new user's UID as the document ID
         await setDoc(doc(firestore, "users", newUserId), newUserDoc);

@@ -67,7 +67,17 @@ import { signOut } from 'firebase/auth';
 import { Skeleton } from './ui/skeleton';
 
 
-const allMenuItems = [
+interface MenuItem {
+    id: string;
+    href: string;
+    label: string;
+    icon?: any;
+    isMenu?: boolean;
+    isMore?: boolean;
+    subItems?: { id: string; href: string; label: string; }[];
+}
+
+const allMenuItems: MenuItem[] = [
     // General
     { id: 'dashboard', href: '/', label: 'Dashboard', icon: LayoutDashboard },
 
@@ -124,7 +134,7 @@ const allMenuItems = [
     },
 
     // More Sub-menu - We will treat these as individual features
-    { id: 'healthRecords', href: '/health-records', label: 'Health Records', icon: HeartPulse, isMore: true },
+    { id: 'healthRecords', href: '/health-records', label: 'Health Records', icon: HeartPulse },
 
     // Admin Specific
     { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog }, // Corrected ID from features page
@@ -145,7 +155,7 @@ const allMenuItems = [
 
 
     // Doctor Specific (already included in 'more')
-    { id: 'ePrescription', href: '/e-prescription', label: 'E-Prescription', icon: FileText, isMore: true },
+    { id: 'ePrescription', href: '/e-prescription', label: 'E-Prescription', icon: FileText },
 
 
     // Social Media Specific
