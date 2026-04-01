@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Trash2, Printer, Save, Search } from 'lucide-react';
+import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -67,7 +67,7 @@ export default function EPrescriptionPage() {
   const [medicines, setMedicines] = React.useState<Medicine[]>([defaultMedicine()]);
   const [investigations, setInvestigations] = React.useState('');
   const [advice, setAdvice] = React.useState('');
-  const [followUp, setFollowUp] = React.useState('');
+  const [followUpDates, setFollowUpDates] = React.useState<string[]>([]);
   const [notes, setNotes] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
@@ -114,7 +114,9 @@ export default function EPrescriptionPage() {
         patientMobile: selectedPatient.mobileNumber,
         doctorId: linkedDoctor?.id || (user as any)?.doctorId || user?.id,
         doctorName: linkedDoctor?.fullName || user?.name,
-        chiefComplaint, diagnosis, vitals, medicines, investigations, advice, followUp, notes,
+        chiefComplaint, diagnosis, vitals, medicines, investigations, advice, 
+        followUp: followUpDates, 
+        notes,
         createdAt: new Date().toISOString(),
       });
       toast({ title: 'Prescription Saved' });
@@ -132,7 +134,7 @@ export default function EPrescriptionPage() {
   const previewProps = { 
     doctorName, doctorQualification, doctorSpecialization, 
     patient: selectedPatient, vitals, chiefComplaint, diagnosis, 
-    medicines, investigations, advice, followUp, today,
+    medicines, investigations, advice, followUpDates, today,
     hideBranding: printOnLetterhead 
   };
 
@@ -306,9 +308,56 @@ export default function EPrescriptionPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2"><Label>Investigations / Tests</Label><Textarea placeholder="e.g., CBC, LFTs, Skin biopsy" value={investigations} onChange={e => setInvestigations(e.target.value)} rows={2} /></div>
                 <div className="space-y-2"><Label>Advice / Instructions</Label><Textarea placeholder="e.g., Avoid sun exposure, Use SPF 50+..." value={advice} onChange={e => setAdvice(e.target.value)} rows={2} /></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Follow-up Date / Note</Label><Input placeholder="e.g., After 2 weeks" value={followUp} onChange={e => setFollowUp(e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Private Notes (Not Printed)</Label><Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(e.target.value)} /></div>
+                 <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Follow-up Appointments</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        type="date" 
+                        id="new-follow-up-date"
+                        className="max-w-[200px]"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = (e.target as HTMLInputElement).value;
+                            if (val && !followUpDates.includes(val)) {
+                              setFollowUpDates(prev => [...prev, val].sort());
+                              (e.target as HTMLInputElement).value = '';
+                            }
+                          }
+                        }}
+                      />
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => {
+                          const el = document.getElementById('new-follow-up-date') as HTMLInputElement;
+                          if (el.value && !followUpDates.includes(el.value)) {
+                            setFollowUpDates(prev => [...prev, el.value].sort());
+                            el.value = '';
+                          }
+                        }}
+                      >
+                        Add Date
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {followUpDates.map(date => (
+                        <Badge key={date} variant="outline" className="flex items-center gap-1 pl-2.5 pr-1 py-1">
+                          {format(new Date(date), 'dd MMM yyyy')}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-4 w-4 rounded-full p-0" 
+                            onClick={() => setFollowUpDates(prev => prev.filter(d => d !== date))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                      {followUpDates.length === 0 && <span className="text-xs text-muted-foreground italic">No follow-up dates added.</span>}
+                    </div>
+                  </div>
+                  <div className="space-y-2"><Label>Private Notes (Not Printed)</Label><Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(prev => e.target.value)} /></div>
                 </div>
               </CardContent>
             </Card>
@@ -347,18 +396,15 @@ interface PreviewProps {
   medicines: Medicine[];
   investigations: string;
   advice: string;
-  followUp: string;
+  followUpDates: string[];
   today: string;
-}
-
-interface PreviewProps extends Omit<ReturnType<typeof EPrescriptionPage>["previewProps"], "hideBranding"> {
   hideBranding?: boolean;
 }
 
 function PrescriptionPreview({ 
   doctorName, doctorQualification, doctorSpecialization, 
   patient, vitals, chiefComplaint, diagnosis, medicines, 
-  investigations, advice, followUp, today, hideBranding 
+  investigations, advice, followUpDates, today, hideBranding 
 }: PreviewProps) {
   // Refined face profile silhouette path
   const preciseFace = "M31.2,16.8c-0.2-2.1,0.2-4.2,1.2-6.1c0.4-0.8,1.4-1,2-0.3c0.7,0.8,1.3,1.6,1.9,2.4c0.7,1,1.5,1.9,2.3,2.8c1,1.1,2.2,2.1,3.4,3c1.3,1,2.7,1.8,4.2,2.5c1.6,0.7,3.2,1.3,4.9,1.7c1.7,0.4,3.5,0.7,5.3,0.7c1.8,0,3.6-0.2,5.4-0.6c1.8-0.4,3.5-1.1,5.1-1.9c0.8-0.4,1.8,0,2,0.8c0.2,0.8,0.1,1.8-0.4,2.5c-0.8,1.3-1.8,2.4-2.8,3.5c-1.1,1-2.3,1.9-3.6,2.7c-1.3,0.8-2.7,1.5-4.2,2c-1.5,0.5-3.1,0.8-4.7,1c-1.6,0.2-3.3,0.3-4.9,0.2c-1.7-0.1-3.3-0.3-5-0.7c-1.6-0.4-3.1-1-4.6-1.7c-1.4-0.7-2.8-1.7-3.9-2.7c-0.8-0.8-1.5-1.7-2.1-2.6c-0.6-0.9-1.1-1.9-1.5-2.9C31.5,21.1,31.2,19,31.2,16.8z M50.4,14.4c-2.4,0-4.3,1.9-4.3,4.3c0,2.4,1.9,4.3,4.3,4.3c2.4,0,4.3-1.9,4.3-4.3C54.7,16.3,52.8,14.4,50.4,14.4z";
@@ -481,8 +527,7 @@ function PrescriptionPreview({
           )}
         </div>
 
-        {/* Rx Symbol */}
-        <div style={{ fontSize: '56px', fontFamily: 'Georgia, serif', color: '#1a1a1a', fontWeight: 'bold', marginBottom: '20px', lineHeight: 1 }}>℞</div>
+        {/* Rx Symbol Removed as per user feedback */}
 
         {/* Medicines List */}
         <div style={{ marginBottom: '40px' }}>
@@ -516,9 +561,14 @@ function PrescriptionPreview({
           )}
         </div>
 
-        {followUp && (
-          <div style={{ marginTop: '40px', fontSize: '13px', color: '#1a1a1a', borderLeft: '2px solid #1a1a1a', paddingLeft: '15px' }}>
-            <strong>FOLLOW-UP:</strong> {followUp}
+        {followUpDates.length > 0 && (
+          <div style={{ marginTop: '40px', fontSize: '13px', color: '#1a1a1a', borderLeft: '2px solid #C9A84C', paddingLeft: '15px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 800, color: '#C9A84C', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '5px' }}>Follow-up Appointments</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+              {followUpDates.map(date => (
+                <div key={date} style={{ fontWeight: 700 }}>• {format(new Date(date), 'dd MMMM yyyy')}</div>
+              ))}
+            </div>
           </div>
         )}
 
