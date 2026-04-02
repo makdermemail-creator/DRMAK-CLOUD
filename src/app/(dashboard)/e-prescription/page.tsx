@@ -85,9 +85,9 @@ export default function EPrescriptionPage() {
 
   const filteredPatients = React.useMemo(() => {
     if (!patients) return [];
-    if (!patientSearch) return patients.slice(0, 20);
+    if (!patientSearch) return patients.slice(0, 200);
     const term = patientSearch.toLowerCase();
-    return patients.filter(p => p.name?.toLowerCase().includes(term) || p.mobileNumber?.includes(term)).slice(0, 10);
+    return patients.filter(p => p.name?.toLowerCase().includes(term) || p.mobileNumber?.includes(term)).slice(0, 200);
   }, [patients, patientSearch]);
 
   const handleMedicineChange = (id: string, field: keyof Medicine, value: string) => {

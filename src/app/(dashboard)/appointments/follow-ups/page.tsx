@@ -81,13 +81,13 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
     const filteredPatients = React.useMemo(() => {
         if (!patients) return [];
         const term = (patientSearch || '').toLowerCase().trim();
-        if (!term) return patients.slice(0, 50);
+        if (!term) return patients.slice(0, 200);
 
         return patients.filter(p => {
             const name = (p.name || '').toLowerCase();
             const phone = (p.mobileNumber || '').toLowerCase();
             return name.includes(term) || phone.includes(term);
-        }).slice(0, 50);
+        }).slice(0, 200);
     }, [patients, patientSearch]);
 
     const selectedPatientData = React.useMemo(() => {
@@ -141,38 +141,36 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label>Patient</Label>
-                        <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen} modal={true}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    className="w-full justify-between font-normal"
-                                >
-                                    <span className="truncate">
-                                        {selectedPatientData ? (
-                                            `${selectedPatientData.name} - ${selectedPatientData.mobileNumber}`
-                                        ) : (
-                                            <span className="text-muted-foreground">Select a patient...</span>
-                                        )}
-                                    </span>
-                                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverPrimitive.Portal>
-                                <PopoverPrimitive.Content
-                                    align="start"
-                                    side="bottom"
-                                    className="z-[100] w-[350px] rounded-md border bg-popover text-popover-foreground shadow-md"
-                                    onOpenAutoFocus={(e) => e.preventDefault()}
-                                >
+                        <div className="relative">
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-full justify-between font-normal"
+                                onClick={() => setIsPatientOpen(!isPatientOpen)}
+                            >
+                                <span className="truncate">
+                                    {selectedPatientData ? (
+                                        `${selectedPatientData.name} - ${selectedPatientData.mobileNumber}`
+                                    ) : (
+                                        <span className="text-muted-foreground">Select a patient...</span>
+                                    )}
+                                </span>
+                                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+
+                            {isPatientOpen && (
+                                <div className="absolute top-full left-0 z-[100] w-full mt-2 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
                                     <div className="flex flex-col h-[300px]">
-                                        <div className="p-2 border-b">
+                                        <div className="p-2 border-b flex items-center gap-2">
                                             <Input
                                                 placeholder="Search name or mobile..."
                                                 value={patientSearch}
                                                 onChange={(e) => setPatientSearch(e.target.value)}
                                                 autoFocus
                                             />
+                                            <Button size="icon" variant="ghost" onClick={() => setIsPatientOpen(false)}>
+                                              <XCircle className="h-4 w-4" />
+                                            </Button>
                                         </div>
                                         <div className="flex-1 overflow-y-auto p-1">
                                             {filteredPatients.map(p => (
@@ -189,11 +187,16 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                                                     <span className="text-xs text-muted-foreground">{p.mobileNumber}</span>
                                                 </Button>
                                             ))}
+                                            {filteredPatients.length === 0 && (
+                                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                                    No patients found.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                </PopoverPrimitive.Content>
-                            </PopoverPrimitive.Portal>
-                        </Popover>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="grid gap-2">
                         <Label>Follow-up Date</Label>
