@@ -68,7 +68,17 @@ import {
     Trash2,
     Edit2
 } from 'lucide-react';
-import { format, isToday, isThisMonth } from 'date-fns';
+import { format, isToday, isThisMonth, isSameDay } from 'date-fns';
+import { DatePicker } from '@/components/DatePicker';
+import {
+    PieChart as RechartsPieChart,
+    Pie,
+    Cell,
+    ResponsiveContainer,
+    Tooltip as RechartsTooltip,
+    Legend
+} from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
 interface Expense {
     id?: string;
@@ -112,6 +122,7 @@ export default function DailyExpensesPage() {
     const [category, setCategory] = React.useState<string>('Supplies');
     const [description, setDescription] = React.useState<string>('');
     const [paymentMethod, setPaymentMethod] = React.useState<string>('Cash');
+    const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
 
     const expensesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -119,6 +130,22 @@ export default function DailyExpensesPage() {
     }, [firestore]);
 
     const { data: allExpenses, isLoading } = useCollection<Expense>(expensesQuery);
+
+    const selectedExpensesList = React.useMemo(() => 
+        allExpenses?.filter(e => isSameDay(new Date(e.timestamp), selectedDate)) || []
+    , [allExpenses, selectedDate]);
+
+    const olderExpensesList = React.useMemo(() => 
+        allExpenses?.filter(e => !isSameDay(new Date(e.timestamp), selectedDate)) || []
+    , [allExpenses, selectedDate]);
+
+    const paymentMethodData = React.useMemo(() => {
+        const methodMap: Record<string, number> = {};
+        selectedExpensesList.forEach(exp => {
+            methodMap[exp.paymentMethod] = (methodMap[exp.paymentMethod] || 0) + exp.amount;
+        });
+        return Object.entries(methodMap).map(([name, value]) => ({ name, value }));
+    }, [selectedExpensesList]);
 
     const stats = React.useMemo(() => {
         if (!allExpenses) return { todayTotal: 0, monthTotal: 0, todayCount: 0, topCategory: 'N/A' };
@@ -130,7 +157,7 @@ export default function DailyExpensesPage() {
 
         allExpenses.forEach(expense => {
             const expDate = new Date(expense.timestamp);
-            if (isToday(expDate)) {
+            if (isSameDay(expDate, selectedDate)) {
                 todayTotal += expense.amount;
                 todayCount++;
                 categoryMap[expense.category] = (categoryMap[expense.category] || 0) + expense.amount;
@@ -243,8 +270,17 @@ export default function DailyExpensesPage() {
         );
     }
 
-    const todayExpensesList = allExpenses?.filter(e => isToday(new Date(e.timestamp))) || [];
-    const olderExpensesList = allExpenses?.filter(e => !isToday(new Date(e.timestamp))) || [];
+    const COLORS = ['#0d9488', '#0284c7', '#7c3aed', '#db2777', '#ea580c'];
+
+    const chartConfig = {
+        amount: {
+            label: "Amount",
+        },
+        Cash: { label: "Cash", color: "hsl(var(--chart-1))" },
+        Card: { label: "Card", color: "hsl(var(--chart-2))" },
+        "Bank Transfer": { label: "Bank", color: "hsl(var(--chart-3))" },
+        UPI: { label: "UPI", color: "hsl(var(--chart-4))" },
+    };
 
     return (
         <div className="flex flex-col gap-6 p-4">
@@ -257,8 +293,14 @@ export default function DailyExpensesPage() {
                     </h2>
                     <p className="text-muted-foreground">Track and manage outgoing clinic expenses.</p>
                 </div>
-                
-                <Dialog open={isAddOpen} onOpenChange={(open) => {
+
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Filter by Date</Label>
+                        <DatePicker date={selectedDate} onDateChange={(d) => d && setSelectedDate(d)} />
+                    </div>
+                    <Separator orientation="vertical" className="h-10 hidden md:block" />
+                    <Dialog open={isAddOpen} onOpenChange={(open) => {
                     setIsAddOpen(open);
                     if (!open) resetForm();
                 }}>
@@ -306,13 +348,16 @@ export default function DailyExpensesPage() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="bg-primary/5 border-primary/20">
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-primary font-semibold uppercase tracking-wider text-[10px]">Today's Expenses</CardDescription>
+                        <CardDescription className="text-primary font-semibold uppercase tracking-wider text-[10px]">
+                            {isToday(selectedDate) ? "Today's" : format(selectedDate, 'PP')} Expenses
+                        </CardDescription>
                         <CardTitle className="text-3xl font-bold">{stats.todayTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -336,7 +381,7 @@ export default function DailyExpensesPage() {
 
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">This Month's Expenses</CardDescription>
+                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">This Month's Total</CardDescription>
                         <CardTitle className="text-3xl font-bold">{stats.monthTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -344,6 +389,56 @@ export default function DailyExpensesPage() {
                             <Calendar className="h-3 w-3" /> Total outgoing this month
                         </div>
                     </CardContent>
+                </Card>
+            </div>
+
+            {/* Analysis Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <PieChart className="h-5 w-5 text-primary" />
+                            Payment Method Distribution
+                        </CardTitle>
+                        <CardDescription>Breakdown of expenses for {format(selectedDate, 'PP')}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[250px]">
+                        {paymentMethodData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                                <p className="italic">No data for selected date</p>
+                            </div>
+                        ) : (
+                            <ChartContainer config={chartConfig} className="h-full w-full">
+                                <RechartsPieChart>
+                                    <Pie
+                                        data={paymentMethodData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {paymentMethodData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <ChartTooltip content={<ChartTooltipContent />} />
+                                    <Legend verticalAlign="bottom" height={36}/>
+                                </RechartsPieChart>
+                            </ChartContainer>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="flex flex-col justify-center items-center p-6 text-center bg-teal-50/50 border-dashed border-teal-200">
+                    <div className="rounded-full bg-teal-100 p-3 mb-4">
+                        <DollarSign className="h-8 w-8 text-teal-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-teal-900 mb-2">Detailed Financial Insight</h3>
+                    <p className="text-sm text-teal-700 max-w-xs">
+                        View exactly how your clinic's funds are being utilized across different payment channels for {format(selectedDate, 'PP')}.
+                    </p>
                 </Card>
             </div>
 
@@ -394,16 +489,16 @@ export default function DailyExpensesPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <DollarSign className="h-5 w-5 text-red-500" />
-                        Today's Expenses Log
+                        Expenses Log: {format(selectedDate, 'PP')}
                     </CardTitle>
-                    <CardDescription>All expenses recorded for today.</CardDescription>
+                    <CardDescription>All expenses recorded for the selected date.</CardDescription>
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">
-                    {todayExpensesList.length === 0 ? (
+                    {selectedExpensesList.length === 0 ? (
                         <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
                             <Receipt className="h-12 w-12 opacity-10 mb-2" />
-                            <p className="italic">No expenses recorded today.</p>
+                            <p className="italic">No expenses recorded for this date.</p>
                         </div>
                     ) : (
                         <Table>
@@ -418,7 +513,7 @@ export default function DailyExpensesPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {todayExpensesList.map((expense) => (
+                                {selectedExpensesList.map((expense) => (
                                     <TableRow key={expense.id}>
                                         <TableCell className="text-xs text-muted-foreground">
                                             {format(new Date(expense.timestamp), 'p')}

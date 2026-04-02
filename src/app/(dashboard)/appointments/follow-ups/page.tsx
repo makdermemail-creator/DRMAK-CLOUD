@@ -141,7 +141,7 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label>Patient</Label>
-                        <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen} modal={false}>
+                        <Popover open={isPatientOpen} onOpenChange={setIsPatientOpen} modal={true}>
                             <PopoverTrigger asChild>
                                 <Button
                                     variant="outline"
@@ -158,39 +158,41 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                                     <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverPrimitive.Content
-                                align="start"
-                                side="bottom"
-                                className="z-[100] w-[350px] rounded-md border bg-popover text-popover-foreground shadow-md"
-                                onOpenAutoFocus={(e) => e.preventDefault()}
-                            >
-                                <div className="flex flex-col h-[300px]">
-                                    <div className="p-2 border-b">
-                                        <Input
-                                            placeholder="Search name or mobile..."
-                                            value={patientSearch}
-                                            onChange={(e) => setPatientSearch(e.target.value)}
-                                            autoFocus
-                                        />
+                            <PopoverPrimitive.Portal>
+                                <PopoverPrimitive.Content
+                                    align="start"
+                                    side="bottom"
+                                    className="z-[100] w-[350px] rounded-md border bg-popover text-popover-foreground shadow-md"
+                                    onOpenAutoFocus={(e) => e.preventDefault()}
+                                >
+                                    <div className="flex flex-col h-[300px]">
+                                        <div className="p-2 border-b">
+                                            <Input
+                                                placeholder="Search name or mobile..."
+                                                value={patientSearch}
+                                                onChange={(e) => setPatientSearch(e.target.value)}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-1">
+                                            {filteredPatients.map(p => (
+                                                <Button
+                                                    key={p.id}
+                                                    variant="ghost"
+                                                    className="w-full justify-start h-auto py-2 px-3 flex flex-col items-start gap-0.5"
+                                                    onClick={() => {
+                                                        setPatientId(p.id);
+                                                        setIsPatientOpen(false);
+                                                    }}
+                                                >
+                                                    <span className="text-sm font-semibold">{p.name}</span>
+                                                    <span className="text-xs text-muted-foreground">{p.mobileNumber}</span>
+                                                </Button>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto p-1">
-                                        {filteredPatients.map(p => (
-                                            <Button
-                                                key={p.id}
-                                                variant="ghost"
-                                                className="w-full justify-start h-auto py-2 px-3 flex flex-col items-start gap-0.5"
-                                                onClick={() => {
-                                                    setPatientId(p.id);
-                                                    setIsPatientOpen(false);
-                                                }}
-                                            >
-                                                <span className="text-sm font-semibold">{p.name}</span>
-                                                <span className="text-xs text-muted-foreground">{p.mobileNumber}</span>
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </PopoverPrimitive.Content>
+                                </PopoverPrimitive.Content>
+                            </PopoverPrimitive.Portal>
                         </Popover>
                     </div>
                     <div className="grid gap-2">

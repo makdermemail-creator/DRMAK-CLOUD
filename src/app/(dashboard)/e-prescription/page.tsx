@@ -68,6 +68,7 @@ export default function EPrescriptionPage() {
   const [investigations, setInvestigations] = React.useState('');
   const [advice, setAdvice] = React.useState('');
   const [followUpDates, setFollowUpDates] = React.useState<string[]>([]);
+  const [newFollowUpDate, setNewFollowUpDate] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
@@ -314,15 +315,13 @@ export default function EPrescriptionPage() {
                     <div className="flex gap-2">
                       <Input 
                         type="date" 
-                        id="new-follow-up-date"
                         className="max-w-[200px]"
+                        value={newFollowUpDate}
+                        onChange={(e) => setNewFollowUpDate(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const val = (e.target as HTMLInputElement).value;
-                            if (val && !followUpDates.includes(val)) {
-                              setFollowUpDates(prev => [...prev, val].sort());
-                              (e.target as HTMLInputElement).value = '';
-                            }
+                          if (e.key === 'Enter' && newFollowUpDate && !followUpDates.includes(newFollowUpDate)) {
+                            setFollowUpDates(prev => [...prev, newFollowUpDate].sort());
+                            setNewFollowUpDate('');
                           }
                         }}
                       />
@@ -330,10 +329,9 @@ export default function EPrescriptionPage() {
                         size="sm" 
                         variant="secondary"
                         onClick={() => {
-                          const el = document.getElementById('new-follow-up-date') as HTMLInputElement;
-                          if (el.value && !followUpDates.includes(el.value)) {
-                            setFollowUpDates(prev => [...prev, el.value].sort());
-                            el.value = '';
+                          if (newFollowUpDate && !followUpDates.includes(newFollowUpDate)) {
+                            setFollowUpDates(prev => [...prev, newFollowUpDate].sort());
+                            setNewFollowUpDate('');
                           }
                         }}
                       >
