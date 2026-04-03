@@ -121,11 +121,14 @@ export default function BillingPage() {
     const pharmacyItems = React.useMemo(() => {
         if (!suppliers) return [];
         const items: (SupplierProduct & { supplierName: string; supplierId: string })[] = [];
-        suppliers.forEach(s => {
-            s.products?.forEach(p => {
-                items.push({ ...p, supplierName: s.name, supplierId: s.id });
+        // Only show items from Distributors (Pharmacy items), not Vendors
+        suppliers
+            .filter(s => s.type === 'Distributor')
+            .forEach(s => {
+                s.products?.forEach(p => {
+                    items.push({ ...p, supplierName: s.name, supplierId: s.id });
+                });
             });
-        });
         return items;
     }, [suppliers]);
 
@@ -828,19 +831,7 @@ export default function BillingPage() {
                             
                             <div className="space-y-1.5 relative">
                                 <Label>Pharmacy Items</Label>
-                                <div className="relative" tabIndex={-1} onBlur={(e) => {
-                                    // Close dropdown if focus moves outside this container
-                                    if (!e.currentTarget.contains(e.relatedTarget)) {
-                                        // using a small timeout is safer if children don't correctly pass relatedTarget in some portals, but here we can just use relatedTarget or timeout.
-                                        setTimeout(() => {
-                                            const active = document.activeElement;
-                                            if (!e.currentTarget.contains(active)) {
-                                                // We don't have a specific state variable for focus so we can just use a hack:
-                                                // Actually, let's just use CSS peer/focus-within if possible, or standard React state.
-                                            }
-                                        }, 150);
-                                    }
-                                }}>
+                                <div className="relative" tabIndex={-1}>
                                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Search pharmacy item..."

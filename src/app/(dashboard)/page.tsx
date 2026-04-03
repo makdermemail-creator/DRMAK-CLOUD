@@ -76,6 +76,7 @@ import { BarChart as RechartsBarChart, XAxis, YAxis, Bar as RechartsBar, Tooltip
 
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -92,7 +93,7 @@ import {
 import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
-import { add, format, startOfDay } from 'date-fns';
+import { add, format, startOfDay, isSameMonth, isSameYear, startOfMonth, startOfYear } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
@@ -712,6 +713,7 @@ const AdminDashboard = () => {
     const { searchTerm } = useSearch();
     const firestore = useFirestore();
     const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
+    const [periodMode, setPeriodMode] = React.useState<'day' | 'month' | 'year'>('day');
 
     React.useEffect(() => {
         setSelectedDate(new Date());
@@ -767,34 +769,41 @@ const AdminDashboard = () => {
             return { dailyRevenue: 0, todaysPatients: 0, appointmentStats: { completed: 0, total: 0 } };
         }
 
-        const selectedDayStart = startOfDay(selectedDate);
-        const dayAppointments = appointments.filter(apt => {
-            const aptDate = startOfDay(new Date(apt.appointmentDateTime));
-            return aptDate.getTime() === selectedDayStart.getTime();
+        const filteredAppointments = appointments.filter(apt => {
+            const aptDate = new Date(apt.appointmentDateTime);
+            if (periodMode === 'day') return startOfDay(aptDate).getTime() === startOfDay(selectedDate).getTime();
+            if (periodMode === 'month') return isSameMonth(aptDate, selectedDate) && isSameYear(aptDate, selectedDate);
+            if (periodMode === 'year') return isSameYear(aptDate, selectedDate);
+            return false;
         });
 
-        const total = dayAppointments.length;
-        const completed = dayAppointments.filter(apt => apt.status === 'Completed').length;
+        const total = filteredAppointments.length;
+        const completed = filteredAppointments.filter(apt => apt.status === 'Completed').length;
 
-        // Revenue calculation using BillingRecord fields
+        // Revenue calculation
         let revenue = 0;
         if (billingRecords) {
             billingRecords.forEach(record => {
-                const recordDate = startOfDay(new Date(record.billingDate));
-                if (recordDate.getTime() === selectedDayStart.getTime()) {
+                const recordDate = new Date(record.billingDate);
+                let match = false;
+                if (periodMode === 'day') match = startOfDay(recordDate).getTime() === startOfDay(selectedDate).getTime();
+                else if (periodMode === 'month') match = isSameMonth(recordDate, selectedDate) && isSameYear(recordDate, selectedDate);
+                else if (periodMode === 'year') match = isSameYear(recordDate, selectedDate);
+
+                if (match) {
                     revenue += record.grandTotal || record.totalAmount || ((record.consultationCharges || 0) + (record.procedureCharges || 0) + (record.medicineCharges || 0));
                 }
             });
         }
 
-        const uniquePatients = new Set(dayAppointments.map(a => a.patientMobileNumber)).size;
+        const uniquePatients = new Set(filteredAppointments.map(a => a.patientMobileNumber)).size;
 
         return {
             dailyRevenue: revenue,
             todaysPatients: uniquePatients,
             appointmentStats: { completed, total }
         };
-    }, [appointments, billingRecords, selectedDate]);
+    }, [appointments, billingRecords, selectedDate, periodMode]);
 
     const activeConsultations = React.useMemo(() => {
         if (!appointments || !selectedDate) return 0;
@@ -821,25 +830,102 @@ const AdminDashboard = () => {
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border border-border/50">
+                <div className="space-y-1">
+                    <h2 className="text-2xl font-bold tracking-tight">Today's Summary</h2>
+                    <p className="text-sm text-muted-foreground">Detailed metrics for your selected period</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Tabs value={periodMode} onValueChange={(v: any) => setPeriodMode(v)} className="w-[300px]">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="day">Day</TabsTrigger>
+                            <TabsTrigger value="month">Month</TabsTrigger>
+                            <TabsTrigger value="year">Year</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                    {periodMode === 'day' && <DatePicker date={selectedDate} onDateChange={setSelectedDate} />}
+                    {periodMode === 'month' && (
+                        <div className="flex gap-2">
+                            <Select value={selectedDate?.getMonth().toString()} onValueChange={(v) => {
+                                const newDate = new Date(selectedDate || new Date());
+                                newDate.setMonth(parseInt(v));
+                                setSelectedDate(newDate);
+                            }}>
+                                <SelectTrigger className="w-[120px]">
+                                    <SelectValue placeholder="Month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 12 }).map((_, i) => (
+                                        <SelectItem key={i} value={i.toString()}>
+                                            {format(new Date(2024, i, 1), 'MMMM')}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={selectedDate?.getFullYear().toString()} onValueChange={(v) => {
+                                const newDate = new Date(selectedDate || new Date());
+                                newDate.setFullYear(parseInt(v));
+                                setSelectedDate(newDate);
+                            }}>
+                                <SelectTrigger className="w-[100px]">
+                                    <SelectValue placeholder="Year" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 5 }).map((_, i) => {
+                                        const year = new Date().getFullYear() - 2 + i;
+                                        return <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                                    })}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    {periodMode === 'year' && (
+                        <Select value={selectedDate?.getFullYear().toString()} onValueChange={(v) => {
+                            const newDate = new Date(selectedDate || new Date());
+                            newDate.setFullYear(parseInt(v));
+                            setSelectedDate(newDate);
+                        }}>
+                            <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {Array.from({ length: 5 }).map((_, i) => {
+                                    const year = new Date().getFullYear() - 2 + i;
+                                    return <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                                })}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Revenue for {selectedDate ? format(selectedDate, 'MMM d') : 'Today'}</CardTitle>
+                        <CardTitle className="text-sm font-medium">
+                            Revenue ({periodMode === 'day' ? format(selectedDate || new Date(), 'MMM d') : 
+                                     periodMode === 'month' ? format(selectedDate || new Date(), 'MMMM yyyy') : 
+                                     format(selectedDate || new Date(), 'yyyy')})
+                        </CardTitle>
                         <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">Rs{dailyRevenue.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Total collected today</p>
+                        <p className="text-xs text-muted-foreground">Total collected in {periodMode}</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Patients for {selectedDate ? format(selectedDate, 'MMM d') : 'Today'}</CardTitle>
+                        <CardTitle className="text-sm font-medium">
+                            Patients ({periodMode === 'day' ? format(selectedDate || new Date(), 'MMM d') : 
+                                     periodMode === 'month' ? format(selectedDate || new Date(), 'MMMM yyyy') : 
+                                     format(selectedDate || new Date(), 'yyyy')})
+                        </CardTitle>
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">+{todaysPatients}</div>
-                        <p className="text-xs text-muted-foreground">Unique patient visits</p>
+                        <p className="text-xs text-muted-foreground">Unique patient interactions</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -849,7 +935,7 @@ const AdminDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{appointmentStats.completed} / {appointmentStats.total}</div>
-                        <p className="text-xs text-muted-foreground">Completed / Total for {selectedDate ? format(selectedDate, 'MMM d') : 'Today'}</p>
+                        <p className="text-xs text-muted-foreground">Completed / Total for period</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -860,7 +946,7 @@ const AdminDashboard = () => {
                     <CardContent>
                         <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
                         <p className={`text-xs ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% from last month
+                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% overall
                         </p>
                     </CardContent>
                 </Card>

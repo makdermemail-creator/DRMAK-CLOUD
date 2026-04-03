@@ -38,7 +38,16 @@ import {
     PieChart,
     Loader2
 } from 'lucide-react';
-import { format, isToday, startOfDay, endOfDay } from 'date-fns';
+import { format, isToday, startOfDay, endOfDay, isSameDay, isSameMonth, isSameYear } from 'date-fns';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DatePicker } from "@/components/DatePicker";
 
 interface BillItem {
     id: string;
@@ -71,20 +80,42 @@ export default function TodaySummaryPage() {
 
     const { data: allRecords, isLoading } = useCollection<BillingRecord>(billingQuery);
 
-    const todayRecords = React.useMemo(() => {
+    // Filter State
+    const [periodMode, setPeriodMode] = React.useState<'Day' | 'Month' | 'Year'>('Day');
+    const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
+    const [selectedMonth, setSelectedMonth] = React.useState<string>(format(new Date(), 'MM'));
+    const [selectedYear, setSelectedYear] = React.useState<string>(format(new Date(), 'yyyy'));
+
+    const filteredRecords = React.useMemo(() => {
         if (!allRecords) return [];
-        return allRecords.filter(record => isToday(new Date(record.timestamp)));
-    }, [allRecords]);
+        return allRecords.filter(record => {
+            const date = new Date(record.timestamp);
+            if (periodMode === 'Day') {
+                return isSameDay(date, selectedDate);
+            } else if (periodMode === 'Month') {
+                const targetMonth = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1);
+                return isSameMonth(date, targetMonth) && isSameYear(date, targetMonth);
+            } else {
+                return isSameYear(date, new Date(parseInt(selectedYear), 0));
+            }
+        });
+    }, [allRecords, periodMode, selectedDate, selectedMonth, selectedYear]);
+
+    const periodLabel = React.useMemo(() => {
+        if (periodMode === 'Day') return format(selectedDate, 'PPPP');
+        if (periodMode === 'Month') return format(new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1), 'MMMM yyyy');
+        return selectedYear;
+    }, [periodMode, selectedDate, selectedMonth, selectedYear]);
 
     const stats = React.useMemo(() => {
-        const totalRevenue = todayRecords.reduce((sum, r) => sum + (r.grandTotal || 0), 0);
-        const uniquePatients = new Set(todayRecords.map(r => r.patientId)).size;
+        const totalRevenue = filteredRecords.reduce((sum, r) => sum + (r.grandTotal || 0), 0);
+        const uniquePatients = new Set(filteredRecords.map(r => r.patientId)).size;
 
         // Group procedures
         const proceduresMap: { [key: string]: { count: number, revenue: number } } = {};
         const paymentsMap: { [key: string]: { count: number, amount: number } } = {};
 
-        todayRecords.forEach(record => {
+        filteredRecords.forEach(record => {
             // Count procedures
             record.items?.forEach(item => {
                 if (item.type === 'procedure') {
@@ -110,9 +141,9 @@ export default function TodaySummaryPage() {
             uniquePatients,
             procedures: Object.entries(proceduresMap).map(([name, data]) => ({ name, ...data })),
             payments: Object.entries(paymentsMap).map(([method, data]) => ({ method, ...data })),
-            totalTransactions: todayRecords.length
+            totalTransactions: filteredRecords.length
         };
-    }, [todayRecords]);
+    }, [filteredRecords]);
 
     const handlePrint = () => {
         window.print();
@@ -131,16 +162,71 @@ export default function TodaySummaryPage() {
         <div className="flex flex-col gap-6 p-4">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
-                <div>
+                <div className="flex-1">
                     <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
                         <TrendingUp className="h-8 w-8 text-primary" />
-                        Today's Clinical Summary
+                        Clinical Performance Summary
                     </h2>
-                    <p className="text-muted-foreground">Detailed breakdown of patients, procedures, and revenue for {format(new Date(), 'PPPP')}.</p>
+                    <p className="text-muted-foreground italic">Viewing reports for <span className="text-primary font-bold">{periodLabel}</span></p>
                 </div>
-                <Button onClick={handlePrint} variant="outline" className="gap-2">
-                    <Printer className="h-4 w-4" /> Print Daily Report
-                </Button>
+
+                <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-2 rounded-xl border border-dashed">
+                    <Tabs value={periodMode} onValueChange={(v: any) => setPeriodMode(v)} className="w-[200px]">
+                        <TabsList className="grid w-full grid-cols-3 h-8">
+                            <TabsTrigger value="Day" className="text-xs">Day</TabsTrigger>
+                            <TabsTrigger value="Month" className="text-xs">Month</TabsTrigger>
+                            <TabsTrigger value="Year" className="text-xs">Year</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+
+                    {periodMode === 'Day' && (
+                        <DatePicker date={selectedDate} onDateChange={setSelectedDate as any} />
+                    )}
+
+                    {periodMode === 'Month' && (
+                        <div className="flex gap-2">
+                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                <SelectTrigger className="w-[110px] h-9">
+                                    <SelectValue placeholder="Month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 12 }, (_, i) => {
+                                        const month = format(new Date(2000, i), 'MM');
+                                        const label = format(new Date(2000, i), 'MMMM');
+                                        return <SelectItem key={month} value={month}>{label}</SelectItem>;
+                                    })}
+                                </SelectContent>
+                            </Select>
+                            <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                <SelectTrigger className="w-[100px] h-9">
+                                    <SelectValue placeholder="Year" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {[2024, 2025, 2026].map(year => (
+                                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {periodMode === 'Year' && (
+                        <Select value={selectedYear} onValueChange={setSelectedYear}>
+                            <SelectTrigger className="w-[100px] h-9">
+                                <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {[2024, 2025, 2026].map(year => (
+                                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
+                    <Button onClick={handlePrint} variant="outline" className="gap-2 h-9">
+                        <Printer className="h-4 w-4" /> Print
+                    </Button>
+                </div>
             </div>
 
             {/* Quick Stats */}
@@ -214,7 +300,7 @@ export default function TodaySummaryPage() {
                         {stats.procedures.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-12">
                                 <Activity className="h-12 w-12 opacity-10 mb-2" />
-                                <p className="italic">No procedures recorded today.</p>
+                                <p className="italic">No procedures recorded for this period.</p>
                             </div>
                         ) : (
                             <Table>
@@ -255,7 +341,7 @@ export default function TodaySummaryPage() {
                         {stats.payments.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-12">
                                 <CreditCard className="h-12 w-12 opacity-10 mb-2" />
-                                <p className="italic">No transactions recorded today.</p>
+                                <p className="italic">No transactions recorded for this period.</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
@@ -300,10 +386,10 @@ export default function TodaySummaryPage() {
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">
-                    {todayRecords.length === 0 ? (
+                    {filteredRecords.length === 0 ? (
                         <div className="flex flex-col items-center justify-center text-muted-foreground py-12">
                             <Users className="h-12 w-12 opacity-10 mb-2" />
-                            <p className="italic">No patient visits recorded today.</p>
+                            <p className="italic">No patient visits recorded for this period.</p>
                         </div>
                     ) : (
                         <Table>
@@ -317,7 +403,7 @@ export default function TodaySummaryPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {todayRecords.map((record) => (
+                                {filteredRecords.map((record) => (
                                     <TableRow key={record.id}>
                                         <TableCell className="text-xs text-muted-foreground">
                                             {format(new Date(record.timestamp), 'p')}
