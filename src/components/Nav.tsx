@@ -52,7 +52,8 @@ import {
     Mail,
     Network,
     Truck,
-    Receipt
+    Receipt,
+    Printer
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -85,6 +86,7 @@ const allMenuItems: MenuItem[] = [
     { id: 'designerWork', href: '/designer-dashboard', label: 'Workstation', icon: LayoutDashboard },
     { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
 
+    { id: 'printPrescription', href: '/print-prescription', label: 'Print Prescription', icon: Printer },
     { id: 'appointments', href: '/appointments', label: 'Appointments', icon: Calendar },
     { id: 'followUpCalendar', href: '/appointments/follow-ups', label: 'Follow-up Calendar', icon: CalendarCheck },
     { id: 'patients', href: '/patients', label: 'Patients', icon: Users },
@@ -176,7 +178,7 @@ const clinicGroups = [
     },
     {
         label: "Core Operations",
-        ids: ["appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing", "todaySummary", "dailyExpenses"]
+        ids: ["printPrescription", "appointments", "followUpCalendar", "patients", "doctors", "procedures", "inventory", "supplier", "billing", "todaySummary", "dailyExpenses"]
     },
     {
         label: "Medical & Pharmacy",
@@ -305,7 +307,7 @@ const NavContent = () => {
             // Core Operations + AI Tools (Removed Pharmacy and Reports)
             baseAccessIds = [
                 'dashboard', 
-                'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
+                'printPrescription', 'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
                 'aiTools'
             ];
         } else if (userProfile?.role === 'Doctor') {
