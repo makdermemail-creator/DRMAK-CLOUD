@@ -67,7 +67,7 @@ export default function PharmacyReportPage() {
   
   const totalRevenue = React.useMemo(() => {
       if (!billingRecords) return 0;
-      return billingRecords.reduce((sum, record) => sum + record.medicineCharges, 0);
+      return billingRecords.reduce((sum, record) => sum + (record.medicineCharges ?? 0), 0);
   }, [billingRecords]);
 
   const tabs = [
@@ -178,8 +178,8 @@ export default function PharmacyReportPage() {
                                    <TableCell>{record.id.slice(0,8)}</TableCell>
                                    <TableCell>{record.patientMobileNumber}</TableCell>
                                    <TableCell>Patient Name</TableCell>
-                                   <TableCell>{record.medicineCharges.toFixed(2)}</TableCell>
-                                   <TableCell>{record.medicineCharges.toFixed(2)}</TableCell>
+                                   <TableCell>{(record.medicineCharges ?? 0).toFixed(2)}</TableCell>
+                                   <TableCell>{(record.medicineCharges ?? 0).toFixed(2)}</TableCell>
                                    <TableCell>{record.paymentMethod}</TableCell>
                                    <TableCell>Pharmacy</TableCell>
                                    <TableCell>{new Date(record.billingDate).toLocaleDateString()}</TableCell>

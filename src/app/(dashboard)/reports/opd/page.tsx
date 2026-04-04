@@ -78,7 +78,7 @@ export default function OPDReportPage() {
 
     billingRecords.forEach(record => {
         const hour = format(new Date(record.billingDate), 'HH:00');
-        const revenue = record.consultationCharges + record.procedureCharges + record.medicineCharges;
+        const revenue = (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0);
         if(hourlyRevenue[hour] !== undefined) {
              hourlyRevenue[hour] += revenue;
         }
@@ -90,7 +90,7 @@ export default function OPDReportPage() {
 
   const totalRevenue = React.useMemo(() => {
     if(!billingRecords) return 0;
-    return billingRecords.reduce((acc, record) => acc + record.consultationCharges + record.procedureCharges + record.medicineCharges, 0);
+    return billingRecords.reduce((acc, record) => acc + (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0), 0);
   }, [billingRecords]);
 
 

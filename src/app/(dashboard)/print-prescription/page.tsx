@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Printer, CheckCircle2, Clock } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { PrescriptionPreview } from '@/components/PrescriptionPreview';
 
 export default function PrintPrescriptionPage() {
@@ -20,7 +20,8 @@ export default function PrintPrescriptionPage() {
     return query(collection(firestore, 'prescriptions'), where('printStatus', '==', 'Pending'));
   }, [firestore]);
 
-  const { data: rawPendingJobs, loading } = useCollection(pendingQuery);
+  const { toast } = useToast();
+  const { data: rawPendingJobs, isLoading: loading } = useCollection(pendingQuery);
 
   // Since we couldn't orderBy createdAt alongside where without a composite index,
   // we sort them client-side.

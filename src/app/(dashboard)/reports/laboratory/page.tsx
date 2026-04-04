@@ -93,7 +93,7 @@ export default function LaboratoryReportPage() {
     if (!billingRecords || !patients || !doctors) return [];
     const patientsMap = new Map(patients.map(p => [p.mobileNumber, p]));
     return billingRecords
-      .filter(record => record.procedureCharges > 0)
+      .filter(record => (record.procedureCharges ?? 0) > 0)
       .map(record => ({
         ...record,
         patient: patientsMap.get(record.patientMobileNumber)
@@ -107,8 +107,8 @@ export default function LaboratoryReportPage() {
     patientName: t.patient?.name || 'N/A',
     referredBy: '-',
     description: 'Lab Tests', // Placeholder
-    total: t.consultationCharges + t.procedureCharges + t.medicineCharges,
-    paid: t.consultationCharges + t.procedureCharges + t.medicineCharges, // Assuming fully paid
+    total: (t.consultationCharges ?? 0) + (t.procedureCharges ?? 0) + (t.medicineCharges ?? 0),
+    paid: (t.consultationCharges ?? 0) + (t.procedureCharges ?? 0) + (t.medicineCharges ?? 0), // Assuming fully paid
     discount: 0.0,
     dues: 0.0,
     deductionsInsurance: 0.0,
@@ -117,7 +117,7 @@ export default function LaboratoryReportPage() {
     advance: 0.0,
     paymentMode: t.paymentMethod,
     doctorRevenue: '-', // Placeholder
-    departmentRevenue: 'Lab = ' + (t.procedureCharges).toFixed(2), // Assuming procedure charges are lab charges
+    departmentRevenue: 'Lab = ' + (t.procedureCharges ?? 0).toFixed(2), // Assuming procedure charges are lab charges
     paymentDate: new Date(t.billingDate).toLocaleString(),
   }));
 

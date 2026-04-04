@@ -210,6 +210,7 @@ export default function PatientEditPage() {
               <Label>Profile photo</Label>
               <AvatarUpload
                 uid={patient.id}
+                firestore={firestore}
                 currentPhotoURL={formData.avatarUrl}
                 onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
               />

@@ -102,9 +102,9 @@ export default function FinancialReportPage() {
       mrn: patientsMap.get(record.patientMobileNumber)?.id.slice(0, 8) || 'N/A',
       patientName: patientsMap.get(record.patientMobileNumber)?.name || 'Unknown',
       referredBy: '-',
-      description: `Charges: Consult(${record.consultationCharges}), Proc(${record.procedureCharges}), Med(${record.medicineCharges})`,
-      total: record.consultationCharges + record.procedureCharges + record.medicineCharges,
-      paid: record.consultationCharges + record.procedureCharges + record.medicineCharges, // Assuming fully paid if recorded
+      description: `Charges: Consult(${record.consultationCharges ?? 0}), Proc(${record.procedureCharges ?? 0}), Med(${record.medicineCharges ?? 0})`,
+      total: (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0),
+      paid: (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0), // Assuming fully paid if recorded
       discount: 0.0,
       dues: 0.0,
       deductionsInsurance: 0.0,
