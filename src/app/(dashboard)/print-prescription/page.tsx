@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, updateDoc, doc } from 'firebase/firestore';
 import { format } from 'date-fns';
+import { safeFormat } from '@/lib/safe-date';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,7 +16,7 @@ export default function PrintPrescriptionPage() {
   const firestore = useFirestore();
 
   // Query all prescriptions that are Pending print
-  const pendingQuery = React.useMemo(() => {
+  const pendingQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'prescriptions'), where('printStatus', '==', 'Pending'));
   }, [firestore]);
@@ -103,7 +104,7 @@ export default function PrintPrescriptionPage() {
                   pendingJobs.map((job) => (
                     <TableRow key={job.id}>
                       <TableCell>
-                        {job.createdAt ? format(new Date(job.createdAt), 'dd MMM yyyy, hh:mm a') : 'Unknown'}
+                        {safeFormat(job.createdAt, 'dd MMM yyyy, hh:mm a')}
                       </TableCell>
                       <TableCell>
                         <div className="font-semibold text-slate-900 dark:text-slate-100">{job.patientName}</div>
@@ -150,7 +151,7 @@ export default function PrintPrescriptionPage() {
             investigations={printingJob.investigations || ''}
             advice={printingJob.advice || ''}
             followUpDates={printingJob.followUp || []}
-            today={printingJob.createdAt ? format(new Date(printingJob.createdAt), 'dd MMMM yyyy') : format(new Date(), 'dd MMMM yyyy')}
+            today={safeFormat(printingJob.createdAt, 'dd MMMM yyyy', format(new Date(), 'dd MMMM yyyy'))}
           />
         </div>
       )}

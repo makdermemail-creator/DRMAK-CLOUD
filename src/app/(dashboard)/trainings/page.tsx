@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
 import { Eye } from 'lucide-react';
+import { safeFormat } from '@/lib/safe-date';
 
 interface TrainingCardProps {
     training: SalesTraining;
@@ -62,7 +63,7 @@ function TrainingCard({ training, userId, onViewDetails }: TrainingCardProps) {
                         {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" />}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                        Published: {new Date(training.createdAt).toLocaleDateString()}
+                        Published: {safeFormat(training.createdAt, 'PP')}
                     </div>
                 </div>
             </CardHeader>
@@ -100,7 +101,7 @@ function TrainingCard({ training, userId, onViewDetails }: TrainingCardProps) {
                             </Button>
                         ) : (
                             <div className="bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2">
-                                <CheckCircle2 className="h-4 w-4" /> Completed on {completion?.completedAt ? new Date(completion.completedAt).toLocaleDateString() : ''}
+                                <CheckCircle2 className="h-4 w-4" /> Completed on {safeFormat(completion?.completedAt, 'PP')}
                             </div>
                         )}
                     </div>

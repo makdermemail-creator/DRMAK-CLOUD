@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { updateDocumentNonBlocking } from '@/firebase';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 import { TrainingDetailDialog } from '@/components/TrainingDetailDialog';
+import { safeFormat } from '@/lib/safe-date';
 import { Eye } from 'lucide-react';
 
 export default function SalesDashboardPage() {
@@ -341,7 +342,7 @@ export default function SalesDashboardPage() {
                                         <p className="text-sm text-muted-foreground">{lead.status}</p>
                                     </div>
                                     <div className="text-sm text-muted-foreground">
-                                        {new Date(lead.createdAt).toLocaleDateString()}
+                                        {safeFormat(lead.createdAt, 'PP')}
                                     </div>
                                 </div>
                             ))}

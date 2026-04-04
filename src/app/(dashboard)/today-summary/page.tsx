@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatePicker } from "@/components/DatePicker";
+import { safeDate, safeFormat } from '@/lib/safe-date';
 
 interface BillItem {
     id: string;
@@ -89,7 +90,8 @@ export default function TodaySummaryPage() {
     const filteredRecords = React.useMemo(() => {
         if (!allRecords) return [];
         return allRecords.filter(record => {
-            const date = new Date(record.timestamp);
+            const date = safeDate(record.timestamp);
+            if (!date) return false;
             if (periodMode === 'Day') {
                 return isSameDay(date, selectedDate);
             } else if (periodMode === 'Month') {
@@ -406,7 +408,7 @@ export default function TodaySummaryPage() {
                                 {filteredRecords.map((record) => (
                                     <TableRow key={record.id}>
                                         <TableCell className="text-xs text-muted-foreground">
-                                            {format(new Date(record.timestamp), 'p')}
+                                            {safeFormat(record.timestamp, 'p')}
                                         </TableCell>
                                         <TableCell>
                                             <div className="font-semibold">{record.patientName}</div>

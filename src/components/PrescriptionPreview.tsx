@@ -200,7 +200,13 @@ export function PrescriptionPreview({
             <div style={{ fontSize: '11px', fontWeight: 800, color: '#C9A84C', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '5px' }}>Follow-up Appointments</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
               {followUpDates.map(date => (
-                <div key={date} style={{ fontWeight: 700 }}>• {format(new Date(date), 'dd MMMM yyyy')}</div>
+                <div key={date} style={{ fontWeight: 700 }}>• {(() => {
+                  try {
+                    return format(new Date(date), 'dd MMMM yyyy');
+                  } catch {
+                    return 'Invalid Date';
+                  }
+                })()}</div>
               ))}
             </div>
           </div>

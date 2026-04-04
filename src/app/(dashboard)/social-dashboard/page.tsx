@@ -86,6 +86,7 @@ import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { Trash2, Settings, Save } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
+import { safeFormat } from '@/lib/safe-date';
 import {
     orderBy,
     or
@@ -596,7 +597,7 @@ export default function SocialDashboardPage() {
                                                     <Clock className="h-3 w-3" />
                                                     Due Soon
                                                 </p>
-                                                <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">{format(new Date(t.createdAt), 'MMM dd')}</p>
+                                                <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">{safeFormat(t.createdAt, 'MMM dd')}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -638,7 +639,7 @@ export default function SocialDashboardPage() {
                                             <div className="flex items-center gap-2 mt-1">
                                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">{post.platform}</p>
                                                 <span className="text-slate-300">•</span>
-                                                <p className="text-[10px] text-slate-500 font-bold">{format(new Date(post.postedAt), 'h:mm a')}</p>
+                                                <p className="text-[10px] text-slate-500 font-bold">{safeFormat(post.postedAt, 'h:mm a')}</p>
                                             </div>
                                         </div>
                                     </div>

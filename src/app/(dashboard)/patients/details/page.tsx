@@ -30,6 +30,7 @@ import { doc, collection, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { DatePicker } from '@/components/DatePicker';
 import { format, formatDistanceToNow, isPast, isToday, isTomorrow, differenceInDays } from 'date-fns';
+import { safeDate, safeFormat } from '@/lib/safe-date';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,14 +182,15 @@ const AddAppointmentDialog = ({ open, onOpenChange, patient }: { open: boolean; 
 // ─── Follow-up Status Badge ───────────────────────────────────────────────────
 
 function FollowUpBadge({ dateStr }: { dateStr: string }) {
-    const date = new Date(dateStr);
+    const date = safeDate(dateStr);
+    if (!date) return <Badge variant="outline">Invalid Date</Badge>;
     const overdue = isPast(date) && !isToday(date);
     const today = isToday(date);
     const tomorrow = isTomorrow(date);
     if (overdue) return <Badge variant="destructive">Overdue</Badge>;
     if (today) return <Badge className="bg-orange-500 text-white">Today</Badge>;
     if (tomorrow) return <Badge className="bg-yellow-500 text-white">Tomorrow</Badge>;
-    return <Badge variant="secondary">{format(date, 'dd MMM yyyy')}</Badge>;
+    return <Badge variant="secondary">{safeFormat(date, 'dd MMM yyyy')}</Badge>;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -292,7 +294,7 @@ export default function PatientDetailsPage() {
                 <Card>
                     <CardContent className="pt-4">
                         <p className="text-xs text-muted-foreground">Last Visit</p>
-                        <p className="text-lg font-bold">{stats.last ? format(new Date(stats.last.timestamp), 'dd MMM yyyy') : '—'}</p>
+                        <p className="text-lg font-bold">{stats.last ? safeFormat(stats.last.timestamp, 'dd MMM yyyy') : '—'}</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -344,10 +346,10 @@ export default function PatientDetailsPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-semibold text-sm">
-                                                            {format(new Date(bill.timestamp), 'EEEE, dd MMMM yyyy')}
+                                                            {safeFormat(bill.timestamp, 'EEEE, dd MMMM yyyy')}
                                                             {idx === 0 && <Badge variant="secondary" className="ml-2 text-[10px]">Latest</Badge>}
                                                         </p>
-                                                        <p className="text-xs text-muted-foreground">{format(new Date(bill.timestamp), 'hh:mm a')} · Invoice #{bill.id.slice(0, 6).toUpperCase()}</p>
+                                                        <p className="text-xs text-muted-foreground">{safeFormat(bill.timestamp, 'hh:mm a')} · Invoice #{bill.id.slice(0, 6).toUpperCase()}</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
@@ -408,8 +410,11 @@ export default function PatientDetailsPage() {
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    {followUps.map(fu => (
-                                        <div key={fu.id} className={`flex items-start justify-between p-4 rounded-lg border ${fu.status === 'Completed' ? 'opacity-60 bg-muted/40' : isPast(new Date(fu.followUpDate)) && !isToday(new Date(fu.followUpDate)) ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-orange-200 bg-orange-50 dark:bg-orange-950/20'}`}>
+                                    {followUps.map(fu => {
+                                        const fuDate = safeDate(fu.followUpDate);
+                                        const isFuPast = fuDate ? isPast(fuDate) && !isToday(fuDate) : false;
+                                        return (
+                                        <div key={fu.id} className={`flex items-start justify-between p-4 rounded-lg border ${fu.status === 'Completed' ? 'opacity-60 bg-muted/40' : isFuPast ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-orange-200 bg-orange-50 dark:bg-orange-950/20'}`}>
                                             <div className="flex items-start gap-3">
                                                 <div className={`h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 ${fu.status === 'Completed' ? 'bg-green-100' : 'bg-orange-100'}`}>
                                                     {fu.status === 'Completed' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-orange-600" />}
@@ -420,7 +425,7 @@ export default function PatientDetailsPage() {
                                                         {fu.reason && <span className="text-sm font-medium">{fu.reason}</span>}
                                                     </div>
                                                     {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
-                                                    <p className="text-xs text-muted-foreground mt-1">Scheduled: {format(new Date(fu.createdAt), 'dd MMM yyyy')}</p>
+                                                    <p className="text-xs text-muted-foreground mt-1">Scheduled: {safeFormat(fu.createdAt, 'dd MMM yyyy')}</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-1 flex-shrink-0">
@@ -434,7 +439,7 @@ export default function PatientDetailsPage() {
                                                 </Button>
                                             </div>
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             )}
                         </CardContent>
@@ -506,7 +511,7 @@ export default function PatientDetailsPage() {
                                     <div key={c.id} className="text-sm border rounded-lg p-3">
                                         <div className="flex justify-between items-center mb-1">
                                             <Badge variant="secondary" className="capitalize">{c.service}</Badge>
-                                            <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(c.sentAt), { addSuffix: true })}</span>
+                                            <span className="text-xs text-muted-foreground">{safeDate(c.sentAt) ? formatDistanceToNow(safeDate(c.sentAt)!, { addSuffix: true }) : 'N/A'}</span>
                                         </div>
                                         <p className="text-sm bg-muted rounded-md p-2 mt-1">{c.message}</p>
                                     </div>

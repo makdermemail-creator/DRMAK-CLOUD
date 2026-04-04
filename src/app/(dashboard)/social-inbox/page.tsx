@@ -28,6 +28,7 @@ import { useCollection, useFirestore, useMemoFirebase, useUser, addDocumentNonBl
 import { collection, query, where, orderBy, limit, doc, getDoc, setDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Chat, Message, User as UserType } from '@/lib/types';
 import { format } from 'date-fns';
+import { safeFormat } from '@/lib/safe-date';
 import {
     Dialog,
     DialogContent,
@@ -342,7 +343,7 @@ export default function SocialInboxPage() {
                                                 <div className="flex justify-between items-baseline mb-0.5">
                                                     <span className="font-bold text-sm text-slate-800 truncate">{getChatName(c)}</span>
                                                     <span className="text-[10px] text-slate-400 font-bold">
-                                                        {c.lastMessageAt && format(new Date(c.lastMessageAt), 'h:mm a')}
+                                                        {safeFormat(c.lastMessageAt, 'h:mm a')}
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-slate-500 truncate font-medium">
@@ -410,7 +411,7 @@ export default function SocialInboxPage() {
                                                         <p className="leading-relaxed font-medium">{m.content}</p>
                                                     </div>
                                                     <div className="flex items-center gap-1 mt-1 px-1">
-                                                        <span className="text-[9px] text-slate-400 font-bold">{format(new Date(m.timestamp), 'h:mm a')}</span>
+                                                        <span className="text-[9px] text-slate-400 font-bold">{safeFormat(m.timestamp, 'h:mm a')}</span>
                                                         {isMe && <CheckCheck className="h-3 w-3 text-indigo-400" />}
                                                     </div>
                                                 </div>

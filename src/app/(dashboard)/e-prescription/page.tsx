@@ -76,11 +76,15 @@ export default function EPrescriptionPage() {
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
 
-  const prescriptionsQuery = React.useMemo(() => firestore && selectedPatient ? query(collection(firestore, 'prescriptions'), where('patientId', '==', selectedPatient.id)) : null, [firestore, selectedPatient]);
-  const { data: rawPastPrescriptions } = useCollection<any>(prescriptionsQuery);
+  const prescriptionsQuery = useMemoFirebase(() => firestore && selectedPatient ? query(collection(firestore, 'prescriptions'), where('patientId', '==', selectedPatient.id)) : null, [firestore, selectedPatient]);
+  const { data: rawPastPrescriptions } = useCollection<any>(prescriptionsQuery as any);
   const pastPrescriptions = React.useMemo(() => {
     if (!rawPastPrescriptions) return [];
-    return rawPastPrescriptions.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return rawPastPrescriptions.slice().sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
   }, [rawPastPrescriptions]);
 
   const handleLoadPrescription = (rx: any) => {
@@ -100,7 +104,7 @@ export default function EPrescriptionPage() {
     if ((user as any).doctorId) return doctors.find(d => d.id === (user as any).doctorId) || null;
     const norm = user.name?.toLowerCase().replace(/^dr\.?\s+/g, '').trim() || '';
     return doctors.find(d => {
-      const dn = d.fullName.toLowerCase().replace(/^dr\.?\s+/g, '').trim();
+      const dn = (d.fullName || '').toLowerCase().replace(/^dr\.?\s+/g, '').trim();
       return dn.includes(norm) || norm.includes(dn);
     }) || null;
   }, [doctors, user]);
@@ -264,7 +268,15 @@ export default function EPrescriptionPage() {
                     {pastPrescriptions.map(rx => (
                       <div key={rx.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg bg-muted/10 gap-3">
                         <div>
-                          <p className="text-sm font-semibold">{format(new Date(rx.createdAt), 'dd MMMM yyyy, p')}</p>
+                          <p className="text-sm font-semibold">
+                            {(() => {
+                              try {
+                                return rx.createdAt ? format(new Date(rx.createdAt), 'dd MMMM yyyy, p') : 'Date Unknown';
+                              } catch {
+                                return 'Invalid Date';
+                              }
+                            })()}
+                          </p>
                           <p className="text-xs text-muted-foreground">{rx.doctorName} • {rx.diagnosis || 'No diagnosis recorded'}</p>
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
@@ -396,7 +408,13 @@ export default function EPrescriptionPage() {
                     <div className="flex flex-wrap gap-2">
                       {followUpDates.map(date => (
                         <Badge key={date} variant="outline" className="flex items-center gap-1 pl-2.5 pr-1 py-1">
-                          {format(new Date(date), 'dd MMM yyyy')}
+                          {(() => {
+                            try {
+                              return format(new Date(date), 'dd MMM yyyy');
+                            } catch {
+                              return 'Invalid Date';
+                            }
+                          })()}
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -453,7 +471,13 @@ export default function EPrescriptionPage() {
                   investigations={previewRx.investigations || ''}
                   advice={previewRx.advice || ''}
                   followUpDates={previewRx.followUp || []}
-                  today={format(new Date(previewRx.createdAt), 'dd MMMM yyyy')}
+                  today={(() => {
+                    try {
+                      return previewRx.createdAt ? format(new Date(previewRx.createdAt), 'dd MMMM yyyy') : today;
+                    } catch {
+                      return today;
+                    }
+                  })()}
                   hideBranding={false}
                 />
               </div>
