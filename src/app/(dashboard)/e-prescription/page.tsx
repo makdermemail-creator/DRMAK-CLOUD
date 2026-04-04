@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { safeFormat } from '@/lib/safe-date';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Info, History } from 'lucide-react';
@@ -75,6 +76,20 @@ export default function EPrescriptionPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
+
+  const resetForm = () => {
+    setSelectedPatient(null);
+    setPatientSearch('');
+    setChiefComplaint('');
+    setDiagnosis('');
+    setVitals({ bp: '', pulse: '', temp: '', weight: '', height: '' });
+    setMedicines([defaultMedicine()]);
+    setInvestigations('');
+    setAdvice('');
+    setFollowUpDates([]);
+    setNewFollowUpDate('');
+    setNotes('');
+  };
 
   const prescriptionsQuery = useMemoFirebase(() => firestore && selectedPatient ? query(collection(firestore, 'prescriptions'), where('patientId', '==', selectedPatient.id)) : null, [firestore, selectedPatient]);
   const { data: rawPastPrescriptions } = useCollection<any>(prescriptionsQuery as any);
@@ -152,6 +167,7 @@ export default function EPrescriptionPage() {
       });
       if (sendForPrint) {
         toast({ title: 'Sent for Print', description: 'The prescription has been added to the operations print queue.' });
+        resetForm();
       } else {
         toast({ title: 'Prescription Saved' });
       }
@@ -269,13 +285,7 @@ export default function EPrescriptionPage() {
                       <div key={rx.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg bg-muted/10 gap-3">
                         <div>
                           <p className="text-sm font-semibold">
-                            {(() => {
-                              try {
-                                return rx.createdAt ? format(new Date(rx.createdAt), 'dd MMMM yyyy, p') : 'Date Unknown';
-                              } catch {
-                                return 'Invalid Date';
-                              }
-                            })()}
+                            {safeFormat(rx.createdAt, 'dd MMMM yyyy, p')}
                           </p>
                           <p className="text-xs text-muted-foreground">{rx.doctorName} • {rx.diagnosis || 'No diagnosis recorded'}</p>
                         </div>
@@ -408,13 +418,7 @@ export default function EPrescriptionPage() {
                     <div className="flex flex-wrap gap-2">
                       {followUpDates.map(date => (
                         <Badge key={date} variant="outline" className="flex items-center gap-1 pl-2.5 pr-1 py-1">
-                          {(() => {
-                            try {
-                              return format(new Date(date), 'dd MMM yyyy');
-                            } catch {
-                              return 'Invalid Date';
-                            }
-                          })()}
+                          {safeFormat(date, 'dd MMM yyyy')}
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -471,13 +475,7 @@ export default function EPrescriptionPage() {
                   investigations={previewRx.investigations || ''}
                   advice={previewRx.advice || ''}
                   followUpDates={previewRx.followUp || []}
-                  today={(() => {
-                    try {
-                      return previewRx.createdAt ? format(new Date(previewRx.createdAt), 'dd MMMM yyyy') : today;
-                    } catch {
-                      return today;
-                    }
-                  })()}
+                  today={safeFormat(previewRx.createdAt, 'dd MMMM yyyy', today)}
                   hideBranding={false}
                 />
               </div>
