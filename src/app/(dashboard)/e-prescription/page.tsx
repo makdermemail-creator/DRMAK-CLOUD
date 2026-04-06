@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X, Send } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
-import { collection, addDoc, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import type { Patient, Doctor } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,6 +74,7 @@ export default function EPrescriptionPage() {
   const [newFollowUpDate, setNewFollowUpDate] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [savedId, setSavedId] = React.useState<string | null>(null);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
 
@@ -89,6 +90,7 @@ export default function EPrescriptionPage() {
     setFollowUpDates([]);
     setNewFollowUpDate('');
     setNotes('');
+    setSavedId(null);
   };
 
   const prescriptionsQuery = useMemoFirebase(() => firestore && selectedPatient ? query(collection(firestore, 'prescriptions'), where('patientId', '==', selectedPatient.id)) : null, [firestore, selectedPatient]);
@@ -143,14 +145,14 @@ export default function EPrescriptionPage() {
     window.print();
   };
 
-  const handleSave = async (sendForPrint: boolean = false) => {
+  const handleSave = async () => {
     if (!firestore || !selectedPatient) {
       toast({ variant: 'destructive', title: 'Select a Patient' });
       return;
     }
     setIsSaving(true);
     try {
-      await addDoc(collection(firestore, 'prescriptions'), {
+      const docRef = await addDoc(collection(firestore, 'prescriptions'), {
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
         patientMobile: selectedPatient.mobileNumber,
@@ -159,20 +161,28 @@ export default function EPrescriptionPage() {
         doctorName: linkedDoctor?.fullName || user?.name,
         doctorQualification: linkedDoctor?.qualification || '',
         doctorSpecialization: linkedDoctor?.specialization || '',
-        chiefComplaint, diagnosis, vitals, medicines, investigations, advice, 
-        followUp: followUpDates, 
+        chiefComplaint, diagnosis, vitals, medicines, investigations, advice,
+        followUp: followUpDates,
         notes,
         createdAt: new Date().toISOString(),
-        ...(sendForPrint ? { printStatus: 'Pending' } : {})
       });
-      if (sendForPrint) {
-        toast({ title: 'Sent for Print', description: 'The prescription has been added to the operations print queue.' });
-        resetForm();
-      } else {
-        toast({ title: 'Prescription Saved' });
-      }
+      setSavedId(docRef.id);
+      toast({ title: 'Prescription Saved', description: 'You can now send it for print.' });
     } catch {
       toast({ variant: 'destructive', title: 'Save Failed' });
+    }
+    setIsSaving(false);
+  };
+
+  const handleSendForPrint = async () => {
+    if (!firestore || !savedId) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(firestore, 'prescriptions', savedId), { printStatus: 'Pending' });
+      toast({ title: 'Sent for Print', description: 'The prescription has been added to the operations print queue.' });
+      resetForm();
+    } catch {
+      toast({ variant: 'destructive', title: 'Failed to Send for Print' });
     }
     setIsSaving(false);
   };
@@ -231,10 +241,10 @@ export default function EPrescriptionPage() {
               </TooltipProvider>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => handleSave(false)} disabled={isSaving}>
-                <Save className="mr-2 h-4 w-4" />{isSaving ? 'Saving...' : 'Save'}
+              <Button variant="outline" onClick={handleSave} disabled={isSaving || !!savedId}>
+                <Save className="mr-2 h-4 w-4" />{isSaving ? 'Saving...' : savedId ? 'Saved' : 'Save'}
               </Button>
-              <Button variant="default" onClick={() => handleSave(true)} disabled={isSaving}>
+              <Button variant="default" onClick={handleSendForPrint} disabled={isSaving || !savedId}>
                 <Send className="mr-2 h-4 w-4" />Send for Print
               </Button>
               <Button onClick={handlePrint} variant="secondary"><Printer className="mr-2 h-4 w-4" />Print Direct</Button>
@@ -256,7 +266,7 @@ export default function EPrescriptionPage() {
                 {patientSearch && (
                   <div className="border rounded-lg max-h-40 overflow-y-auto divide-y">
                     {filteredPatients.map(p => (
-                      <div key={p.id} className="px-3 py-2 hover:bg-muted cursor-pointer flex justify-between items-center" onClick={() => { setSelectedPatient(p); setPatientSearch(''); }}>
+                      <div key={p.id} className="px-3 py-2 hover:bg-muted cursor-pointer flex justify-between items-center" onClick={() => { setSelectedPatient(p); setPatientSearch(''); setSavedId(null); }}>
                         <span className="font-medium text-sm">{p.name}</span>
                         <span className="text-xs text-muted-foreground">{p.mobileNumber}</span>
                       </div>
