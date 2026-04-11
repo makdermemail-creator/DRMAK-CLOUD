@@ -715,6 +715,7 @@ export default function RecommendationsPage() {
                     {markers.map((marker) => (
                       <div
                         key={marker.id}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className={cn(
                           "absolute flex items-center justify-center pointer-events-auto group",
                           marker.width ? "border-2 border-primary/50 rounded-lg shadow-xl" : "w-10 h-10 -ml-5 -mt-5"
@@ -770,7 +771,7 @@ export default function RecommendationsPage() {
                         )}
                         
                         {marker.diagnosis && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 bg-slate-900/95 backdrop-blur-xl text-white p-4 rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-300">
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-900/95 backdrop-blur-xl text-white p-5 rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 animate-in fade-in zoom-in-95 duration-300">
                             <div className="flex items-center gap-2 mb-2">
                               <div className="h-6 w-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
                                 <Stethoscope className="h-3 w-3 text-emerald-400" />
@@ -790,8 +791,17 @@ export default function RecommendationsPage() {
                                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/20" />
                               </div>
                             </div>
-                            {/* Triangle Arrow */}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900/95" />
+                            
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="w-full mt-2 h-7 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMarkers(prev => prev.map(m => m.id === marker.id ? { ...m, diagnosis: undefined } : m));
+                              }}
+                            >
+                            </Button>
                           </div>
                         )}
 
@@ -970,6 +980,14 @@ export default function RecommendationsPage() {
                   </p>
                 </CardContent>
               </Card>
+
+              <Button 
+                variant="outline" 
+                className="w-full border-dashed"
+                onClick={() => setResult(null)}
+              >
+                Dismiss Analysis Results
+              </Button>
             </div>
           ) : (
             <Card className="h-full flex flex-col items-center justify-center p-12 text-center text-muted-foreground border-dashed border-2">
