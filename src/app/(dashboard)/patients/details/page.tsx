@@ -25,7 +25,7 @@ import {
     History, Bell, CheckCircle2, Clock, Loader2, PlusCircle, Phone, FilePlus2, Route
 } from 'lucide-react';
 import { useDoc, useFirestore, useMemoFirebase, useCollection, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
-import type { Patient, Doctor, Appointment, MedicalHistory, Communication } from '@/lib/types';
+import type { Patient, Doctor, Appointment, MedicalHistory, Communication, PatientComment } from '@/lib/types';
 import { doc, collection, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { DatePicker } from '@/components/DatePicker';
@@ -201,9 +201,12 @@ export default function PatientDetailsPage() {
     const searchParams = useSearchParams();
     const patientId = searchParams.get('id');
     const firestore = useFirestore();
+    const { user } = useUser();
 
     const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = React.useState(false);
     const [isFollowUpDialogOpen, setIsFollowUpDialogOpen] = React.useState(false);
+    const [newComment, setNewComment] = React.useState('');
+    const [isAddingComment, setIsAddingComment] = React.useState(false);
 
     // Patient
     const patientDocRef = useMemoFirebase(() => firestore && patientId ? doc(firestore, 'patients', patientId) : null, [firestore, patientId]);
@@ -230,13 +233,51 @@ export default function PatientDetailsPage() {
     }, [firestore, patientId]);
     const { data: communications } = useCollection<Communication>(communicationsQuery);
 
+    // Patient Comments
+    const commentsQuery = useMemoFirebase(() => {
+        if (!firestore || !patientId) return null;
+        return query(collection(firestore, `patients/${patientId}/comments`), orderBy('createdAt', 'desc'));
+    }, [firestore, patientId]);
+    const { data: patientComments, isLoading: commentsLoading } = useCollection<PatientComment>(commentsQuery);
+
     const stats = React.useMemo(() => {
         const total = billingHistory?.reduce((s, b) => s + b.grandTotal, 0) ?? 0;
         const visits = billingHistory?.length ?? 0;
         const last = billingHistory?.[0];
         const pendingFollowUps = followUps?.filter(f => f.status === 'Pending').length ?? 0;
-        return { total, visits, last, pendingFollowUps };
-    }, [billingHistory, followUps]);
+        const totalComments = patientComments?.length ?? 0;
+        return { total, visits, last, pendingFollowUps, totalComments };
+    }, [billingHistory, followUps, patientComments]);
+
+    const handleAddComment = async () => {
+        if (!firestore || !patientId || !newComment.trim() || !user) return;
+        setIsAddingComment(true);
+        try {
+            const commentObj: Omit<PatientComment, 'id'> = {
+                patientId,
+                comment: newComment.trim(),
+                addedBy: user.name || 'Unknown',
+                addedByRole: user.role || 'Guest',
+                createdAt: new Date().toISOString(),
+            };
+
+            // 1. Add to sub-collection
+            await addDocumentNonBlocking(collection(firestore, `patients/${patientId}/comments`), commentObj);
+
+            // 2. Update patient document for list view
+            await updateDocumentNonBlocking(doc(firestore, 'patients', patientId), {
+                lastComment: newComment.trim(),
+                lastCommentDate: new Date().toISOString(),
+            });
+
+            setNewComment('');
+            toast({ title: 'Comment added successfully' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error adding comment', description: 'Please try again later.' });
+        } finally {
+            setIsAddingComment(false);
+        }
+    };
 
     const handleMarkFollowUpDone = async (id: string) => {
         if (!firestore) return;
@@ -317,6 +358,12 @@ export default function PatientDetailsPage() {
                     </TabsTrigger>
                     <TabsTrigger value="info" className="gap-2"><HeartPulse className="h-4 w-4" /> Patient Info</TabsTrigger>
                     <TabsTrigger value="comms" className="gap-2"><MessageSquare className="h-4 w-4" /> Communications</TabsTrigger>
+                    <TabsTrigger value="comments" className="gap-2">
+                        <MessageSquare className="h-4 w-4" /> Comments
+                        {stats.totalComments > 0 && (
+                            <span className="ml-1 bg-primary text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">{stats.totalComments}</span>
+                        )}
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* ── Visit History ─────────────────────────────────────────── */}
@@ -517,6 +564,75 @@ export default function PatientDetailsPage() {
                                     </div>
                                 ))
                             )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* ── Comments ──────────────────────────────────────────────── */}
+                <TabsContent value="comments">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center gap-2"><MessageSquare className="h-5 w-5" /> Patient Comments History</CardTitle>
+                            <CardDescription>Internal notes and comments by managers and admins.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {(user?.role === 'Operations Manager' || user?.isAdmin) && (
+                                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                                    <Label className="text-sm font-semibold">Add New Comment</Label>
+                                    <Textarea 
+                                        placeholder="Add a comment or note about this patient..." 
+                                        value={newComment}
+                                        onChange={(e) => setNewComment(e.target.value)}
+                                        rows={3}
+                                    />
+                                    <div className="flex justify-end">
+                                        <Button 
+                                            size="sm" 
+                                            onClick={handleAddComment} 
+                                            disabled={isAddingComment || !newComment.trim()}
+                                        >
+                                            {isAddingComment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Post Comment
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                {commentsLoading ? (
+                                    <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                                ) : !patientComments || patientComments.length === 0 ? (
+                                    <div className="text-center py-12 text-muted-foreground border-t pt-12">
+                                        <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                                        <p className="font-medium">No comments yet</p>
+                                        <p className="text-xs mt-1">Important notes about the patient will appear here.</p>
+                                    </div>
+                                ) : (
+                                    patientComments.map((c) => (
+                                        <div key={c.id} className="flex gap-4 p-4 border rounded-lg bg-white dark:bg-zinc-950">
+                                            <Avatar className="h-10 w-10 border-2 border-primary/10">
+                                                <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                                                    {c.addedBy?.charAt(0) || 'U'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex-1 space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <span className="font-bold text-sm">{c.addedBy}</span>
+                                                        <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 h-4">{c.addedByRole}</Badge>
+                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {safeDate(c.createdAt) ? format(safeDate(c.createdAt)!, 'dd MMM yyyy, hh:mm a') : 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                                                    {c.comment}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>

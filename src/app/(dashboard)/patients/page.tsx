@@ -343,6 +343,7 @@ function PatientsContent() {
                   <TableHead>Gender</TableHead>
                   <TableHead>First Visit</TableHead>
                   <TableHead>Next Follow-up</TableHead>
+                  <TableHead className="min-w-[150px]">Comments</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -400,6 +401,25 @@ function PatientsContent() {
                           </div>
                         ) : (
                           <span className="text-muted-foreground/50 text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {patient.lastComment ? (
+                          <div className="max-w-[200px]">
+                            <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed italic">
+                              "{patient.lastComment}"
+                            </p>
+                            {patient.lastCommentDate && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {new Date(patient.lastCommentDate).toLocaleDateString('en-GB', {
+                                  day: 'numeric',
+                                  month: 'short'
+                                })}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/30 text-[10px]">No notes</span>
                         )}
                       </TableCell>
                       <TableCell>

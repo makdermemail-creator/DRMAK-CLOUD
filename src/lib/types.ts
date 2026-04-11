@@ -50,6 +50,17 @@ export type Patient = {
   status?: 'Active' | 'Inactive';
   smsPreference?: 'English' | 'Urdu';
   deceased?: boolean;
+  lastComment?: string;
+  lastCommentDate?: string; // ISO string
+};
+
+export type PatientComment = {
+  id: string;
+  patientId: string;
+  comment: string;
+  addedBy: string; // User Name
+  addedByRole: string; // User Role
+  createdAt: string; // ISO string
 };
 
 export type Appointment = {
