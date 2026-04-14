@@ -546,13 +546,20 @@ export default function BillingPage() {
                     });
                 }
 
-                // Apply adjustments
+                // 1. COLLECT ALL READS FIRST (Firestore requirement: all reads before all writes)
+                const supplierDataMap: Record<string, Supplier> = {};
                 for (const supplierId of Object.keys(adjustments)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
                     const supplierDoc = await transaction.get(supplierDocRef);
-                    if (!supplierDoc.exists()) continue;
+                    if (supplierDoc.exists()) {
+                        supplierDataMap[supplierId] = supplierDoc.data() as Supplier;
+                    }
+                }
 
-                    const supplierData = supplierDoc.data() as Supplier;
+                // 2. PERFORM ALL WRITES AFTER READS
+                for (const supplierId of Object.keys(supplierDataMap)) {
+                    const supplierDocRef = doc(firestore, 'suppliers', supplierId);
+                    const supplierData = supplierDataMap[supplierId];
                     const products = supplierData.products || [];
                     const supplierAdjustments = adjustments[supplierId];
 
@@ -618,7 +625,7 @@ export default function BillingPage() {
                 // Sync stock for edits by calculating the diff
                 await updateInventoryStock(billItems, 'diff', originalBillItems);
                 
-                updateDocumentNonBlocking(doc(firestore, 'billingRecords', editingBillId), billData);
+                await updateDocumentNonBlocking(doc(firestore, 'billingRecords', editingBillId), billData);
                 toast({
                     title: 'Bill Updated',
                     description: 'The bill and inventory have been successfully updated.',
@@ -629,7 +636,7 @@ export default function BillingPage() {
                 // Deduct stock for new pharmacy items
                 await updateInventoryStock(billItems, 'deduct');
 
-                addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
+                await addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
                 toast({
                     title: 'Bill Saved',
                     description: 'The bill has been saved and inventory updated.',

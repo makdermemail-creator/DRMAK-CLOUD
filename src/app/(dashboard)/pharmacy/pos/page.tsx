@@ -109,12 +109,20 @@ export default function POSPage() {
                     }
                 });
 
+                // 1. COLLECT ALL READS FIRST (Firestore requirement: all reads before all writes)
+                const supplierDataMap: Record<string, Supplier> = {};
                 for (const supplierId of Object.keys(adjustments)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
                     const supplierDoc = await transaction.get(supplierDocRef);
-                    if (!supplierDoc.exists()) continue;
+                    if (supplierDoc.exists()) {
+                        supplierDataMap[supplierId] = supplierDoc.data() as Supplier;
+                    }
+                }
 
-                    const supplierData = supplierDoc.data() as Supplier;
+                // 2. PERFORM ALL WRITES AFTER READS
+                for (const supplierId of Object.keys(supplierDataMap)) {
+                    const supplierDocRef = doc(firestore, 'suppliers', supplierId);
+                    const supplierData = supplierDataMap[supplierId];
                     const products = supplierData.products || [];
                     const supplierAdjustments = adjustments[supplierId];
 
