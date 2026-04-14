@@ -247,9 +247,19 @@ export default function InventoryPage() {
                                             <TableCell className="text-right text-xs text-muted-foreground">{item.price.toLocaleString()} Rs</TableCell>
                                             <TableCell className="text-right font-black text-primary">{item.sellingPrice?.toLocaleString()} Rs</TableCell>
                                             <TableCell className="text-right">
-                                                <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-black ${Number(item.quantity) <= (item.minThreshold || 0) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                                                    {item.quantity}
-                                                </span>
+                                                {Number(item.quantity) <= 0 ? (
+                                                    <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[10px] font-black bg-red-600 text-white animate-pulse">
+                                                        OUT OF STOCK
+                                                    </span>
+                                                ) : Number(item.quantity) <= (item.minThreshold || 0) ? (
+                                                    <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                                        {item.quantity} Low Stock
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                        {item.quantity} Available
+                                                    </span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right space-x-2">
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleOpenDialog(item)}>

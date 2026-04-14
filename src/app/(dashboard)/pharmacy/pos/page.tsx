@@ -120,7 +120,9 @@ export default function POSPage() {
 
                     const updatedProducts = products.map(p => {
                         if (supplierAdjustments[p.id]) {
-                            return { ...p, quantity: Math.max(0, p.quantity - supplierAdjustments[p.id]) };
+                            const currentQty = Number(p.quantity) || 0;
+                            const adjustment = Number(supplierAdjustments[p.id]) || 0;
+                            return { ...p, quantity: Math.max(0, currentQty - adjustment) };
                         }
                         return p;
                     });
