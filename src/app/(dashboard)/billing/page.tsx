@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, runTransaction } from 'firebase/firestore';
 import type { Patient, Supplier, SupplierProduct } from '@/lib/types';
 import { Search, Plus, Trash2, Printer, CheckCircle2, CircleDollarSign, Bell, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -121,9 +121,8 @@ export default function BillingPage() {
     const pharmacyItems = React.useMemo(() => {
         if (!suppliers) return [];
         const items: (SupplierProduct & { supplierName: string; supplierId: string })[] = [];
-        // Only show items from Distributors (Pharmacy items), not Vendors
+        // Show items from all suppliers that have products
         suppliers
-            .filter(s => s.type === 'Distributor')
             .forEach(s => {
                 s.products?.forEach(p => {
                     items.push({ ...p, supplierName: s.name, supplierId: s.id });
@@ -142,6 +141,7 @@ export default function BillingPage() {
     const [discountType, setDiscountType] = React.useState<'percentage' | 'fixed'>('percentage');
     const [discountValue, setDiscountValue] = React.useState<number>(0);
     const [paymentMethod, setPaymentMethod] = React.useState<'Cash' | 'Card' | 'Online' | 'Nill' | ''>('');
+    const [originalBillItems, setOriginalBillItems] = React.useState<BillItem[]>([]);
 
     const [activeTab, setActiveTab] = React.useState('new-bill');
     const [editingBillId, setEditingBillId] = React.useState<string | null>(null);
@@ -507,7 +507,72 @@ export default function BillingPage() {
         }, 500);
     };
 
-    const handleSaveBill = () => {
+    const updateInventoryStock = async (items: BillItem[], type: 'deduct' | 'return' | 'diff', oldItems: BillItem[] = []) => {
+        if (!firestore) return;
+
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const pharmacyItems = items.filter(i => i.type === 'pharmacy' && i.supplierId && i.productId);
+                const oldPharmacyItems = oldItems.filter(i => i.type === 'pharmacy' && i.supplierId && i.productId);
+
+                // Map of supplierId -> { productId: adjustmentAmount }
+                const adjustments: Record<string, Record<string, number>> = {};
+
+                if (type === 'deduct') {
+                    pharmacyItems.forEach(item => {
+                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
+                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) + item.qty;
+                    });
+                } else if (type === 'return') {
+                    pharmacyItems.forEach(item => {
+                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
+                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) - item.qty;
+                    });
+                } else if (type === 'diff') {
+                    // Reduce stock for new/increased qty
+                    pharmacyItems.forEach(item => {
+                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
+                        const oldItem = oldPharmacyItems.find(oi => oi.supplierId === item.supplierId && oi.productId === item.productId);
+                        const oldQty = oldItem ? oldItem.qty : 0;
+                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) + (item.qty - oldQty);
+                    });
+                    // Return stock for removed items completely
+                    oldPharmacyItems.forEach(oldItem => {
+                        const stillExists = pharmacyItems.find(i => i.supplierId === oldItem.supplierId && i.productId === oldItem.productId);
+                        if (!stillExists) {
+                            if (!adjustments[oldItem.supplierId!]) adjustments[oldItem.supplierId!] = {};
+                            adjustments[oldItem.supplierId!][oldItem.productId!] = (adjustments[oldItem.supplierId!][oldItem.productId!] || 0) - oldItem.qty;
+                        }
+                    });
+                }
+
+                // Apply adjustments
+                for (const supplierId of Object.keys(adjustments)) {
+                    const supplierDocRef = doc(firestore, 'suppliers', supplierId);
+                    const supplierDoc = await transaction.get(supplierDocRef);
+                    if (!supplierDoc.exists()) continue;
+
+                    const supplierData = supplierDoc.data() as Supplier;
+                    const products = supplierData.products || [];
+                    const supplierAdjustments = adjustments[supplierId];
+
+                    const updatedProducts = products.map(p => {
+                        if (supplierAdjustments[p.id]) {
+                            return { ...p, quantity: Math.max(0, p.quantity - supplierAdjustments[p.id]) };
+                        }
+                        return p;
+                    });
+
+                    transaction.update(supplierDocRef, { products: updatedProducts });
+                }
+            });
+        } catch (error) {
+            console.error('Error updating inventory stock:', error);
+            throw error;
+        }
+    };
+
+    const handleSaveBill = async () => {
         if (!firestore || !selectedPatient || billItems.length === 0) return;
 
         if (!paymentMethod) {
@@ -541,43 +606,44 @@ export default function BillingPage() {
             })
         };
 
-        if (editingBillId) {
-            if (!editReason.trim()) {
-                toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for updating this bill.' });
-                return;
-            }
-            updateDocumentNonBlocking(doc(firestore, 'billingRecords', editingBillId), billData);
-            toast({
-                title: 'Bill Updated',
-                description: 'The bill has been successfully updated.',
-            });
-            setEditingBillId(null);
-        } else {
-            // Deduct stock for pharmacy items only for new bills
-            billItems.forEach(item => {
-                if (item.type === 'pharmacy' && item.supplierId && item.productId) {
-                    const supplier = suppliers?.find(s => s.id === item.supplierId);
-                    if (supplier && supplier.products) {
-                        const newProducts = supplier.products.map(p => {
-                            if (p.id === item.productId) {
-                                return { ...p, quantity: Math.max(0, p.quantity - item.qty) };
-                            }
-                            return p;
-                        });
-                        updateDocumentNonBlocking(doc(firestore, 'suppliers', supplier.id), { products: newProducts });
-                    }
+        try {
+            if (editingBillId) {
+                if (!editReason.trim()) {
+                    toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for updating this bill.' });
+                    return;
                 }
-            });
+                
+                // Sync stock for edits by calculating the diff
+                await updateInventoryStock(billItems, 'diff', originalBillItems);
+                
+                updateDocumentNonBlocking(doc(firestore, 'billingRecords', editingBillId), billData);
+                toast({
+                    title: 'Bill Updated',
+                    description: 'The bill and inventory have been successfully updated.',
+                });
+                setEditingBillId(null);
+                setOriginalBillItems([]);
+            } else {
+                // Deduct stock for new pharmacy items
+                await updateInventoryStock(billItems, 'deduct');
 
-            addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
+                addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
+                toast({
+                    title: 'Bill Saved',
+                    description: 'The bill has been saved and inventory updated.',
+                });
+            }
+            
+            // Reset state
+            handleClear();
+        } catch (error) {
+            console.error('Save failed:', error);
             toast({
-                title: 'Bill Saved',
-                description: 'The bill has been successfully saved to the records.',
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'Could not update inventory or save the bill. Please try again.',
             });
         }
-
-        // Reset state
-        handleClear();
     };
 
     const handleClear = () => {
@@ -587,6 +653,7 @@ export default function BillingPage() {
         setDiscountValue(0);
         setPaymentMethod('');
         setEditingBillId(null);
+        setOriginalBillItems([]);
         setEditReason('');
     };
 
@@ -600,6 +667,7 @@ export default function BillingPage() {
         }
 
         setBillItems(bill.items);
+        setOriginalBillItems(JSON.parse(JSON.stringify(bill.items))); // Deep copy for comparison
         setReimbursements(bill.reimbursements || []);
         setDiscountType(bill.discountType);
         setDiscountValue(bill.discountValue);
@@ -613,10 +681,17 @@ export default function BillingPage() {
     const handleDeleteBill = async (billId: string) => {
         if (!firestore || !window.confirm('Are you sure you want to delete this billing record?')) return;
         try {
+            const billToDelete = billingRecords?.find(b => b.id === billId);
+            if (billToDelete) {
+                // Return stock before deleting
+                await updateInventoryStock(billToDelete.items, 'return');
+            }
+            
             await deleteDocumentNonBlocking(doc(firestore, 'billingRecords', billId));
-            toast({ title: 'Bill Deleted', description: 'The record has been permanently removed.' });
+            toast({ title: 'Bill Deleted', description: 'The record has been permanently removed and stock restored.' });
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete record.' });
+            console.error('Delete failed:', error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete record or update inventory.' });
         }
     };
 

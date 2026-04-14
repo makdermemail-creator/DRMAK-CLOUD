@@ -23,9 +23,9 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PlusCircle, Search, Trash2, Info, MessageSquare, Phone, Pencil, Printer, Save } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import type { Patient, PharmacyItem } from '@/lib/types';
-import { collection } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import type { Patient, PharmacyItem, Supplier } from '@/lib/types';
+import { collection, doc, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
@@ -95,6 +95,99 @@ export default function POSPage() {
         const grandTotal = subTotal - totalDiscount;
         return { subTotal, totalDiscount, grandTotal };
     }, [invoiceItems]);
+
+    const updateInventoryStock = async (items: InvoiceItem[]) => {
+        if (!firestore) return;
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const adjustments: Record<string, Record<string, number>> = {};
+                
+                items.forEach(item => {
+                    if (item.supplierId) {
+                        if (!adjustments[item.supplierId]) adjustments[item.supplierId] = {};
+                        adjustments[item.supplierId][item.id] = (adjustments[item.supplierId][item.id] || 0) + item.saleQuantity;
+                    }
+                });
+
+                for (const supplierId of Object.keys(adjustments)) {
+                    const supplierDocRef = doc(firestore, 'suppliers', supplierId);
+                    const supplierDoc = await transaction.get(supplierDocRef);
+                    if (!supplierDoc.exists()) continue;
+
+                    const supplierData = supplierDoc.data() as Supplier;
+                    const products = supplierData.products || [];
+                    const supplierAdjustments = adjustments[supplierId];
+
+                    const updatedProducts = products.map(p => {
+                        if (supplierAdjustments[p.id]) {
+                            return { ...p, quantity: Math.max(0, p.quantity - supplierAdjustments[p.id]) };
+                        }
+                        return p;
+                    });
+
+                    transaction.update(supplierDocRef, { products: updatedProducts });
+                }
+            });
+        } catch (error) {
+            console.error('Error updating inventory stock:', error);
+            throw error;
+        }
+    };
+
+    const handleSaveInvoice = async (shouldPrint: boolean = false) => {
+        if (!firestore) return;
+        if (!selectedPatient) {
+            toast({ variant: 'destructive', title: 'Patient required', description: 'Please select a patient before saving.' });
+            return;
+        }
+        if (invoiceItems.length === 0) {
+            toast({ variant: 'destructive', title: 'No items', description: 'Please add items to the invoice.' });
+            return;
+        }
+
+        try {
+            // 1. Deduct Stock
+            await updateInventoryStock(invoiceItems);
+
+            // 2. Prepare Billing Record
+            const billData = {
+                patientId: selectedPatient.id,
+                patientName: selectedPatient.name,
+                patientMobile: selectedPatient.mobileNumber,
+                items: invoiceItems.map(item => ({
+                    id: `${item.supplierId}_${item.id}`,
+                    name: item.productName,
+                    type: 'pharmacy',
+                    price: item.sellingPrice,
+                    qty: item.saleQuantity,
+                    supplierId: item.supplierId,
+                    productId: item.id
+                })),
+                subTotal: summary.subTotal,
+                discountAmount: summary.totalDiscount,
+                grandTotal: summary.grandTotal,
+                paymentMethod: 'Cash', // Default for POS
+                timestamp: new Date().toISOString(),
+                status: 'Paid'
+            };
+
+            // 3. Save to Firestore
+            await addDocumentNonBlocking(collection(firestore, 'billingRecords'), billData);
+
+            toast({ title: 'Invoice Saved', description: 'Inventory updated and transaction recorded.' });
+            
+            if (shouldPrint) {
+                // Mock printing for now or reuse print logic if available
+                window.print();
+            }
+
+            // 4. Reset
+            setInvoiceItems([]);
+            setSelectedPatient(null);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error saving invoice', description: 'Inventory update failed.' });
+        }
+    };
 
 
   return (
@@ -279,8 +372,8 @@ export default function POSPage() {
                 </Label>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" className="w-full">Save</Button>
-                <Button className="w-full">Save & Print Invoice</Button>
+                <Button variant="outline" className="w-full" onClick={() => handleSaveInvoice(false)}>Save</Button>
+                <Button className="w-full" onClick={() => handleSaveInvoice(true)}>Save & Print Invoice</Button>
             </div>
         </div>
       </div>
