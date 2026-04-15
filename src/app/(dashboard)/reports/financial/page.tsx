@@ -589,9 +589,3 @@ export default function FinancialReportPage() {
         </div>
     );
 }
-                        </Tabs>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
