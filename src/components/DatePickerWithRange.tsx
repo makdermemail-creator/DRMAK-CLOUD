@@ -45,12 +45,13 @@ export function DatePickerWithRange({
     const date = externalDate || internalDate;
     const setDate = onDateChange || setInternalDate;
 
-    // Sync tempDate when popover opens
-    React.useEffect(() => {
-        if (isOpen) {
+    // Initialize tempDate only when the popover opens
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
             setTempDate(date);
         }
-    }, [isOpen, date]);
+        setIsOpen(open);
+    };
 
     const handleApply = () => {
         setDate(tempDate);
@@ -70,7 +71,7 @@ export function DatePickerWithRange({
 
     return (
         <div className={cn('grid gap-2', className)}>
-            <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <Popover open={isOpen} onOpenChange={handleOpenChange}>
                 <PopoverTrigger asChild>
                     <Button
                         id="date"
@@ -85,7 +86,7 @@ export function DatePickerWithRange({
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[11px] uppercase tracking-widest text-slate-400 font-black mb-0.5">Date Range</span>
-                            <span className="text-sm">
+                            <span className="text-sm text-slate-900">
                                 {date?.from ? (
                                     date.to ? (
                                         <>
@@ -101,7 +102,7 @@ export function DatePickerWithRange({
                         </div>
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 border-none shadow-2xl rounded-[1.5rem] overflow-hidden bg-white/95 backdrop-blur-xl" align="end">
+                <PopoverContent className="w-auto p-0 border-none shadow-2xl rounded-[1.5rem] overflow-hidden bg-white/95 backdrop-blur-xl z-50" align="end">
                     <div className="flex flex-col md:flex-row h-full">
                         {/* Presets Sidebar */}
                         <div className="w-full md:w-48 bg-slate-50/50 p-4 border-r border-slate-100 flex flex-col gap-1">
@@ -137,23 +138,26 @@ export function DatePickerWithRange({
                                     mode="range"
                                     defaultMonth={tempDate?.from}
                                     selected={tempDate}
-                                    onSelect={setTempDate}
+                                    onSelect={(range) => {
+                                        // Ensure range is at least defined as from
+                                        if (range) setTempDate(range);
+                                    }}
                                     numberOfMonths={2}
                                     className="rounded-xl"
                                 />
                             </div>
                             {/* Footer with Apply Button */}
                             <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                                <div className="text-[10px] font-medium text-slate-400">
+                                <div className="text-[10px] font-bold text-slate-400 px-2">
                                     {tempDate?.from && tempDate?.to ? (
-                                        <span>{format(tempDate.from, 'MMM dd')} - {format(tempDate.to, 'MMM dd, yyyy')}</span>
+                                        <span className="text-indigo-600">{format(tempDate.from, 'MMM dd')} - {format(tempDate.to, 'MMM dd, yyyy')}</span>
                                     ) : (
                                         <span>Select a valid range</span>
                                     )}
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="ghost" size="sm" className="rounded-xl font-bold text-xs h-9 px-4" onClick={() => setIsOpen(false)}>Cancel</Button>
-                                    <Button size="sm" className="rounded-xl font-bold text-xs h-9 px-6 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100" onClick={handleApply}>
+                                    <Button variant="ghost" size="sm" className="rounded-xl font-bold text-xs h-9 px-4 text-slate-500" onClick={() => setIsOpen(false)}>Cancel</Button>
+                                    <Button size="sm" className="rounded-xl font-bold text-xs h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100" onClick={handleApply}>
                                         Apply Range & OK
                                     </Button>
                                 </div>

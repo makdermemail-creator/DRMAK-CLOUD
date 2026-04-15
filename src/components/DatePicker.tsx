@@ -25,12 +25,13 @@ export function DatePicker({
   const [isOpen, setIsOpen] = React.useState(false);
   const [tempDate, setTempDate] = React.useState<Date | undefined>(externalDate);
 
-  // Sync tempDate when popover opens
-  React.useEffect(() => {
-    if (isOpen) {
+  // Initialize tempDate only when the popover opens, not on every externalDate change while open
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
       setTempDate(externalDate);
     }
-  }, [isOpen, externalDate]);
+    setIsOpen(open);
+  };
 
   const handleApply = () => {
     onDateChange(tempDate);
@@ -38,7 +39,7 @@ export function DatePicker({
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen} modal={true}>
+    <Popover open={isOpen} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant={'outline'}
@@ -61,22 +62,23 @@ export function DatePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-auto p-0 border-none shadow-2xl rounded-[1.5rem] overflow-hidden bg-white/95 backdrop-blur-xl" 
+        className="w-auto p-0 border-none shadow-2xl rounded-[1.5rem] overflow-hidden bg-white/95 backdrop-blur-xl z-50" 
         align="start"
-        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="flex flex-col">
             <Calendar
             mode="single"
             selected={tempDate}
-            onSelect={setTempDate}
+            onSelect={(date) => {
+                if (date) setTempDate(date);
+            }}
             initialFocus
             className="rounded-2xl"
             />
             {/* Footer with OK Button */}
             <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-end gap-2">
-                <Button variant="ghost" size="sm" className="rounded-xl font-bold text-xs h-9 px-4" onClick={() => setIsOpen(false)}>Cancel</Button>
-                <Button size="sm" className="rounded-xl font-bold text-xs h-9 px-6 bg-slate-900 text-white" onClick={handleApply}>
+                <Button variant="ghost" size="sm" className="rounded-xl font-bold text-xs h-9 px-4 text-slate-500" onClick={() => setIsOpen(false)}>Cancel</Button>
+                <Button size="sm" className="rounded-xl font-bold text-xs h-9 px-6 bg-slate-900 text-white shadow-lg shadow-slate-200" onClick={handleApply}>
                     Confirm & OK
                 </Button>
             </div>

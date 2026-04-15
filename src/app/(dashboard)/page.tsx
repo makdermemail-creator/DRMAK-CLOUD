@@ -29,6 +29,11 @@ import {
     ArrowRight,
     ShieldAlert,
     Boxes,
+    Download,
+    Receipt,
+    Users2,
+    FileBarChart,
+    Zap,
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -72,7 +77,7 @@ import {
     ChartTooltip,
     ChartTooltipContent,
 } from "@/components/ui/chart"
-import { BarChart as RechartsBarChart, XAxis, YAxis, Bar as RechartsBar, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
+import { BarChart as RechartsBarChart, XAxis, YAxis, Bar as RechartsBar, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -502,12 +507,33 @@ const OrganizationDashboard = () => {
     const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
     const leadsRef = useMemoFirebase(() => firestore ? collection(firestore, 'leads') : null, [firestore]);
     const tasksRef = useMemoFirebase(() => firestore ? collection(firestore, 'adminTaskTemplates') : null, [firestore]);
+    const billingRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
+    const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
+    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersRef);
     const { data: leads, isLoading: leadsLoading } = useCollection<Lead>(leadsRef);
     const { data: tasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksRef);
+    const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
+    const { data: allExpenses } = useCollection<any>(expensesRef);
+    const { data: appointments } = useCollection<Appointment>(appointmentsRef);
 
     const isLoading = analyticsLoading || usersLoading || leadsLoading || tasksLoading;
+
+    const stats = React.useMemo(() => {
+        const today = startOfDay(new Date()).getTime();
+        
+        const revenue = (billingRecords || []).filter(r => startOfDay(new Date(r.billingDate)).getTime() === today)
+            .reduce((acc, r) => acc + (r.grandTotal || r.totalAmount || ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+            
+        const expenses = (allExpenses || []).filter((e: any) => startOfDay(new Date(e.timestamp)).getTime() === today)
+            .reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+            
+        const dailyAppointments = (appointments || []).filter(a => startOfDay(new Date(a.appointmentDateTime)).getTime() === today);
+        const completed = dailyAppointments.filter(a => a.status === 'Completed').length;
+
+        return { revenue, expenses, profit: revenue - expenses, totalAppointments: dailyAppointments.length, completed };
+    }, [billingRecords, allExpenses, appointments]);
 
     const leadStats = React.useMemo(() => {
         if (!leads) return { total: 0, new: 0, converted: 0, inProgress: 0 };
@@ -537,47 +563,95 @@ const OrganizationDashboard = () => {
     }
 
     return (
-        <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
-            {/* Top Metrics */}
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                <Card className="bg-gradient-to-br from-white to-slate-50 border-primary/20">
+        <div className="grid flex-1 items-start gap-8 auto-rows-max animate-in fade-in duration-500">
+            {/* Financial Multi-Pillar Executive Summary */}
+            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-3">
+                <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2.5rem] overflow-hidden border border-emerald-100/30">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200"><TrendingUp className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Management Inflow</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-4xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {stats.revenue.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-emerald-600/80 uppercase tracking-tighter">Gross Collections (Today)</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-none bg-rose-50/50 shadow-xl shadow-rose-100/20 rounded-[2.5rem] overflow-hidden border border-rose-100/30">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-rose-600 text-white rounded-2xl shadow-lg shadow-rose-200"><Receipt className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Operational Burn</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-4xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {stats.expenses.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-rose-600/80 uppercase tracking-tighter">Tracked Expenses (Today)</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-none bg-indigo-50/50 shadow-xl shadow-indigo-100/20 rounded-[2.5rem] overflow-hidden border-2 border-indigo-100/50">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200"><CircleDollarSign className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 leading-none">Net Position</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className={`text-4xl font-black tracking-tighter leading-none ${stats.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                Rs {stats.profit.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-indigo-600/80 uppercase tracking-tighter">Bottom Line Position</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Existing Contextual Metrics */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="bg-gradient-to-br from-white to-slate-50 border-primary/20 rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Team</CardTitle>
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Total Team</CardTitle>
                         <Users className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{users?.length || 0}</div>
-                        <p className="text-xs text-muted-foreground">Active Employees</p>
+                        <div className="text-2xl font-black">{users?.length || 0}</div>
+                        <p className="text-[10px] text-muted-foreground font-bold">Active Employees</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-gradient-to-br from-white to-blue-50 border-blue-200">
+                <Card className="bg-gradient-to-br from-white to-blue-50 border-blue-200 rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Sales Pipeline</CardTitle>
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Sales Pipeline</CardTitle>
                         <Target className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{leadStats.total}</div>
-                        <p className="text-xs text-blue-600/80">{leadStats.converted} Converted</p>
+                        <div className="text-2xl font-black">{leadStats.total}</div>
+                        <p className="text-[10px] text-blue-600/80 font-bold">{leadStats.converted} Converted</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-gradient-to-br from-white to-indigo-50 border-indigo-200">
+                <Card className="bg-gradient-to-br from-white to-indigo-50 border-indigo-200 rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Reach</CardTitle>
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Social Reach</CardTitle>
                         <Share2 className="h-4 w-4 text-indigo-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
-                        <p className="text-xs text-green-600">+{summaryMetrics.reachChange}% Month-over-Month</p>
+                        <div className="text-2xl font-black">{summaryMetrics.totalReach.toLocaleString()}</div>
+                        <p className="text-[10px] text-green-600 font-bold">+{summaryMetrics.reachChange}% MoM</p>
                     </CardContent>
                 </Card>
-                <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200">
+                <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200 rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Admin Tasks</CardTitle>
-                        <ListTodo className="h-4 w-4 text-orange-600" />
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Throughput</CardTitle>
+                        <Zap className="h-4 w-4 text-orange-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{tasks?.length || 0}</div>
-                        <p className="text-xs text-muted-foreground">Active Templates</p>
+                        <div className="text-2xl font-black">{stats.completed}/{stats.totalAppointments}</div>
+                        <p className="text-[10px] text-orange-600/80 font-bold">Appointments Finished</p>
                     </CardContent>
                 </Card>
             </div>
@@ -723,13 +797,15 @@ const AdminDashboard = () => {
     const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
     const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
     const billingRecordsRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
+    const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
 
     const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
     const { data: doctors, isLoading: doctorsLoading } = useCollection<Doctor>(doctorsRef);
     const { data: patients, isLoading: patientsLoading } = useCollection<Patient>(patientsRef);
     const { data: billingRecords, isLoading: billingLoading } = useCollection<BillingRecord>(billingRecordsRef);
+    const { data: allExpenses, isLoading: expensesLoading } = useCollection<any>(expensesRef);
 
-    const isLoading = appointmentsLoading || doctorsLoading || patientsLoading || billingLoading;
+    const isLoading = appointmentsLoading || doctorsLoading || patientsLoading || billingLoading || expensesLoading;
 
     const enrichedAppointments = React.useMemo(() => {
         if (!appointments || !doctors || !patients) return [];
@@ -764,9 +840,28 @@ const AdminDashboard = () => {
         });
     }, [enrichedAppointments, selectedDate]);
 
-    const { dailyRevenue, todaysPatients, appointmentStats } = React.useMemo(() => {
+    const financialMetrics = React.useMemo(() => {
+        if (!selectedDate) return { revenue: 0, expenses: 0, profit: 0 };
+        
+        const filter = (itemDate: Date) => {
+            if (periodMode === 'day') return startOfDay(itemDate).getTime() === startOfDay(selectedDate).getTime();
+            if (periodMode === 'month') return isSameMonth(itemDate, selectedDate) && isSameYear(itemDate, selectedDate);
+            if (periodMode === 'year') return isSameYear(itemDate, selectedDate);
+            return false;
+        };
+
+        const revenue = (billingRecords || []).filter(r => filter(new Date(r.billingDate)))
+            .reduce((acc, r) => acc + (r.grandTotal || r.totalAmount || ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+            
+        const expenses = (allExpenses || []).filter((e: any) => filter(new Date(e.timestamp)))
+            .reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+
+        return { revenue, expenses, profit: revenue - expenses };
+    }, [billingRecords, allExpenses, selectedDate, periodMode]);
+
+    const { todaysPatients, appointmentStats } = React.useMemo(() => {
         if (!selectedDate || !appointments) {
-            return { dailyRevenue: 0, todaysPatients: 0, appointmentStats: { completed: 0, total: 0 } };
+            return { todaysPatients: 0, appointmentStats: { completed: 0, total: 0 } };
         }
 
         const filteredAppointments = appointments.filter(apt => {
@@ -779,31 +874,13 @@ const AdminDashboard = () => {
 
         const total = filteredAppointments.length;
         const completed = filteredAppointments.filter(apt => apt.status === 'Completed').length;
-
-        // Revenue calculation
-        let revenue = 0;
-        if (billingRecords) {
-            billingRecords.forEach(record => {
-                const recordDate = new Date(record.billingDate);
-                let match = false;
-                if (periodMode === 'day') match = startOfDay(recordDate).getTime() === startOfDay(selectedDate).getTime();
-                else if (periodMode === 'month') match = isSameMonth(recordDate, selectedDate) && isSameYear(recordDate, selectedDate);
-                else if (periodMode === 'year') match = isSameYear(recordDate, selectedDate);
-
-                if (match) {
-                    revenue += record.grandTotal || record.totalAmount || ((record.consultationCharges || 0) + (record.procedureCharges || 0) + (record.medicineCharges || 0));
-                }
-            });
-        }
-
         const uniquePatients = new Set(filteredAppointments.map(a => a.patientMobileNumber)).size;
 
         return {
-            dailyRevenue: revenue,
             todaysPatients: uniquePatients,
             appointmentStats: { completed, total }
         };
-    }, [appointments, billingRecords, selectedDate, periodMode]);
+    }, [appointments, selectedDate, periodMode]);
 
     const activeConsultations = React.useMemo(() => {
         if (!appointments || !selectedDate) return 0;
@@ -899,55 +976,72 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Revenue ({periodMode === 'day' ? format(selectedDate || new Date(), 'MMM d') : 
-                                     periodMode === 'month' ? format(selectedDate || new Date(), 'MMMM yyyy') : 
-                                     format(selectedDate || new Date(), 'yyyy')})
-                        </CardTitle>
-                        <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Rs{dailyRevenue.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Total collected in {periodMode}</p>
+            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+                <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-emerald-100/30">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200"><TrendingUp className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Gross Revenue</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {financialMetrics.revenue.toLocaleString()}
+                            </div>
+                            <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-tighter">
+                                Inflow for {periodMode}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                            Patients ({periodMode === 'day' ? format(selectedDate || new Date(), 'MMM d') : 
-                                     periodMode === 'month' ? format(selectedDate || new Date(), 'MMMM yyyy') : 
-                                     format(selectedDate || new Date(), 'yyyy')})
-                        </CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">+{todaysPatients}</div>
-                        <p className="text-xs text-muted-foreground">Unique patient interactions</p>
+
+                <Card className="border-none bg-rose-50/50 shadow-xl shadow-rose-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-rose-100/30">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-rose-600 text-white rounded-xl shadow-lg shadow-rose-200"><Receipt className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Total Burn</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {financialMetrics.expenses.toLocaleString()}
+                            </div>
+                            <p className="text-[10px] font-bold text-rose-600/80 uppercase tracking-tighter">
+                                Expenses for {periodMode}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Appointments</CardTitle>
-                        <CalendarCheck className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{appointmentStats.completed} / {appointmentStats.total}</div>
-                        <p className="text-xs text-muted-foreground">Completed / Total for period</p>
+
+                <Card className="border-none bg-indigo-50/50 shadow-xl shadow-indigo-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border-2 border-indigo-100/50">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200"><CircleDollarSign className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 leading-none">Net Position</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className={`text-3xl font-black tracking-tighter leading-none ${financialMetrics.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                Rs {financialMetrics.profit.toLocaleString()}
+                            </div>
+                            <p className="text-[10px] font-bold text-indigo-600/80 uppercase tracking-tighter">
+                                Final Profit/Loss
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Social Reach</CardTitle>
-                        <Share2 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summaryMetrics.totalReach.toLocaleString()}</div>
-                        <p className={`text-xs ${summaryMetrics.reachChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {summaryMetrics.reachChange >= 0 ? '+' : ''}{summaryMetrics.reachChange}% overall
-                        </p>
+
+                <Card className="border-none bg-slate-50 shadow-xl shadow-slate-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-slate-200/50">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-200"><Users2 className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Performance</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                {appointmentStats.completed}/{appointmentStats.total}
+                            </div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                Appointments Finished
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -1344,10 +1438,12 @@ const ReportsDashboard = () => {
     const billingRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
     const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+    const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
+    const { data: allExpenses } = useCollection<any>(expensesRef);
 
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
@@ -1356,6 +1452,14 @@ const ReportsDashboard = () => {
             return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
         });
     }, [billingRecords, selectedRange]);
+
+    const filteredExpenses = React.useMemo(() => {
+        if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
+        return allExpenses.filter((e: any) => {
+            const date = new Date(e.timestamp);
+            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        });
+    }, [allExpenses, selectedRange]);
 
     const filteredAppointments = React.useMemo(() => {
         if (!appointments || !selectedRange?.from || !selectedRange?.to) return appointments || [];
@@ -1366,17 +1470,18 @@ const ReportsDashboard = () => {
     }, [appointments, selectedRange]);
 
     const financialStats = React.useMemo(() => {
-        if (!filteredBilling) return { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 };
-        return filteredBilling.reduce((acc, curr) => {
-            const billTotal = curr.grandTotal || curr.totalAmount || ((curr.consultationCharges || 0) + (curr.procedureCharges || 0) + (curr.medicineCharges || 0));
-            return {
-                totalRevenue: acc.totalRevenue + billTotal,
-                consultation: acc.consultation + (curr.consultationCharges || 0),
-                procedures: acc.procedures + (curr.procedureCharges || 0),
-                medicines: acc.medicines + (curr.medicineCharges || 0),
-            };
-        }, { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 });
-    }, [filteredBilling]);
+        const revenue = filteredBilling.reduce((acc, curr) => acc + (curr.grandTotal || curr.totalAmount || ((curr.consultationCharges || 0) + (curr.procedureCharges || 0) + (curr.medicineCharges || 0))), 0);
+        const expense = filteredExpenses.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
+        
+        return {
+            totalRevenue: revenue,
+            totalExpense: expense,
+            netProfit: revenue - expense,
+            consultation: filteredBilling.reduce((acc, curr) => acc + (curr.consultationCharges || 0), 0),
+            procedures: filteredBilling.reduce((acc, curr) => acc + (curr.procedureCharges || 0), 0),
+            medicines: filteredBilling.reduce((acc, curr) => acc + (curr.medicineCharges || 0), 0),
+        };
+    }, [filteredBilling, filteredExpenses]);
 
     const employeePerformance = React.useMemo(() => {
         if (!users || !filteredAppointments) return [];
@@ -1395,86 +1500,108 @@ const ReportsDashboard = () => {
     }, [users, filteredAppointments]);
 
     return (
-        <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Financial & Performance Reports</h2>
-                    <p className="text-muted-foreground">Comprehensive overview of clinic health and team productivity.</p>
+        <div className="grid flex-1 items-start gap-8 auto-rows-max animate-in fade-in duration-700">
+            {/* Executive Summary Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-200/60 shadow-sm">
+                <div className="space-y-1">
+                    <h2 className="text-4xl font-black tracking-tighter text-slate-900">Reports & <span className="text-indigo-600">Analytics</span></h2>
+                    <p className="text-slate-500 font-bold text-sm uppercase tracking-widest opacity-70">Unified Financial Audit Center</p>
                 </div>
-                <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
+                <div className="flex items-center gap-3">
+                    <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
+                    <Button variant="outline" className="rounded-2xl border-slate-200 h-12 px-6 font-black hover:bg-white shadow-sm transition-all active:scale-95">
+                        <Download className="mr-2 h-4 w-4" /> Export
+                    </Button>
+                </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                        <CircleDollarSign className="h-4 w-4 text-emerald-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Rs {financialStats.totalRevenue.toLocaleString()}</div>
-                        <p className="text-xs text-emerald-600/80">Accumulated for selected period</p>
+            {/* Main Financial Pillars */}
+            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-3">
+                <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2.5rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200"><TrendingUp className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Total Revenue</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-4xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {financialStats.totalRevenue.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-emerald-600/80 uppercase tracking-tighter">Gross Inflow Audited</p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Consultations</CardTitle>
-                        <Activity className="h-4 w-4 text-blue-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Rs {financialStats.consultation.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Fees from doctor visits</p>
+
+                <Card className="border-none bg-rose-50/50 shadow-xl shadow-rose-100/20 rounded-[2.5rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-rose-600 text-white rounded-2xl shadow-lg shadow-rose-200"><Receipt className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Total Expenses</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-4xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {financialStats.totalExpense.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-rose-600/80 uppercase tracking-tighter">Operational Burn Tracked</p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Procedures</CardTitle>
-                        <Sparkles className="h-4 w-4 text-purple-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Rs {financialStats.procedures.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Surgical & skin treatments</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Medicines</CardTitle>
-                        <Boxes className="h-4 w-4 text-orange-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Rs {financialStats.medicines.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Pharmacy sales revenue</p>
+
+                <Card className="border-none bg-indigo-50/50 shadow-xl shadow-indigo-100/20 rounded-[2.5rem] overflow-hidden group hover:scale-[1.02] transition-all border-2 border-indigo-100/50">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200"><CircleDollarSign className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 leading-none">Net Profit/Loss</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className={`text-4xl font-black tracking-tighter leading-none ${financialStats.netProfit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                Rs {financialStats.netProfit.toLocaleString()}
+                            </div>
+                            <p className="text-xs font-bold text-indigo-600/80 uppercase tracking-tighter">Final Bottom Line</p>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-4">
-                    <CardHeader>
-                        <CardTitle>Employee Performance</CardTitle>
-                        <CardDescription>Appointment completion rates and efficiency by staff member.</CardDescription>
+            {/* Performance & Attribution Grid */}
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
+                <Card className="col-span-4 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden">
+                    <CardHeader className="p-8 pb-0">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Staff Productivity</CardTitle>
+                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Efficiency Metrics</CardDescription>
+                            </div>
+                            <Users2 className="h-6 w-6 text-slate-300" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-8">
                         <Table>
                             <TableHeader>
-                                <TableRow>
-                                    <TableHead>Employee</TableHead>
-                                    <TableHead>Role</TableHead>
-                                    <TableHead className="text-center">Total Appts</TableHead>
-                                    <TableHead className="text-center">Completed</TableHead>
-                                    <TableHead className="text-right">Efficiency</TableHead>
+                                <TableRow className="hover:bg-transparent border-slate-100">
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Employee</TableHead>
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Completed</TableHead>
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Efficiency</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {employeePerformance.map((emp) => (
-                                    <TableRow key={emp.id}>
-                                        <TableCell className="font-medium">{emp.name}</TableCell>
-                                        <TableCell><Badge variant="outline">{emp.role}</Badge></TableCell>
-                                        <TableCell className="text-center">{emp.appointments}</TableCell>
-                                        <TableCell className="text-center text-emerald-600 font-semibold">{emp.completed}</TableCell>
+                                    <TableRow key={emp.id} className="border-slate-50 h-16 hover:bg-slate-50/50 transition-colors">
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="font-black text-slate-900">{emp.name}</span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-center text-emerald-600 font-black">
+                                            {emp.completed} <span className="text-slate-300 font-bold ml-1">/ {emp.appointments}</span>
+                                        </TableCell>
                                         <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className="text-xs font-medium">{emp.efficiency}%</span>
-                                                <Progress value={emp.efficiency} className="h-1.5 w-12" />
+                                            <div className="flex items-center justify-end gap-3">
+                                                <span className="text-xs font-black text-slate-900">{emp.efficiency}%</span>
+                                                <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${emp.efficiency}%` }} />
+                                                </div>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -1484,25 +1611,50 @@ const ReportsDashboard = () => {
                     </CardContent>
                 </Card>
 
-                <Card className="col-span-3">
-                    <CardHeader>
-                        <CardTitle>Revenue Attribution</CardTitle>
-                        <CardDescription>Breakdown by service category.</CardDescription>
+                <Card className="col-span-3 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden">
+                    <CardHeader className="p-8 pb-0">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Revenue Stream</CardTitle>
+                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Service Breakdown</CardDescription>
+                            </div>
+                            <FileBarChart className="h-6 w-6 text-slate-300" />
+                        </div>
                     </CardHeader>
-                    <CardContent className="h-[300px]">
+                    <CardContent className="p-8 h-[400px]">
                         <ChartContainer config={{
                             value: { label: "Revenue", color: "hsl(var(--primary))" }
                         }} className="h-full w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <RechartsBarChart data={[
-                                    { name: 'Consultations', value: financialStats.consultation },
+                                    { name: 'Consults', value: financialStats.consultation },
                                     { name: 'Procedures', value: financialStats.procedures },
                                     { name: 'Medicines', value: financialStats.medicines },
                                 ]}>
-                                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                                    <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `Rs${v / 1000}k`} />
-                                    <RechartsTooltip content={<ChartTooltipContent />} />
-                                    <RechartsBar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                    <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        fontSize={10} 
+                                        tickLine={false} 
+                                        axisLine={false} 
+                                        fontWeight="black" 
+                                        tick={{ fill: '#64748b' }} 
+                                    />
+                                    <YAxis 
+                                        fontSize={10} 
+                                        tickLine={false} 
+                                        axisLine={false} 
+                                        fontWeight="black" 
+                                        tick={{ fill: '#64748b' }} 
+                                        tickFormatter={(v) => `Rs${v / 1000}k`} 
+                                    />
+                                    <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={<ChartTooltipContent />} />
+                                    <RechartsBar 
+                                        dataKey="value" 
+                                        fill="#4f46e5" 
+                                        radius={[12, 12, 0, 0]} 
+                                        barSize={40}
+                                    />
                                 </RechartsBarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
