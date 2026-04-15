@@ -17,12 +17,18 @@ import type { Patient, Doctor } from '@/lib/types';
 import { collection, doc } from 'firebase/firestore';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DateRange } from 'react-day-picker';
+import { startOfMonth } from 'date-fns';
 
 export default function PatientJourneyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientId = searchParams.get('id');
   const firestore = useFirestore();
+  const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: new Date(),
+  });
 
   const patientDocRef = useMemoFirebase(
     () => (firestore && patientId ? doc(firestore, 'patients', patientId) : null),
@@ -57,7 +63,7 @@ export default function PatientJourneyPage() {
       
       <div className="flex items-center justify-between gap-4 p-4 border rounded-lg">
         <div className="flex items-center gap-2">
-            <DatePickerWithRange />
+            <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
             <Select>
                 <SelectTrigger className="w-48"><SelectValue placeholder="Select Doctor"/></SelectTrigger>
                 <SelectContent>

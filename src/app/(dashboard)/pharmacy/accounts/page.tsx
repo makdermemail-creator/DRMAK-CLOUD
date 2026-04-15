@@ -19,6 +19,8 @@ import { Input } from '@/components/ui/input';
 import { Search, PlusCircle, Download, Printer, Eye, Edit, Trash2, ClipboardList, History as HistoryIcon } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { DateRange } from 'react-day-picker';
+import { startOfMonth } from 'date-fns';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,7 +30,6 @@ import { collection, doc, query, where } from 'firebase/firestore';
 import type { Supplier } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign } from 'lucide-react';
-
 const COLORS = ['hsl(var(--primary))'];
 
 
@@ -41,6 +42,11 @@ export default function AccountsPage() {
 
     const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
     const { data: allSuppliers } = useCollection<Supplier>(suppliersRef);
+
+    const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
+        from: startOfMonth(new Date()),
+        to: new Date(),
+    });
 
     const distributors = React.useMemo(() => {
         if (!allSuppliers) return [];
@@ -77,7 +83,7 @@ export default function AccountsPage() {
                             <Input placeholder="Search Voucher No." className="pl-8" />
                         </div>
                         <Select><SelectTrigger><SelectValue placeholder="Select Expense Category" /></SelectTrigger><SelectContent/></Select>
-                        <DatePickerWithRange />
+                        <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                         <Select><SelectTrigger><SelectValue placeholder="Select Payment Mode" /></SelectTrigger><SelectContent/></Select>
                         <Select><SelectTrigger><SelectValue placeholder="Select Doctor" /></SelectTrigger><SelectContent/></Select>
                     </div>
@@ -166,7 +172,7 @@ export default function AccountsPage() {
             <TabsContent value="expenses-summary" className="pt-6">
                 <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                        <DatePickerWithRange />
+                        <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                          <div className="flex items-center gap-2">
                             <Button variant="outline"><Download className="mr-2 h-4 w-4"/> Excel</Button>
                             <Button variant="outline"><Printer className="mr-2 h-4 w-4"/> Print</Button>
@@ -208,7 +214,7 @@ export default function AccountsPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <DatePickerWithRange />
+                            <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                         </div>
 
                         {selectedDistributor ? (
@@ -354,7 +360,7 @@ export default function AccountsPage() {
                             <Select><SelectTrigger className="w-[280px]"><SelectValue placeholder="Select Doctor" /></SelectTrigger><SelectContent/></Select>
                             <p className="text-xs text-destructive mt-1">Kindly select the Doctor to view share</p>
                         </div>
-                        <DatePickerWithRange />
+                        <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <Card>

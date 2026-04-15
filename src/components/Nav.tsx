@@ -53,7 +53,8 @@ import {
     Network,
     Truck,
     Receipt,
-    Printer
+    Printer,
+    Wallet
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -120,28 +121,13 @@ const allMenuItems: MenuItem[] = [
         ]
     },
 
-    // Reports Sub-menu
-    {
-        id: 'reports.full', href: '/reports', label: 'Reports', icon: LineChart, isMenu: true,
-        subItems: [
-            { id: 'reports.full', href: '/reports/appointments', label: 'Appointments' },
-            { id: 'reports.full', href: '/reports/opd', label: 'OPD' },
-            { id: 'reports.full', href: '/reports/patients', label: 'Patients' },
-            { id: 'reports.inventory', href: '/reports/inventory', label: 'Inventory' },
-            { id: 'reports.financial', href: '/reports/financial', label: 'Financial' },
-            { id: 'reports.full', href: '/reports/ipd', label: 'IPD' },
-            { id: 'reports.full', href: '/reports/pharmacy', label: 'Pharmacy' },
-            { id: 'reports.full', href: '/reports/laboratory', label: 'Laboratory' },
-        ]
-    },
+    // Core Reports (Top-level)
+    { id: 'rep_finance', href: '/reports/financial', label: 'Finance', icon: LineChart },
+    { id: 'rep_inventory', href: '/reports/inventory', label: 'Inventory Management', icon: Boxes },
+    { id: 'rep_performance', href: '/employee-reports', label: 'Team performance', icon: TrendingUp },
+    { id: 'rep_expenses', href: '/daily-expenses', label: 'Expenses', icon: Receipt },
+    { id: 'rep_salaries', href: '/reports/salaries', label: 'Employee Salary', icon: Wallet },
 
-    // More Sub-menu - We will treat these as individual features
-    { id: 'healthRecords', href: '/health-records', label: 'Health Records', icon: HeartPulse },
-
-    // Admin Specific
-    { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog }, // Corrected ID from features page
-    { id: 'featureControl', href: '/features', label: 'Features', icon: Settings }, // Corrected ID from features page
-    { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: FileBarChart },
     { id: 'taskManagement', href: '/admin/manage-tasks', label: 'Manage Tasks', icon: ListTodo },
     { id: 'admin_trainings', href: '/admin/trainings', label: 'Manage Trainings', icon: GraduationCap },
 
@@ -200,8 +186,8 @@ const reportsGroups = [
         ids: ["dashboard"]
     },
     {
-        label: "Intelligence & Analysis",
-        ids: ["reports.full", "employeeReports", "analytics"]
+        label: "Reports and Analytics",
+        ids: ["rep_finance", "rep_inventory", "rep_performance", "rep_expenses", "rep_salaries", "analytics"]
     },
     {
         label: "SkinSmith AI",

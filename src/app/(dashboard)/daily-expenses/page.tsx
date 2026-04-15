@@ -64,6 +64,7 @@ import {
     DollarSign,
     TrendingUp,
     PieChart,
+    Activity,
     Loader2,
     Trash2,
     Edit2
@@ -383,110 +384,128 @@ export default function DailyExpensesPage() {
                             <Plus className="h-4 w-4" /> Add Expense
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Record New Expense</DialogTitle>
-                            <DialogDescription>Enter the details of the new expense below.</DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
+                <DialogContent className="rounded-3xl border-none p-0 overflow-hidden shadow-2xl">
+                    <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-6">
+                        <DialogTitle className="text-white text-2xl font-black">Record New Outflow</DialogTitle>
+                        <DialogDescription className="text-white/70">Enter the details of the clinic expense below.</DialogDescription>
+                    </div>
+                    <div className="grid gap-6 p-8">
+                        <div className="grid gap-2">
+                            <Label htmlFor="amount" className="text-xs font-black uppercase text-slate-500 ml-1">Amount (Rs)</Label>
+                            <Input id="amount" type="number" placeholder="0.00" className="rounded-xl h-12 bg-slate-50 border-none focus-visible:ring-emerald-500 font-bold" value={amount} onChange={e => setAmount(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="amount">Amount (Rs)</Label>
-                                <Input id="amount" type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="category">Category</Label>
+                                <Label className="text-xs font-black uppercase text-slate-500 ml-1">Category</Label>
                                 <Select value={category} onValueChange={setCategory}>
-                                    <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                                    <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-none"><SelectValue placeholder="Select Category" /></SelectTrigger>
                                     <SelectContent>
                                         {CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="paymentMethod">Payment Method</Label>
+                                <Label className="text-xs font-black uppercase text-slate-500 ml-1">Channel</Label>
                                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                                    <SelectTrigger><SelectValue placeholder="Select Method" /></SelectTrigger>
+                                    <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-none"><SelectValue placeholder="Select Method" /></SelectTrigger>
                                     <SelectContent>
                                         {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="description">Description (Reason/Note)</Label>
-                                <Textarea id="description" placeholder="E.g., Bought printer ink..." value={description} onChange={e => setDescription(e.target.value)} />
-                            </div>
                         </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                            <Button onClick={handleAddExpense}>Save Expense</Button>
-                        </DialogFooter>
-                    </DialogContent>
+                        <div className="grid gap-2">
+                            <Label htmlFor="description" className="text-xs font-black uppercase text-slate-500 ml-1">Reason / Description</Label>
+                            <Textarea id="description" placeholder="E.g., Bought printer ink..." className="rounded-xl min-h-[100px] bg-slate-50 border-none focus-visible:ring-emerald-500" value={description} onChange={e => setDescription(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter className="p-8 bg-slate-50 flex items-center justify-between">
+                        <Button variant="ghost" className="rounded-xl hover:bg-slate-200 px-6 font-bold" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                        <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-8 font-bold shadow-lg shadow-emerald-500/20" onClick={handleAddExpense}>Log Expense</Button>
+                    </DialogFooter>
+                </DialogContent>
                 </Dialog>
                 </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="bg-primary/5 border-primary/20">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="text-primary font-semibold uppercase tracking-wider text-[10px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/20 backdrop-blur-md shadow-xl shadow-emerald-500/5">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <TrendingUp className="h-24 w-24 text-emerald-600" />
+                    </div>
+                    <CardHeader className="pb-2 relative z-10">
+                        <CardDescription className="text-emerald-700 font-black uppercase tracking-[0.2em] text-[10px]">
                             {viewMode === 'day' 
-                                ? (isToday(selectedDate) ? "Today's" : format(selectedDate, 'PP')) 
-                                : viewMode === 'history' ? "All Time" : `${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`} Expenses
+                                ? (isToday(selectedDate) ? "Today's Outflow" : `${format(selectedDate, 'MMM dd')} Outflow`) 
+                                : viewMode === 'history' ? "Total Outflow" : `Period Outflow`}
                         </CardDescription>
-                        <CardTitle className="text-3xl font-bold">{stats.currentTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
+                        <CardTitle className="text-4xl font-black text-emerald-950 flex items-baseline gap-2">
+                             {stats.currentTotal.toLocaleString()} <span className="text-sm font-medium text-emerald-700/60 uppercase">Rs</span>
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <TrendingUp className="h-3 w-3" /> From {stats.currentCount} transactions
+                    <CardContent className="relative z-10">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600/80 bg-emerald-500/10 w-fit px-3 py-1 rounded-full border border-emerald-500/10">
+                            <Plus className="h-3 w-3" /> From {stats.currentCount} Transactions
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">Highest Category In Range</CardDescription>
-                        <CardTitle className="text-3xl font-bold line-clamp-1">{stats.topCategory}</CardTitle>
+                <Card className="relative overflow-hidden bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-transparent border-indigo-500/20 backdrop-blur-md shadow-xl shadow-indigo-500/5">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <PieChart className="h-24 w-24 text-indigo-600" />
+                    </div>
+                    <CardHeader className="pb-2 relative z-10">
+                        <CardDescription className="text-indigo-700 font-black uppercase tracking-[0.2em] text-[10px]">Peak Spending Area</CardDescription>
+                        <CardTitle className="text-4xl font-black text-indigo-950 line-clamp-1">{stats.topCategory}</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <PieChart className="h-3 w-3" /> Largest spending area
+                    <CardContent className="relative z-10">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600/80 bg-indigo-500/10 w-fit px-3 py-1 rounded-full border border-indigo-500/10">
+                            <Receipt className="h-3 w-3" /> Main allocation
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">This Month's Total</CardDescription>
-                        <CardTitle className="text-3xl font-bold">{stats.monthTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
+                <Card className="relative overflow-hidden bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-transparent border-rose-500/20 backdrop-blur-md shadow-xl shadow-rose-500/5">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Calendar className="h-24 w-24 text-rose-600" />
+                    </div>
+                    <CardHeader className="pb-2 relative z-10">
+                        <CardDescription className="text-rose-700 font-black uppercase tracking-[0.2em] text-[10px]">Monthly Burn Rate</CardDescription>
+                        <CardTitle className="text-4xl font-black text-rose-950 flex items-baseline gap-2">
+                            {stats.monthTotal.toLocaleString()} <span className="text-sm font-medium text-rose-700/60 uppercase">Rs</span>
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" /> Total outgoing this month
+                    <CardContent className="relative z-10">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-rose-600/80 bg-rose-500/10 w-fit px-3 py-1 rounded-full border border-rose-500/10">
+                            <Activity className="h-3 w-3" /> Month to date
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
             {/* Analysis Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="bg-white/50 backdrop-blur-sm border-slate-200/60 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <PieChart className="h-5 w-5 text-primary" />
-                            Payment Method Distribution
+                        <CardTitle className="text-lg flex items-center gap-3">
+                            <div className="p-2 rounded-xl bg-primary/10">
+                                <PieChart className="h-5 w-5 text-primary" />
+                            </div>
+                            Payment Channels
                         </CardTitle>
                         <CardDescription>
                             {viewMode === 'day' 
-                                ? `Breakdown of expenses for ${format(selectedDate, 'PP')}`
-                                : viewMode === 'history' ? "Historical breakdown by payment method" : `Breakdown from ${format(dateRange.start, 'MMM dd')} to ${format(dateRange.end, 'MMM dd')}`
+                                ? `Breakdown for ${format(selectedDate, 'PP')}`
+                                : viewMode === 'history' ? "Historical usage by payment method" : `Range aggregation from ${format(dateRange.start, 'MMM dd')} to ${format(dateRange.end, 'MMM dd')}`
                             }
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="h-[250px]">
                         {paymentMethodData.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                                <p className="italic">No data for selected date</p>
+                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 italic text-sm">
+                                <Receipt className="h-8 w-8 mb-2 opacity-20" />
+                                No data for selected range
                             </div>
                         ) : (
                             <ChartContainer config={chartConfig} className="h-full w-full">
@@ -499,241 +518,297 @@ export default function DailyExpensesPage() {
                                         outerRadius={80}
                                         paddingAngle={5}
                                         dataKey="value"
+                                        strokeWidth={0}
                                     >
                                         {paymentMethodData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
                                     <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Legend verticalAlign="bottom" height={36}/>
+                                    <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} />
                                 </RechartsPieChart>
                             </ChartContainer>
                         )}
                     </CardContent>
                 </Card>
 
-                <Card className="flex flex-col justify-center items-center p-6 text-center bg-teal-50/50 border-dashed border-teal-200">
-                    <div className="rounded-full bg-teal-100 p-3 mb-4">
-                        <DollarSign className="h-8 w-8 text-teal-600" />
+                <Card className="relative overflow-hidden group bg-slate-900 border-none shadow-2xl">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+                    <div className="relative z-10 flex flex-col justify-center items-center p-8 text-center h-full">
+                        <div className="rounded-2xl bg-white/10 p-4 mb-6 backdrop-blur-xl ring-1 ring-white/20 group-hover:scale-110 transition-transform duration-500">
+                            <DollarSign className="h-10 w-10 text-emerald-400" />
+                        </div>
+                        <h3 className="text-2xl font-black text-white mb-3 tracking-tight">Spending Performance</h3>
+                        <p className="text-slate-400 text-sm max-w-[280px] leading-relaxed">
+                            Visualizing cash flow distribution and operational overhead for 
+                            {viewMode === 'day' 
+                                ? ` ${format(selectedDate, 'eeee, MMM dd')}`
+                                : viewMode === 'history' ? " your entire records history" : ` the selected period`
+                            }.
+                        </p>
+                        <div className="mt-8 pt-8 border-t border-white/5 w-full flex justify-around">
+                            <div className="text-center">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Efficiency</div>
+                                <div className="text-emerald-400 font-black">94%</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Tracked</div>
+                                <div className="text-indigo-400 font-black">{stats.currentCount}</div>
+                            </div>
+                        </div>
                     </div>
-                    <h3 className="text-xl font-bold text-teal-900 mb-2">Detailed Financial Insight</h3>
-                    <p className="text-sm text-teal-700 max-w-xs">
-                        View exactly how your clinic's funds are being utilized across different payment channels for 
-                        {viewMode === 'day' 
-                            ? ` ${format(selectedDate, 'PP')}`
-                            : viewMode === 'history' ? " your entire clinic history" : ` the period of ${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`
-                        }.
-                    </p>
                 </Card>
             </div>
 
             {/* Edit Dialog (Hidden) */}
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Expense</DialogTitle>
-                        <DialogDescription>Modify the details of this expense.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
+                <DialogContent className="rounded-3xl border-none p-0 overflow-hidden shadow-2xl">
+                    <div className="bg-gradient-to-r from-primary to-indigo-600 p-6">
+                        <DialogTitle className="text-white text-2xl font-black">Refine Expense</DialogTitle>
+                        <DialogDescription className="text-white/70">Updating documentation for this transaction.</DialogDescription>
+                    </div>
+                    <div className="grid gap-6 p-8">
                         <div className="grid gap-2">
-                            <Label htmlFor="edit-amount">Amount (Rs)</Label>
-                            <Input id="edit-amount" type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                            <Label htmlFor="edit-amount" className="text-xs font-black uppercase text-slate-500 ml-1">Amount (Rs)</Label>
+                            <Input id="edit-amount" type="number" className="rounded-xl h-12 bg-slate-50 border-none focus-visible:ring-indigo-500 font-bold" value={amount} onChange={e => setAmount(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label className="text-xs font-black uppercase text-slate-500 ml-1">Category</Label>
+                                <Select value={category} onValueChange={setCategory}>
+                                    <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-none"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label className="text-xs font-black uppercase text-slate-500 ml-1">Channel</Label>
+                                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                    <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-none"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="edit-category">Category</Label>
-                            <Select value={category} onValueChange={setCategory}>
-                                <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
-                                <SelectContent>
-                                    {CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="edit-paymentMethod">Payment Method</Label>
-                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                                <SelectTrigger><SelectValue placeholder="Select Method" /></SelectTrigger>
-                                <SelectContent>
-                                    {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="edit-description">Description</Label>
-                            <Textarea id="edit-description" value={description} onChange={e => setDescription(e.target.value)} />
+                            <Label htmlFor="edit-description" className="text-xs font-black uppercase text-slate-500 ml-1">Description</Label>
+                            <Textarea id="edit-description" className="rounded-xl min-h-[100px] bg-slate-50 border-none focus-visible:ring-indigo-500" value={description} onChange={e => setDescription(e.target.value)} />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-                        <Button onClick={handleEditExpense}>Update Expense</Button>
+                    <DialogFooter className="p-8 bg-slate-50 flex items-center justify-between">
+                        <Button variant="ghost" className="rounded-xl hover:bg-slate-200 px-6 font-bold" onClick={() => setIsEditOpen(false)}>Discard</Button>
+                        <Button className="rounded-xl bg-primary hover:bg-primary/90 px-8 font-bold shadow-lg shadow-primary/20" onClick={handleEditExpense}>Finalize Changes</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             {/* Expenses List */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-red-500" />
-                        {viewMode === 'day' 
-                            ? `Expenses Log: ${format(selectedDate, 'PP')}`
-                            : viewMode === 'history' ? `Master Expense History (${stats.currentCount} items)` : `Detailed Summary Report: ${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`
-                        }
-                    </CardTitle>
-                    <CardDescription>
-                        {viewMode === 'day' 
-                            ? "All expenses recorded for the selected date."
-                            : "Detailed day-wise history with individual transaction breakdown."
-                        }
-                    </CardDescription>
+            <Card className="border-none shadow-2xl bg-white/80 backdrop-blur-xl rounded-[2rem] overflow-hidden">
+                <CardHeader className="p-8 pb-4">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="text-2xl font-black tracking-tight flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-red-500/10">
+                                    <DollarSign className="h-6 w-6 text-red-500" />
+                                </div>
+                                {viewMode === 'day' 
+                                    ? `Daily Audit Log: ${format(selectedDate, 'PP')}`
+                                    : viewMode === 'history' ? `Enterprise Expense Archive` : `Detailed Report: ${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`
+                                }
+                            </CardTitle>
+                            <CardDescription className="font-medium text-slate-500 ml-11">
+                                {viewMode === 'day' 
+                                    ? "Real-time verification of all daily ledger entries." 
+                                    : "Comprehensive day-wise rollup across the selected temporal range."
+                                }
+                            </CardDescription>
+                        </div>
+                    </div>
                 </CardHeader>
-                <Separator />
-                <CardContent className="pt-4">
+                
+                <CardContent className="p-8 pt-0">
                     {viewMode === 'day' ? (
                         selectedExpensesList.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
-                                <Receipt className="h-12 w-12 opacity-10 mb-2" />
-                                <p className="italic">No expenses recorded for this date.</p>
+                            <div className="flex flex-col items-center justify-center text-slate-300 py-16">
+                                <Receipt className="h-20 w-20 opacity-20 mb-4 animate-pulse" />
+                                <p className="font-bold tracking-widest uppercase text-sm">Clear Ledger: No Activity</p>
                             </div>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Time</TableHead>
-                                        <TableHead>Category</TableHead>
-                                        <TableHead>Description</TableHead>
-                                        <TableHead>Payment</TableHead>
-                                        <TableHead className="text-right">Amount (Rs)</TableHead>
-                                        <TableHead className="w-[100px]"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selectedExpensesList.map((expense) => (
-                                        <TableRow key={expense.id}>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {format(new Date(expense.timestamp), 'p')}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{expense.category}</Badge>
-                                            </TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={expense.description}>
-                                                {expense.description}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="secondary" className="font-bold">{expense.paymentMethod}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right font-bold text-red-600">
-                                                - {expense.amount.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => openEditForm(expense)}>
-                                                        <Edit2 className="h-4 w-4" />
-                                                    </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500">
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Expense?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This action cannot be undone. This will permanently delete the expense record for Rs {expense.amount}.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteExpense(expense.id!)}>Delete</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            </TableCell>
+                            <div className="border rounded-2xl overflow-hidden shadow-sm">
+                                <Table>
+                                    <TableHeader className="bg-slate-50/80">
+                                        <TableRow className="hover:bg-transparent border-none">
+                                            <TableHead className="font-black text-slate-500 text-[10px] uppercase tracking-widest pl-6">Time</TableHead>
+                                            <TableHead className="font-black text-slate-500 text-[10px] uppercase tracking-widest">Classification</TableHead>
+                                            <TableHead className="font-black text-slate-500 text-[10px] uppercase tracking-widest">Operational Detail</TableHead>
+                                            <TableHead className="font-black text-slate-500 text-[10px] uppercase tracking-widest">Channel</TableHead>
+                                            <TableHead className="text-right font-black text-slate-500 text-[10px] uppercase tracking-widest pr-6">Value (Rs)</TableHead>
+                                            <TableHead className="w-[80px]"></TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {selectedExpensesList.map((expense) => (
+                                            <TableRow key={expense.id} className="group transition-colors hover:bg-slate-50/50 border-slate-100">
+                                                <TableCell className="pl-6 text-xs font-bold text-slate-400">
+                                                    {format(new Date(expense.timestamp), 'p')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-none font-bold text-[10px] rounded-lg px-2 shadow-none">
+                                                        {expense.category}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="font-medium text-slate-700 max-w-[300px] truncate">
+                                                    {expense.description}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1.5 font-black text-[11px] text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full w-fit">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                        {expense.paymentMethod}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right pr-6">
+                                                    <span className="font-black text-slate-900">{expense.amount.toLocaleString()}</span>
+                                                </TableCell>
+                                                <TableCell className="pr-4">
+                                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl hover:bg-indigo-50 hover:text-indigo-600" onClick={() => openEditForm(expense)}>
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </Button>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl hover:bg-red-50 hover:text-red-600">
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent className="rounded-3xl border-none">
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle className="text-2xl font-black">Remove entry?</AlertDialogTitle>
+                                                                    <AlertDialogDescription className="font-medium">
+                                                                        You are about to permanently delete this allocation of <span className="text-red-600 font-bold">Rs {expense.amount}</span>. This data cannot be recovered.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter className="p-4 bg-slate-50 rounded-b-3xl">
+                                                                    <AlertDialogCancel className="rounded-xl font-bold">Abort</AlertDialogCancel>
+                                                                    <AlertDialogAction className="rounded-xl bg-red-600 hover:bg-red-700 font-bold" onClick={() => handleDeleteExpense(expense.id!)}>Confirm Deletion</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         )
                     ) : (
                         groupedExpenses.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
-                                <Calendar className="h-12 w-12 opacity-10 mb-2" />
-                                <p className="italic">No expenses recorded for this period.</p>
+                            <div className="flex flex-col items-center justify-center text-slate-300 py-16">
+                                <Calendar className="h-20 w-20 opacity-20 mb-4 animate-pulse" />
+                                <p className="font-bold tracking-widest uppercase text-sm">Zero Activity Spotted</p>
                             </div>
                         ) : (
-                            <div className="space-y-4">
-                                <Accordion type="multiple" className="space-y-3">
+                            <div className="space-y-6">
+                                <Accordion type="multiple" defaultValue={[format(groupedExpenses[0].date, 'yyyy-MM-dd')]} className="space-y-4">
                                     {groupedExpenses.map((group) => {
-                                        const topCat = Object.entries(group.categories).sort((a, b) => b[1] - a[1])[0][0];
+                                        const dateId = format(group.date, 'yyyy-MM-dd');
+                                        const topCats = Object.entries(group.categories).sort((a, b) => b[1] - a[1]).slice(0, 2);
+                                        
                                         return (
                                             <AccordionItem 
-                                                key={format(group.date, 'yyyy-MM-dd')} 
-                                                value={format(group.date, 'yyyy-MM-dd')}
-                                                className="border rounded-lg bg-card overflow-hidden"
+                                                key={dateId} 
+                                                value={dateId}
+                                                className="border-none bg-slate-50 shadow-sm rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-md"
                                             >
-                                                <AccordionTrigger className="px-4 py-4 hover:no-underline bg-muted/20">
-                                                    <div className="flex justify-between items-center w-full pr-4">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="flex flex-col items-start gap-1">
-                                                                <span className="font-bold text-sm">{format(group.date, 'eeee, MMM dd, yyyy')}</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Badge variant="secondary" className="text-[10px]">{group.count} Transactions</Badge>
-                                                                    <Badge variant="outline" className="text-[10px]">{topCat}</Badge>
+                                                <AccordionTrigger className="px-8 py-6 hover:no-underline group/acc">
+                                                    <div className="flex flex-wrap md:flex-nowrap justify-between items-center w-full pr-4 gap-4">
+                                                        <div className="flex items-center gap-6">
+                                                            <div className="text-left">
+                                                                <h4 className="text-lg font-black text-slate-900 group-hover/acc:text-primary transition-colors">
+                                                                    {format(group.date, 'eeee')}
+                                                                </h4>
+                                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">
+                                                                    {format(group.date, 'MMMM dd, yyyy')}
+                                                                </p>
+                                                            </div>
+                                                            <Separator orientation="vertical" className="h-8 hidden md:block" />
+                                                            <div className="hidden md:flex items-center gap-2">
+                                                                <div className="flex flex-col items-start">
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume</span>
+                                                                    <Badge className="bg-white text-slate-600 shadow-sm border-none font-black px-3">{group.count} Items</Badge>
+                                                                </div>
+                                                                <div className="flex flex-col items-start">
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Impact</span>
+                                                                    <div className="flex gap-1">
+                                                                        {topCats.map(([cat]) => (
+                                                                            <Badge key={cat} variant="secondary" className="text-[9px] px-1.5 py-0 font-bold opacity-60">
+                                                                                {cat}
+                                                                            </Badge>
+                                                                        ))}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Total Day Expense</span>
-                                                            <span className="font-black text-red-600">Rs {group.total.toLocaleString()}</span>
+                                                        <div className="text-right bg-white p-3 rounded-2xl shadow-sm border border-slate-100 min-w-[140px]">
+                                                            <span className="text-[9px] uppercase font-black text-slate-400 block tracking-tighter mb-1">Aggregate Expense</span>
+                                                            <span className="text-xl font-black text-red-600 tracking-tight">Rs {group.total.toLocaleString()}</span>
                                                         </div>
                                                     </div>
                                                 </AccordionTrigger>
-                                                <AccordionContent className="p-0">
-                                                    <div className="bg-background">
+                                                <AccordionContent className="px-4 pb-4">
+                                                    <div className="rounded-2xl overflow-hidden border border-slate-200/60 bg-white">
                                                         <Table>
-                                                            <TableHeader className="bg-muted/30">
-                                                                <TableRow>
-                                                                    <TableHead className="text-[10px] font-bold">Time</TableHead>
-                                                                    <TableHead className="text-[10px] font-bold">Category</TableHead>
-                                                                    <TableHead className="text-[10px] font-bold">Detailed Reason/Description</TableHead>
-                                                                    <TableHead className="text-[10px] font-bold">Payment</TableHead>
-                                                                    <TableHead className="text-right text-[10px] font-bold">Amount (Rs)</TableHead>
+                                                            <TableHeader className="bg-slate-50/50">
+                                                                <TableRow className="border-none">
+                                                                    <TableHead className="text-[10px] font-black uppercase text-slate-400 pl-6">Instant</TableHead>
+                                                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Sphere</TableHead>
+                                                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Allocation Narrative</TableHead>
+                                                                    <TableHead className="text-[10px] font-black uppercase text-slate-400">Method</TableHead>
+                                                                    <TableHead className="text-right text-[10px] font-black uppercase text-slate-400 pr-6">Value (Rs)</TableHead>
                                                                 </TableRow>
                                                             </TableHeader>
                                                             <TableBody>
                                                                 {group.items.map((item) => (
-                                                                    <TableRow key={item.id} className="hover:bg-muted/10">
-                                                                        <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                                                    <TableRow key={item.id} className="hover:bg-slate-50/30 border-slate-100 last:border-0">
+                                                                        <TableCell className="text-[11px] font-bold text-slate-400 pl-6">
                                                                             {format(new Date(item.timestamp), 'p')}
                                                                         </TableCell>
                                                                         <TableCell>
-                                                                            <Badge variant="secondary" className="text-[10px] px-1 py-0">{item.category}</Badge>
+                                                                            <Badge className="bg-slate-100 text-slate-600 shadow-none border-none text-[9px] font-black rounded-md px-1.5">
+                                                                                {item.category}
+                                                                            </Badge>
                                                                         </TableCell>
-                                                                        <TableCell className="text-[12px] font-medium italic">
+                                                                        <TableCell className="text-sm font-medium text-slate-700 py-3">
                                                                             {item.description}
                                                                         </TableCell>
-                                                                        <TableCell className="text-[11px] font-semibold text-teal-600">
-                                                                            {item.paymentMethod}
+                                                                        <TableCell>
+                                                                            <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md">
+                                                                                {item.paymentMethod}
+                                                                            </span>
                                                                         </TableCell>
-                                                                        <TableCell className="text-right font-bold text-slate-700">
+                                                                        <TableCell className="text-right font-black text-slate-900 pr-6">
                                                                             {item.amount.toLocaleString()}
                                                                         </TableCell>
                                                                     </TableRow>
                                                                 ))}
                                                             </TableBody>
                                                         </Table>
-                                                        <div className="flex justify-end p-2 bg-muted/5 border-t">
+                                                        <div className="flex justify-between items-center p-4 bg-slate-50/30 border-t border-slate-100">
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase italic">
+                                                                Ledger finalized by {group.items[0].addedBy}
+                                                            </div>
                                                             <Button 
-                                                                variant="link" 
+                                                                variant="outline" 
                                                                 size="sm" 
-                                                                className="text-[10px] h-6"
+                                                                className="rounded-xl h-8 text-xs font-black shadow-none border-slate-200"
                                                                 onClick={() => {
                                                                     setSelectedDate(group.date);
                                                                     setViewMode('day');
                                                                 }}
                                                             >
-                                                                Go to Single Day View for Actions →
+                                                                Manage Transactions <Plus className="ml-1 h-3 w-3" />
                                                             </Button>
                                                         </div>
                                                     </div>
@@ -743,18 +818,21 @@ export default function DailyExpensesPage() {
                                     })}
                                 </Accordion>
 
-                                <Card className="bg-red-50 border-red-100 overflow-hidden">
-                                    <div className="flex justify-between items-center px-6 py-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] uppercase font-black text-red-500 tracking-widest">Selected Period Grand Total</span>
-                                            <span className="text-muted-foreground text-xs">
-                                                Based on {stats.currentCount} total recorded transactions
+                                <Card className="relative overflow-hidden bg-slate-900 rounded-[2rem] border-none shadow-2xl mt-8">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 to-transparent" />
+                                    <div className="flex justify-between items-center px-10 py-8 relative z-10">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] uppercase font-black text-red-500 tracking-[0.3em] block">Consolidated Outflow</span>
+                                            <span className="text-slate-400 text-sm font-medium">
+                                                Based on <span className="text-white font-black">{stats.currentCount}</span> validated transactions in the requested timeline
                                             </span>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-3xl font-black text-red-600">
-                                                Rs {stats.currentTotal.toLocaleString()}
-                                            </span>
+                                        <div className="text-right">
+                                            <div className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Grand Total</div>
+                                            <div className="text-4xl font-black text-white tracking-tighter">
+                                                <span className="text-sm text-red-500 mr-1">Rs</span>
+                                                {stats.currentTotal.toLocaleString()}
+                                            </div>
                                         </div>
                                     </div>
                                 </Card>

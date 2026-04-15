@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import type { DailyReport, User } from '@/lib/types';
+import type { DailyReport, User, DailyTask } from '@/lib/types';
 import { collection, query, orderBy, where } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -21,9 +21,14 @@ export default function EmployeeReportsPage() {
         firestore ? query(collection(firestore, 'dailyReports'), orderBy('reportDate', 'desc')) : null,
         [firestore]
     );
+    const tasksQuery = useMemoFirebase(() => 
+        firestore ? collection(firestore, 'dailyTasks') : null,
+        [firestore]
+    );
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
     const { data: reports, isLoading: reportsLoading } = useCollection<DailyReport>(reportsQuery);
+    const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
 
     const isMainAdmin = currentUser?.email === 'admin1@skinsmith.com' || currentUser?.isMainAdmin;
 
@@ -64,10 +69,10 @@ export default function EmployeeReportsPage() {
         );
     }
 
-    if (usersLoading || reportsLoading) {
+    if (usersLoading || reportsLoading || tasksLoading) {
         return (
             <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin" />
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
     }
@@ -112,7 +117,7 @@ export default function EmployeeReportsPage() {
                                 <TableHead>Date</TableHead>
                                 <TableHead>Summary</TableHead>
                                 <TableHead>Plans for Tomorrow</TableHead>
-                                <TableHead>Tasks Completed</TableHead>
+                                <TableHead>Pending Tasks</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -133,17 +138,30 @@ export default function EmployeeReportsPage() {
                                         <TableCell className="max-w-[200px]">
                                             <p className="text-sm line-clamp-2" title={report.plans}>{report.plans}</p>
                                         </TableCell>
-                                        <TableCell className="max-w-[200px]">
-                                            <p className="text-sm line-clamp-2" title={report.completingTasks || 'None'}>
-                                                {report.completingTasks || '-'}
+                                        <TableCell>
+                                            <p className="text-sm font-bold text-emerald-600 truncate max-w-[200px]" title={report.completingTasks || 'None'}>
+                                                {report.completingTasks || '—'}
                                             </p>
+                                        </TableCell>
+                                        <TableCell>
+                                            {(() => {
+                                                const pendingCount = tasks?.filter(t => t.userId === report.userId && t.status === 'Pending').length || 0;
+                                                return (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={pendingCount > 0 ? "font-black text-rose-600" : "text-slate-400 font-medium"}>
+                                                            {pendingCount} Tasks
+                                                        </span>
+                                                        {pendingCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />}
+                                                    </div>
+                                                );
+                                            })()}
                                         </TableCell>
                                     </TableRow>
                                 );
                             })}
                             {filteredReports.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
                                         No reports found.
                                     </TableCell>
                                 </TableRow>

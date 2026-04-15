@@ -93,7 +93,7 @@ import {
 import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
-import { add, format, startOfDay, isSameMonth, isSameYear, startOfMonth, startOfYear } from 'date-fns';
+import { add, format, startOfDay, endOfDay, isSameMonth, isSameYear, startOfMonth, startOfYear, isWithinInterval } from 'date-fns';
 import { DatePicker } from '@/components/DatePicker';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { DailyTasksWidget } from '@/components/DailyTasksWidget';
@@ -619,7 +619,7 @@ const OrganizationDashboard = () => {
                     <CardContent>
                         <div className="space-y-4">
                             {usersByRole.map((role) => (
-                                <div key={role.name} className="flex items-center gap-4">
+                                <div key={`role-${role.name}`} className="flex items-center gap-4">
                                     <div className="flex-1 space-y-1">
                                         <div className="flex items-center justify-between text-sm font-medium leading-none">
                                             <span>{role.name}</span>
@@ -1336,7 +1336,10 @@ const DoctorDashboard = () => {
 const ReportsDashboard = () => {
     const firestore = useFirestore();
     const { summaryMetrics } = useAnalyticsData();
-    const [selectedRange, setSelectedRange] = React.useState<{ from: Date; to: Date } | undefined>();
+    const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
+        from: startOfMonth(new Date()),
+        to: new Date(),
+    });
 
     const billingRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
     const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
@@ -1346,9 +1349,25 @@ const ReportsDashboard = () => {
     const { data: users } = useCollection<User>(usersRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
 
+    const filteredBilling = React.useMemo(() => {
+        if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
+        return billingRecords.filter(b => {
+            const date = new Date(b.billingDate);
+            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        });
+    }, [billingRecords, selectedRange]);
+
+    const filteredAppointments = React.useMemo(() => {
+        if (!appointments || !selectedRange?.from || !selectedRange?.to) return appointments || [];
+        return appointments.filter(a => {
+            const date = new Date(a.appointmentDateTime);
+            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        });
+    }, [appointments, selectedRange]);
+
     const financialStats = React.useMemo(() => {
-        if (!billingRecords) return { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 };
-        return billingRecords.reduce((acc, curr) => {
+        if (!filteredBilling) return { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 };
+        return filteredBilling.reduce((acc, curr) => {
             const billTotal = curr.grandTotal || curr.totalAmount || ((curr.consultationCharges || 0) + (curr.procedureCharges || 0) + (curr.medicineCharges || 0));
             return {
                 totalRevenue: acc.totalRevenue + billTotal,
@@ -1357,14 +1376,15 @@ const ReportsDashboard = () => {
                 medicines: acc.medicines + (curr.medicineCharges || 0),
             };
         }, { totalRevenue: 0, consultation: 0, procedures: 0, medicines: 0 });
-    }, [billingRecords]);
+    }, [filteredBilling]);
 
     const employeePerformance = React.useMemo(() => {
-        if (!users || !appointments) return [];
+        if (!users || !filteredAppointments) return [];
         return users.map(u => {
-            const userAppointments = appointments.filter(a => a.doctorId === u.id);
+            const userAppointments = filteredAppointments.filter(a => a.doctorId === u.id);
             const completed = userAppointments.filter(a => a.status === 'Completed').length;
             return {
+                id: u.id,
                 name: u.name || u.email?.split('@')[0] || 'Unknown',
                 role: u.role,
                 appointments: userAppointments.length,
@@ -1372,7 +1392,7 @@ const ReportsDashboard = () => {
                 efficiency: userAppointments.length > 0 ? Math.round((completed / userAppointments.length) * 100) : 0
             };
         }).sort((a, b) => b.completed - a.completed);
-    }, [users, appointments]);
+    }, [users, filteredAppointments]);
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
@@ -1381,7 +1401,7 @@ const ReportsDashboard = () => {
                     <h2 className="text-3xl font-bold tracking-tight">Financial & Performance Reports</h2>
                     <p className="text-muted-foreground">Comprehensive overview of clinic health and team productivity.</p>
                 </div>
-                <DatePickerWithRange />
+                <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1392,7 +1412,7 @@ const ReportsDashboard = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">Rs {financialStats.totalRevenue.toLocaleString()}</div>
-                        <p className="text-xs text-emerald-600/80">All-time billing accumulated</p>
+                        <p className="text-xs text-emerald-600/80">Accumulated for selected period</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -1446,7 +1466,7 @@ const ReportsDashboard = () => {
                             </TableHeader>
                             <TableBody>
                                 {employeePerformance.map((emp) => (
-                                    <TableRow key={emp.name}>
+                                    <TableRow key={emp.id}>
                                         <TableCell className="font-medium">{emp.name}</TableCell>
                                         <TableCell><Badge variant="outline">{emp.role}</Badge></TableCell>
                                         <TableCell className="text-center">{emp.appointments}</TableCell>

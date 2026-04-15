@@ -52,7 +52,7 @@ const Breadcrumbs = () => {
         <span className={'text-muted-foreground hover:text-foreground'}>Dashboard</span>
       </Link>
       {segments.map((segment, index) => (
-        <React.Fragment key={segment}>
+        <React.Fragment key={`${segment}-${index}`}>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <Link href={`/${segments.slice(0, index + 1).join('/')}`}>
             <span

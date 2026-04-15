@@ -18,6 +18,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DateRange } from 'react-day-picker';
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  isWithinInterval, 
+  startOfDay, 
+  endOfDay, 
+  eachDayOfInterval,
+  differenceInDays
+} from 'date-fns';
 import {
   File,
   Search,
@@ -60,9 +71,8 @@ import {
   doc,
   setDoc
 } from 'firebase/firestore';
-import type { BillingRecord, Patient, Doctor } from '@/lib/types';
+import type { BillingRecord, Patient, Doctor, Supplier } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { format } from 'date-fns';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import {
   Select,
@@ -88,34 +98,82 @@ import {
 
 export default function FinancialReportPage() {
   const firestore = useFirestore();
+  const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: new Date(),
+  });
+
+  // Operational Data Fetching
   const billingQuery = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
   const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
-  const { data: billingRecords, isLoading: billingLoading } = useCollection<BillingRecord>(billingQuery);
-  const { data: patients, isLoading: patientsLoading } = useCollection<Patient>(patientsQuery);
+  const expensesQuery = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
+  const suppliersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+  const doctorsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+
+  const { data: billingRecords } = useCollection<BillingRecord>(billingQuery);
+  const { data: patients } = useCollection<Patient>(patientsQuery);
+  const { data: allExpenses } = useCollection<any>(expensesQuery);
+  const { data: allSuppliers } = useCollection<Supplier>(suppliersQuery);
+  const { data: allDoctors } = useCollection<Doctor>(doctorsQuery);
+
+  // Derived Financial State
+  const filteredBilling = React.useMemo(() => {
+    if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
+    return billingRecords.filter(b => {
+        const date = new Date(b.billingDate);
+        return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+    });
+  }, [billingRecords, selectedRange]);
+
+  const filteredExpenses = React.useMemo(() => {
+    if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
+    return allExpenses.filter((e: any) => {
+        const date = new Date(e.timestamp);
+        return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+    });
+  }, [allExpenses, selectedRange]);
+
+  const financialKPIs = React.useMemo(() => {
+    const revenue = filteredBilling.reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+    const burn = filteredExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+    const debt = allSuppliers?.reduce((sum, s) => sum + (s.currentBalance || 0), 0) || 0;
+    
+    return {
+        grossRevenue: revenue,
+        operationalBurn: burn,
+        pendingVendorDebt: debt,
+        netPosition: revenue - burn
+    };
+  }, [filteredBilling, filteredExpenses, allSuppliers]);
 
   const transactionData = React.useMemo(() => {
-    if (!billingRecords || !patients) return [];
+    if (!filteredBilling || !patients) return [];
     const patientsMap = new Map(patients.map(p => [p.mobileNumber, p]));
 
-    return billingRecords.map(record => ({
-      invoice: record.id.slice(0, 6).toUpperCase(),
-      mrn: patientsMap.get(record.patientMobileNumber)?.id.slice(0, 8) || 'N/A',
-      patientName: patientsMap.get(record.patientMobileNumber)?.name || 'Unknown',
-      referredBy: '-',
-      description: `Charges: Consult(${record.consultationCharges ?? 0}), Proc(${record.procedureCharges ?? 0}), Med(${record.medicineCharges ?? 0})`,
-      total: (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0),
-      paid: (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0), // Assuming fully paid if recorded
-      discount: 0.0,
-      dues: 0.0,
-      deductionsInsurance: 0.0,
-      taxDeductions: 0.0,
-      insuranceClaims: 0.0,
-      advance: 0.0,
-      paymentMode: record.paymentMethod,
-      doctorRevenue: '-',
-      departmentRevenue: 'OPD',
-      paymentDate: format(new Date(record.billingDate), 'dd/MM/yyyy - hh:mm a')
-    }));
+    return filteredBilling.map(record => {
+      const patient = patientsMap.get(record.patientMobileNumber);
+      const total = (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0);
+      
+      return {
+        invoice: record.id.slice(0, 6).toUpperCase(),
+        mrn: patient?.id?.slice(0, 8) || 'N/A',
+        patientName: patient?.name || 'Unknown',
+        referredBy: '-',
+        description: `Charges: Consult(${record.consultationCharges ?? 0}), Proc(${record.procedureCharges ?? 0}), Med(${record.medicineCharges ?? 0})`,
+        total: total,
+        paid: total, // Assuming fully paid if recorded
+        discount: 0.0,
+        dues: 0.0,
+        deductionsInsurance: 0.0,
+        taxDeductions: 0.0,
+        insuranceClaims: 0.0,
+        advance: 0.0,
+        paymentMode: record.paymentMethod || 'Unknown',
+        doctorRevenue: '-',
+        departmentRevenue: 'OPD',
+        paymentDate: record.billingDate ? format(new Date(record.billingDate), 'dd/MM/yyyy - hh:mm a') : 'N/A'
+      };
+    });
   }, [billingRecords, patients]);
 
   const stats = React.useMemo(() => {
@@ -124,20 +182,48 @@ export default function FinancialReportPage() {
   }, [transactionData]);
 
   const chartData = React.useMemo(() => {
-    if (!transactionData.length) return [];
-    // Group by hour for today/selected range
-    const hours = Array.from({ length: 24 }, (_, i) => ({
-      name: `${i.toString().padStart(2, '0')}:00`,
-      value: 0
-    }));
-
-    transactionData.forEach(t => {
-      // Very basic grouping logic
-      const hour = parseInt(t.paymentDate.split(' - ')[1].split(':')[0]);
-      if (!isNaN(hour)) hours[hour].value += t.total;
-    });
-    return hours.filter(h => h.value > 0);
-  }, [transactionData]);
+    if (!selectedRange?.from || !selectedRange?.to) return [];
+    
+    const daysDiff = differenceInDays(selectedRange.to, selectedRange.from);
+    
+    if (daysDiff > 1) {
+      // Group by Day
+      const days = eachDayOfInterval({ start: selectedRange.from, end: selectedRange.to });
+      return days.map(day => {
+        const dayStart = startOfDay(day);
+        const dayEnd = endOfDay(day);
+        
+        const rev = filteredBilling.filter(b => isWithinInterval(new Date(b.billingDate), { start: dayStart, end: dayEnd }))
+          .reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+          
+        const burn = filteredExpenses.filter((e: any) => isWithinInterval(new Date(e.timestamp), { start: dayStart, end: dayEnd }))
+          .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+          
+        return {
+          name: format(day, 'MMM dd'),
+          revenue: rev,
+          burn: burn
+        };
+      });
+    } else {
+      // Group by Hour for a single day
+      const hours = Array.from({ length: 24 }, (_, i) => {
+        const hour = i;
+        const rev = filteredBilling.filter(b => new Date(b.billingDate).getHours() === hour)
+          .reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+          
+        const burn = filteredExpenses.filter((e: any) => new Date(e.timestamp).getHours() === hour)
+          .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+          
+        return {
+          name: `${hour.toString().padStart(2, '0')}:00`,
+          revenue: rev,
+          burn: burn
+        };
+      });
+      return hours.filter(h => h.revenue > 0 || h.burn > 0);
+    }
+  }, [filteredBilling, filteredExpenses, selectedRange]);
 
   const pieData = React.useMemo(() => {
     const modes: Record<string, number> = {};
@@ -162,1209 +248,350 @@ export default function FinancialReportPage() {
     { item: 'Net Income', value: stats.totalRevenue }
   ];
   const tabs = [
-    { value: 'transaction', label: 'Transaction', icon: ArrowRightLeft },
-    { value: 'summary', label: 'Summary', icon: FileBarChart },
-    { value: 'shift', label: 'Shift', icon: Hourglass },
-    { value: 'staff', label: 'Staff', icon: Users2 },
-    { value: 'payment-mode', label: 'Payment Mode', icon: CreditCard },
-    { value: 'procedures', label: 'Procedures', icon: Scissors },
-    { value: 'income-statement', label: 'Income Statement', icon: FileText },
-    { value: 'doctors-share', label: 'Doctors Share', icon: HandCoins },
-    { value: 'pending-payments', label: 'Pending Payments', icon: Hourglass },
-    { value: 'advance-payments', label: 'Advance Payments', icon: HandCoins },
-    { value: 'deleted-invoices', label: 'Deleted Invoices', icon: Trash2 },
-    { value: 'refund-report', label: 'Refund Report', icon: FileQuestion },
-    { value: 'statistics', label: 'Statistics', icon: BarChart3 },
-    { value: 'discounts', label: 'Discounts', icon: Percent },
-    { value: 'profit-loss', label: 'Profit/Loss Details', icon: TrendingUp },
-    { value: 'cost-per-patient', label: 'Cost Per Patient', icon: User },
+    { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
+    { value: 'expenses', label: 'Operational BURN', icon: Receipt },
+    { value: 'vendors', label: 'Vendor Accounts', icon: Boxes },
+    { value: 'shares', label: 'Doctor Dividends', icon: HandCoins },
+    { value: 'analytics', label: 'Strategic P&L', icon: FileBarChart },
   ];
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Financial Report</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="transaction" className="w-full">
-            <div className="overflow-x-auto">
-              <TabsList className="h-auto whitespace-nowrap">
-                {tabs.map((tab) => (
-                  <TabsTrigger key={tab.value} value={tab.value}>
-                    <tab.icon className="mr-2 h-4 w-4" />
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+        <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
+            {/* Executive Finance Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-2">
+                <div className="space-y-1">
+                    <h1 className="text-5xl font-black tracking-tighter text-slate-900 flex items-center gap-4">
+                        <span className="bg-indigo-600 text-white p-3 rounded-2xl shadow-xl shadow-indigo-100"><TrendingUp className="h-8 w-8" /></span>
+                        Financial <span className="text-indigo-600">Hub</span>
+                    </h1>
+                    <p className="text-slate-500 font-bold ml-1 text-sm uppercase tracking-widest opacity-60">Unified Operational Intelligence</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
+                    <Button variant="outline" className="rounded-2xl border-slate-200 h-14 px-8 font-black hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                        <Download className="mr-2 h-5 w-5" /> Export
+                    </Button>
+                    <Button className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 h-14 px-8 font-black shadow-2xl shadow-indigo-200 transition-all active:scale-95">
+                        <Printer className="mr-2 h-5 w-5" /> Print Board
+                    </Button>
+                </div>
             </div>
-            <TabsContent value="transaction" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="cost-per-patient" />
-                  <Label htmlFor="cost-per-patient">Cost Per Patient</Label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Department" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Payment Mode" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <DatePickerWithRange />
-                  <Input placeholder="Search by Invoice#" />
 
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Doctor" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Tags" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Procedure" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Refer By" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-
-                  <Input placeholder="Search By Patient MR#" />
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Doctor Share Filter" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Input placeholder="Lower Invoice# Range" />
-                    <Input placeholder="Upper Invoice# Range" />
-                  </div>
-                  <Button>Search</Button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Cash</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Advance</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Refund</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardContent className="pt-6 h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>REFERRED BY</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DISCOUNT</TableHead>
-                      <TableHead>DUES</TableHead>
-                      <TableHead>DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                      <TableHead>TAX DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                      <TableHead>INSURANCE CLAIMS</TableHead>
-                      <TableHead>ADVANCE</TableHead>
-                      <TableHead>MODE OF PAYMENT</TableHead>
-                      <TableHead>DOCTOR REVENUE</TableHead>
-                      <TableHead>DEPARTMENT REVENUE</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.referredBy}</TableCell>
-                        <TableCell>{t.description}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell>{t.discount.toFixed(2)}</TableCell>
-                        <TableCell>{t.dues.toFixed(2)}</TableCell>
-                        <TableCell>{t.deductionsInsurance.toFixed(2)}</TableCell>
-                        <TableCell>{t.taxDeductions.toFixed(2)}</TableCell>
-                        <TableCell>{t.insuranceClaims.toFixed(2)}</TableCell>
-                        <TableCell>{t.advance.toFixed(2)}</TableCell>
-                        <TableCell>{t.paymentMode}</TableCell>
-                        <TableCell>{t.doctorRevenue}</TableCell>
-                        <TableCell>{t.departmentRevenue}</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><Eye className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><Printer className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><Receipt className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><MessageSquare className="h-4 w-4" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="summary" className="pt-4">
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                  <Select><SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger></Select>
-                  <Select><SelectTrigger><SelectValue placeholder="Select Group" /></SelectTrigger></Select>
-                  <Select><SelectTrigger><SelectValue placeholder="Select Payment Mode" /></SelectTrigger></Select>
-                  <DatePickerWithRange />
-                  <Button>Search</Button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Expense</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Net Profit/Loss</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>DEPARTMENT</TableHead>
-                      <TableHead>REVENUE</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>OPD</TableCell>
-                      <TableCell>{stats.totalRevenue.toLocaleString()}</TableCell>
-                    </TableRow>
-                    <TableRow className="font-bold bg-muted/50">
-                      <TableCell>Grand Total</TableCell>
-                      <TableCell>{stats.totalRevenue.toLocaleString()}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="shift" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="shift-cost-per-patient" />
-                  <Label htmlFor="shift-cost-per-patient">Cost Per Patient</Label>
-                </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <p className="text-sm text-red-600">* Please Enable Shifts from Admin Settings To Show the Shift Collections</p>
-                  <Select>
-                    <SelectTrigger className="w-[280px]">
-                      <SelectValue placeholder="Morning (12am - 12am)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="morning">Morning (12am - 12am)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <DatePickerWithRange />
-                  <div className="flex gap-2 ml-auto">
-                    <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                  </div>
-                </div>
-                <Card className="w-full max-w-xs">
-                  <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                </Card>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DISCOUNT</TableHead>
-                      <TableHead>DUES</TableHead>
-                      <TableHead>DOCTOR REVENUE</TableHead>
-                      <TableHead>DEPARTMENT REVENUE</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {shiftTransactionData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.description}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell>{t.discount.toFixed(2)}</TableCell>
-                        <TableCell>{t.dues.toFixed(2)}</TableCell>
-                        <TableCell>{t.doctorRevenue}</TableCell>
-                        <TableCell>{t.departmentRevenue}</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"><Printer className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="staff" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="staff-cost-per-patient" />
-                  <Label htmlFor="staff-cost-per-patient">Cost Per Patient</Label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Muhammad Umar" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <DatePickerWithRange />
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Shift" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Department" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Doctor" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Collection By Cash</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Collection By Other Methods</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button>Collect All</Button>
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DUES</TableHead>
-                      <TableHead>DISCOUNT</TableHead>
-                      <TableHead>DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                      <TableHead>TAX DEDUCTIONS AGAINST INSURANCE CLAIMS</TableHead>
-                      <TableHead>INSURANCE CLAIMS</TableHead>
-                      <TableHead>ADVANCE</TableHead>
-                      <TableHead>DOCTOR REVENUE</TableHead>
-                      <TableHead>USER INCOME TAX</TableHead>
-                      <TableHead>EXPENSES</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {staffTransactionData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.description}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell>{t.dues.toFixed(2)}</TableCell>
-                        <TableCell>{t.discount.toFixed(2)}</TableCell>
-                        <TableCell>{t.deductionsInsurance.toFixed(2)}</TableCell>
-                        <TableCell>{t.taxDeductions.toFixed(2)}</TableCell>
-                        <TableCell>{t.insuranceClaims.toFixed(2)}</TableCell>
-                        <TableCell>{t.advance.toFixed(2)}</TableCell>
-                        <TableCell>{t.doctorRevenue}</TableCell>
-                        <TableCell>0.00</TableCell>
-                        <TableCell>0.00</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"><Printer className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="font-bold bg-muted/50">
-                      <TableCell colSpan={4}>Grand Total</TableCell>
-                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.total, 0).toFixed(2)}</TableCell>
-                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.paid, 0).toFixed(2)}</TableCell>
-                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.dues, 0).toFixed(2)}</TableCell>
-                      <TableCell>{staffTransactionData.reduce((s, t) => s + t.discount, 0).toFixed(2)}</TableCell>
-                      <TableCell>0.00</TableCell>
-                      <TableCell>0.00</TableCell>
-                      <TableCell>0.00</TableCell>
-                      <TableCell>0.00</TableCell>
-                      <TableCell colSpan={5}></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="payment-mode" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="payment-cost-per-patient" />
-                    <Label htmlFor="payment-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Payment Mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                      <SelectItem value="upi">UPI</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <DatePickerWithRange />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                  <Card className="md:col-span-1">
-                    <CardHeader><CardTitle className="text-base">Totals</CardTitle></CardHeader>
-                    <CardContent><p className="text-3xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card className="md:col-span-2">
-                    <CardHeader>
-                      <CardTitle className="text-base">Payment Mode</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            outerRadius={80}
-                            fill="#8884d8"
-                            dataKey="value"
-                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                          >
-                            {pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend iconType="circle" />
-                        </PieChart>
-                      </ResponsiveContainer>
+            {/* KPI Cards Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200"><TrendingUp className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Gross Revenue</span>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-4xl font-black text-emerald-900 tracking-tighter">Rs {financialKPIs.grossRevenue.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-emerald-600/80">Total Inflow • {filteredBilling.length} Invoices</p>
+                        </div>
                     </CardContent>
-                  </Card>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DUES</TableHead>
-                      <TableHead>MODE OF PAYMENT</TableHead>
-                      <TableHead>DEPARTMENT REVENUE</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paymentModeData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.description}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell>{t.dues.toFixed(2)}</TableCell>
-                        <TableCell>{t.paymentMode}</TableCell>
-                        <TableCell>{t.departmentRevenue}</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"><Printer className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="procedures" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="procedures-cost-per-patient" />
-                    <Label htmlFor="procedures-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Laser" />
-                    </SelectTrigger>
-                  </Select>
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Department" />
-                    </SelectTrigger>
-                  </Select>
-                  <DatePickerWithRange />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Revenue</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()}</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Refund Amount</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                  <Button variant="outline"><Sparkles className="mr-2 h-4 w-4" /> Customize</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>QTY</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>PROCEDURES</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {proceduresData.map((p, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{p.invoice}</TableCell>
-                        <TableCell>{p.mrn}</TableCell>
-                        <TableCell>{p.patientName}</TableCell>
-                        <TableCell>{p.description}</TableCell>
-                        <TableCell>1</TableCell>
-                        <TableCell>{p.total.toFixed(2)}</TableCell>
-                        <TableCell>{p.paid.toFixed(2)}</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>{p.paymentDate}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"><Printer className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-              </div>
-            </TabsContent>
-            <TabsContent value="income-statement" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="income-cost-per-patient" />
-                    <Label htmlFor="income-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Shift" />
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                  <DatePickerWithRange />
-                  <div className="flex gap-2 ml-auto">
-                    <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                    <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                  </div>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INCOME STATEMENT</TableHead>
-                      <TableHead className="text-right">VALUE</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {incomeStatementData.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.item}</TableCell>
-                        <TableCell className="text-right">{item.value.toFixed(1)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="doctors-share" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="doctors-share-cost-per-patient" />
-                  <Label htmlFor="doctors-share-cost-per-patient">Cost Per Patient</Label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Dr. Mahvish aftab Khan" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Department" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Procedure" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                  <DatePickerWithRange />
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Type" />
-                    </SelectTrigger>
-                    <SelectContent></SelectContent>
-                  </Select>
-                </div>
-
-                <Card className="w-full max-w-xs">
-                  <CardHeader><CardTitle className="text-sm font-medium">Doctor's Revenue</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">400.0</p></CardContent>
                 </Card>
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>EXPENSES</TableHead>
-                      <TableHead>DOCTOR REVENUE</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {doctorsShareData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.description}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell>0.00</TableCell>
-                        <TableCell>{t.doctorRevenue}</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"><Lock className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="pending-payments" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Department" />
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Doctor" />
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                  <DatePickerWithRange />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Dues</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">1,000.00</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Pending Invoices</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">1</p></CardContent>
-                  </Card>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DUES</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingPaymentsData.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{t.invoice}</TableCell>
-                        <TableCell>{t.mrn}</TableCell>
-                        <TableCell>{t.patientName}</TableCell>
-                        <TableCell>{t.total.toFixed(2)}</TableCell>
-                        <TableCell>{t.paid.toFixed(2)}</TableCell>
-                        <TableCell className="text-destructive font-semibold">{t.dues.toFixed(2)}</TableCell>
-                        <TableCell>{t.paymentDate}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="advance-payments" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="advance-cost-per-patient" />
-                    <Label htmlFor="advance-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <DatePickerWithRange />
-                  <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Cash" /></SelectTrigger></Select>
-                  <Select><SelectTrigger className="w-[180px]"><SelectValue placeholder="Select Department" /></SelectTrigger></Select>
-                  <Input placeholder="Search By Invoice" />
-                  <Input placeholder="Search By Name, MR# or Phone" />
-                </div>
-                <Card className="w-full max-w-xs">
-                  <CardHeader><CardTitle className="text-sm font-medium">Total Advance</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">-0.0</p></CardContent>
-                </Card>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>ADVANCE</TableHead>
-                      <TableHead>ADDED BY</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-48 text-center">
-                        <ClipboardList className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-4 text-muted-foreground">There are no records to show.</p>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="deleted-invoices" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="deleted-cost-per-patient" />
-                    <Label htmlFor="deleted-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <DatePickerWithRange />
-                    <div className="flex gap-2 ml-auto">
-                      <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                      <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                    </div>
-                  </div>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>INVOICE #</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>AMOUNT</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>CREATED AT</TableHead>
-                      <TableHead>DELETED BY</TableHead>
-                      <TableHead>DELETED AT</TableHead>
-                      <TableHead>PATIENT TYPE</TableHead>
-                      <TableHead>RESTORE</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={10} className="h-96 text-center">
-                        <ClipboardList className="mx-auto h-16 w-16 text-muted-foreground" />
-                        <p className="mt-4 text-lg font-medium text-muted-foreground">There are no records to show.</p>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="refund-report" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="refund-cost-per-patient" />
-                    <Label htmlFor="refund-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <DatePickerWithRange />
-                  <Input placeholder="Search by Patient MRN" />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>REFUND</TableHead>
-                      <TableHead>REASON FOR REFUND</TableHead>
-                      <TableHead>REFUNDED BY</TableHead>
-                      <TableHead>PAYMENT DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={10} className="h-96 text-center">
-                        <ClipboardList className="mx-auto h-16 w-16 text-muted-foreground" />
-                        <p className="mt-4 text-lg font-medium text-muted-foreground">There are no records to show.</p>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="statistics" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="statistics-cost-per-patient" />
-                    <Label htmlFor="statistics-cost-per-patient">Cost Per Patient</Label>
-                  </div>
-                  <DatePickerWithRange />
-                </div>
-                <Card>
-                  <CardContent className="pt-6 h-96 flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={[{ name: 'Paid invoices', value: 100 }]}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                          outerRadius={100}
-                          innerRadius={60}
-                          dataKey="value"
-                        >
-                          <Cell fill="hsl(var(--primary))" />
-                        </Pie>
-                        <Tooltip />
-                        <Legend iconType="circle" />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-            <TabsContent value="discounts" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="discounts-cost-per-patient" />
-                  <Label htmlFor="discounts-cost-per-patient">Cost Per Patient</Label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  <Select><SelectTrigger><SelectValue placeholder="Select Procedure" /></SelectTrigger><SelectContent /></Select>
-                  <Select><SelectTrigger><SelectValue placeholder="Select User" /></SelectTrigger><SelectContent /></Select>
-                  <Select><SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger><SelectContent /></Select>
-                  <DatePickerWithRange />
-                  <Input placeholder="Search By Patient MR#" />
-                </div>
-
-                <Card className="w-full max-w-xs">
-                  <CardHeader><CardTitle className="text-sm font-medium">Total Discount</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">1,000.0</p></CardContent>
-                </Card>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>DESCRIPTION</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID</TableHead>
-                      <TableHead>DISCOUNT</TableHead>
-                      <TableHead>ADDED BY</TableHead>
-                      <TableHead>INVOICE DATE</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {discountsData.map((d, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{d.invoice}</TableCell>
-                        <TableCell>{d.mrn}</TableCell>
-                        <TableCell>{d.patientName}</TableCell>
-                        <TableCell>{d.description}</TableCell>
-                        <TableCell>{d.total.toFixed(2)}</TableCell>
-                        <TableCell>{d.paid.toFixed(2)}</TableCell>
-                        <TableCell>{d.discount.toFixed(2)}</TableCell>
-                        <TableCell>{d.addedBy}</TableCell>
-                        <TableCell>{d.invoiceDate}</TableCell>
-                        <TableCell><Button variant="ghost" size="icon" className="h-6 w-6"><Lock className="h-4 w-4" /></Button></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-            <TabsContent value="profit-loss" className="pt-4">
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-4">
-                  <DatePickerWithRange />
-                  <Select>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select Created By" />
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="profit-loss-summary" />
-                    <Label htmlFor="profit-loss-summary">Profit & Loss Summary</Label>
-                  </div>
-                  <div className="flex gap-2 ml-auto">
-                    <Button variant="outline">
-                      <Download className="mr-2 h-4 w-4" /> Excel
-                    </Button>
-                    <Button variant="outline">
-                      <Printer className="mr-2 h-4 w-4" /> Print
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">37,000.0</p>
+                <Card className="border-none bg-rose-50/50 shadow-xl shadow-rose-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-lg shadow-rose-200"><Receipt className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Operational Burn</span>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-4xl font-black text-rose-900 tracking-tighter">Rs {financialKPIs.operationalBurn.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-rose-600/80">Direct Expenses • {filteredExpenses.length} Records</p>
+                        </div>
                     </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm font-medium">Total Expense</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">590.0</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm font-medium">Net Profit/Loss</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">36,410.0</p>
-                    </CardContent>
-                  </Card>
-                </div>
+                </Card>
 
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Revenue</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>INVOICE#</TableHead>
-                        <TableHead>MR#</TableHead>
-                        <TableHead>PATIENT NAME</TableHead>
-                        <TableHead>REFERRED BY</TableHead>
-                        <TableHead>DESCRIPTION</TableHead>
-                        <TableHead>TOTAL</TableHead>
-                        <TableHead>PAID</TableHead>
-                        <TableHead>DISCOUNT</TableHead>
-                        <TableHead>DUES</TableHead>
-                        <TableHead>DEDUCTIONS</TableHead>
-                        <TableHead>TAX DEDUCTIONS</TableHead>
-                        <TableHead>INSURANCE CLAIMS</TableHead>
-                        <TableHead>ADVANCE</TableHead>
-                        <TableHead>MODE OF PAYMENT</TableHead>
-                        <TableHead>DOCTOR REVENUE</TableHead>
-                        <TableHead>USER INCOME TAX</TableHead>
-                        <TableHead>PAYMENT DATE</TableHead>
-                        <TableHead>ACTION</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {staffTransactionData.map((t, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{t.invoice}</TableCell>
-                          <TableCell>{t.mrn}</TableCell>
-                          <TableCell>{t.patientName}</TableCell>
-                          <TableCell>-</TableCell>
-                          <TableCell>{t.description}</TableCell>
-                          <TableCell>{t.total.toFixed(2)}</TableCell>
-                          <TableCell>{t.paid.toFixed(2)}</TableCell>
-                          <TableCell>{t.discount.toFixed(2)}</TableCell>
-                          <TableCell>{t.dues.toFixed(2)}</TableCell>
-                          <TableCell>{t.deductionsInsurance.toFixed(2)}</TableCell>
-                          <TableCell>{t.taxDeductions.toFixed(2)}</TableCell>
-                          <TableCell>{t.insuranceClaims.toFixed(2)}</TableCell>
-                          <TableCell>{t.advance.toFixed(2)}</TableCell>
-                          <TableCell>Cash</TableCell>
-                          <TableCell>{t.doctorRevenue}</TableCell>
-                          <TableCell>0.00</TableCell>
-                          <TableCell>{t.paymentDate}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-6 w-6"><Eye className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6"><Lock className="h-4 w-4" /></Button>
+                <Card className="border-none bg-indigo-600 shadow-[0_20px_50px_rgba(79,70,229,0.3)] rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8 text-white">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl"><Sparkles className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-100/60 leading-none">Net Position</span>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-4xl font-black tracking-tighter">Rs {financialKPIs.netPosition.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-indigo-100/80">Actual Profitability</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-none bg-slate-900 shadow-xl shadow-slate-200 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all">
+                    <CardContent className="p-8 text-white">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-slate-800 rounded-2xl"><Boxes className="h-6 w-6" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Vendor Debt</span>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-4xl font-black tracking-tighter">Rs {financialKPIs.pendingVendorDebt.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-slate-400">Locked Liabilities</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card className="border-none bg-white/40 backdrop-blur-3xl shadow-2xl shadow-slate-200/50 rounded-[3rem] overflow-hidden ring-1 ring-white/20">
+                <CardContent className="p-10">
+                    <Tabs defaultValue="revenue" className="w-full">
+                        <div className="flex items-center justify-between mb-8">
+                            <TabsList className="bg-slate-100/80 p-1.5 rounded-3xl h-auto border border-slate-200/80 shadow-inner">
+                                {tabs.map((tab) => (
+                                    <TabsTrigger 
+                                        key={tab.value} 
+                                        value={tab.value}
+                                        className="rounded-2xl px-8 py-3.5 font-black text-sm data-[state=active]:bg-white data-[state=active]:shadow-xl data-[state=active]:text-indigo-600 transition-all tracking-tight uppercase"
+                                    >
+                                        <tab.icon className="mr-2.5 h-4 w-4" />
+                                        {tab.label}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </div>
+
+                        <TabsContent value="revenue" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+                                <div className="lg:col-span-3">
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                        <Input placeholder="Search Invoices, Patients, or Doctors..." className="pl-12 h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-indigo-500" />
+                                    </div>
+                                </div>
+                                <Select>
+                                    <SelectTrigger className="h-14 rounded-2xl font-bold bg-white border-slate-200">
+                                        <SelectValue placeholder="All Departments" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="opd">OPD</SelectItem>
+                                        <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                                        <SelectItem value="lab">Laboratory</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
 
-                <div>
-                  <h3 className="text-lg font-semibold mt-6 mb-2">Expenses</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>VOUCHER#</TableHead>
-                        <TableHead>EMPLOYEE</TableHead>
-                        <TableHead>DESCRIPTION</TableHead>
-                        <TableHead>DATE</TableHead>
-                        <TableHead>CATEGORY</TableHead>
-                        <TableHead>AMOUNT</TableHead>
-                        <TableHead>PAYMENT MODE</TableHead>
-                        <TableHead>CREATED AT</TableHead>
-                        <TableHead>ACTION</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {vouchersData.map((v, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{v.voucher}</TableCell>
-                          <TableCell>{v.employee}</TableCell>
-                          <TableCell>{v.description}</TableCell>
-                          <TableCell>{v.date}</TableCell>
-                          <TableCell>{v.category}</TableCell>
-                          <TableCell>{v.amount.toFixed(2)}</TableCell>
-                          <TableCell>{v.paymentMode}</TableCell>
-                          <TableCell>{v.createdAt}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-6 w-6"><Eye className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6"><Lock className="h-4 w-4" /></Button>
+                            <div className="rounded-3xl border border-slate-100 overflow-hidden bg-white/50 shadow-sm">
+                                <Table>
+                                    <TableHeader className="bg-slate-50/50">
+                                        <TableRow className="border-slate-100 font-bold">
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Invoice#</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Patient Identity</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Clinical Context</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14 text-right">Revenue</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Status</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14 text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {transactionData.map((t, i) => (
+                                            <TableRow key={i} className="group border-slate-50 hover:bg-slate-50/80 transition-colors">
+                                                <TableCell className="font-black text-indigo-600 h-16">{t.invoice}</TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-0.5">
+                                                        <p className="font-bold text-slate-900">{t.patientName}</p>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ID: {t.mrn}</p>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-0.5">
+                                                        <p className="font-semibold text-slate-700 text-sm line-clamp-1">{t.description}</p>
+                                                        <p className="text-[10px] font-black text-indigo-600/60 uppercase tracking-tighter">{t.paymentMode} • {t.departmentRevenue}</p>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-black text-slate-900">
+                                                    Rs {t.total.toLocaleString()}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase">Collected</span>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-indigo-50 hover:text-indigo-600"><Eye className="h-4 w-4" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-indigo-50 hover:text-indigo-600"><Printer className="h-4 w-4" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-rose-50 hover:text-rose-600 text-slate-400"><Trash2 className="h-4 w-4" /></Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            </TabsContent>
-            <TabsContent value="cost-per-patient" className="pt-4">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <DatePickerWithRange />
-                  <Input placeholder="Search By Patient Wise" className="w-full sm:w-64" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Paid Amount</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Expenses</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Dues</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Total Advance</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm font-medium">Profit/Loss</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">0.0</p></CardContent>
-                  </Card>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Excel</Button>
-                  <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print</Button>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>SR#</TableHead>
-                      <TableHead>INVOICE#</TableHead>
-                      <TableHead>MR#</TableHead>
-                      <TableHead>PATIENT NAME</TableHead>
-                      <TableHead>TOTAL</TableHead>
-                      <TableHead>PAID AMOUNT</TableHead>
-                      <TableHead>ACTION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-48 text-center">
-                        <ClipboardList className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="mt-4 text-muted-foreground">There are no records to show.</p>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-      <div className="fixed bottom-8 right-8 flex flex-col gap-2">
-        <Button size="icon" className="rounded-full h-12 w-12">
-          <FileText className="h-6 w-6" />
-        </Button>
-        <Button size="icon" className="rounded-full h-12 w-12">
-          <Pencil className="h-6 w-6" />
-        </Button>
-        <Button size="icon" className="rounded-full h-12 w-12">
-          <Eye className="h-6 w-6" />
-        </Button>
-      </div>
-    </div>
-  );
+                        </TabsContent>
+
+                        <TabsContent value="expenses" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+                                <div className="lg:col-span-3">
+                                    <h3 className="text-xl font-black text-slate-900">Daily Burn Log</h3>
+                                    <p className="text-sm text-slate-500 font-medium">Tracking operational outflows and clinic maintenance.</p>
+                                </div>
+                                <Button className="h-14 rounded-2xl font-black bg-rose-600 hover:bg-rose-700 shadow-xl shadow-rose-100">
+                                    <Receipt className="mr-2 h-5 w-5" /> Log New Expense
+                                </Button>
+                            </div>
+                            <div className="rounded-3xl border border-slate-100 overflow-hidden bg-white/50">
+                                <Table>
+                                    <TableHeader className="bg-slate-50/50 text-right">
+                                        <TableRow className="border-slate-100 font-bold">
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Category</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14">Description</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14 text-right">Amount</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest h-14 text-right">Log Date</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredExpenses.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="h-48 text-center">
+                                                    <div className="flex flex-col items-center gap-2 opacity-20">
+                                                        <Receipt className="h-12 w-12" />
+                                                        <p className="font-black uppercase tracking-widest text-xs">No expenses logged in this range</p>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredExpenses.map((exp: any, i: number) => (
+                                            <TableRow key={i} className="border-slate-50 h-16">
+                                                <TableCell>
+                                                    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black uppercase">{exp.category || 'General'}</span>
+                                                </TableCell>
+                                                <TableCell className="font-bold text-slate-700">{exp.description}</TableCell>
+                                                <TableCell className="text-right font-black text-rose-600">Rs {exp.amount.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right font-bold text-slate-400 text-xs">{format(new Date(exp.timestamp), 'dd MMM yyyy')}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="vendors" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {allSuppliers?.map((supplier, i) => (
+                                        <Card key={i} className="border-none bg-slate-50 shadow-sm rounded-3xl group hover:shadow-md transition-all">
+                                            <CardContent className="p-6">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="space-y-1">
+                                                        <h4 className="text-lg font-black text-slate-900">{supplier.name}</h4>
+                                                        <p className="text-xs font-bold text-slate-500 tracking-wider uppercase">{supplier.type || 'Distributor'}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Balance Due</p>
+                                                        <p className="text-2xl font-black text-indigo-600">Rs {supplier.currentBalance?.toLocaleString() || 0}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-6 flex items-center gap-3">
+                                                    <Button variant="outline" className="flex-1 h-12 rounded-xl font-black text-sm hover:bg-white border-slate-200">View Ledger</Button>
+                                                    <Button className="flex-1 h-12 rounded-xl font-black text-sm bg-slate-900 hover:bg-black">Process Payment</Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="shares" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
+                             <div className="rounded-3xl border border-slate-100 overflow-hidden bg-white/50">
+                                <Table>
+                                    <TableHeader className="bg-slate-50/50">
+                                        <TableRow className="border-slate-100 h-14">
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Clinical Authority</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Total Revenue Generated</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Computed Share</TableHead>
+                                            <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Status</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {allDoctors?.map((doctor, i) => {
+                                            const doctorRevenue = transactionData.filter(t => t.description.toLowerCase().includes(doctor.name.toLowerCase())).reduce((sum, t) => sum + t.total, 0);
+                                            return (
+                                                <TableRow key={i} className="border-slate-50 h-16">
+                                                    <TableCell className="font-black text-slate-900">{doctor.name}</TableCell>
+                                                    <TableCell className="text-right font-bold text-slate-600">Rs {doctorRevenue.toLocaleString()}</TableCell>
+                                                    <TableCell className="text-right font-black text-indigo-600">Rs {(doctorRevenue * 0.4).toLocaleString()}</TableCell> {/* Mock 40% share */}
+                                                    <TableCell className="text-right">
+                                                        <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-black uppercase">Unsettled</span>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                             </div>
+                        </TabsContent>
+
+                        <TabsContent value="analytics" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
+                             <Card className="border-none shadow-none bg-slate-50/50 rounded-3xl p-8">
+                                <div className="flex items-center justify-between mb-10">
+                                    <div>
+                                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Financial Momentum</h3>
+                                        <p className="text-sm font-bold text-slate-500">Cross-period revenue vs expense performance.</p>
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-3 w-3 rounded-full bg-indigo-600" />
+                                            <span className="text-xs font-black uppercase text-slate-600">Revenue</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-3 w-3 rounded-full bg-rose-500" />
+                                            <span className="text-xs font-black uppercase text-slate-600">Burn</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="h-[400px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis 
+                                                dataKey="name" 
+                                                stroke="#94a3b8" 
+                                                fontSize={10} 
+                                                tickLine={false} 
+                                                axisLine={false} 
+                                                fontWeight="bold"
+                                            />
+                                            <YAxis 
+                                                stroke="#94a3b8" 
+                                                fontSize={10} 
+                                                tickLine={false} 
+                                                axisLine={false} 
+                                                fontWeight="bold"
+                                                tickFormatter={(v) => `Rs ${v/1000}k`}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="revenue" 
+                                                stroke="#4f46e5" 
+                                                strokeWidth={4} 
+                                                dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} 
+                                                activeDot={{ r: 8, strokeWidth: 0 }}
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="burn" 
+                                                stroke="#f43f5e" 
+                                                strokeWidth={4} 
+                                                strokeDasharray="8 8"
+                                                dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} 
+                                                activeDot={{ r: 8, strokeWidth: 0 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                             </Card>
+                        </TabsContent>
+                    </Tabs>
+                </CardContent>
+            </Card>
+        </div>
+    );
 }
+                        </Tabs>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
