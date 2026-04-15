@@ -68,8 +68,26 @@ import {
     Trash2,
     Edit2
 } from 'lucide-react';
-import { format, isToday, isThisMonth, isSameDay } from 'date-fns';
+import { 
+    format, 
+    isToday, 
+    isThisMonth, 
+    isSameDay, 
+    startOfWeek, 
+    endOfWeek, 
+    startOfMonth, 
+    endOfMonth, 
+    isWithinInterval,
+    eachDayOfInterval
+} from 'date-fns';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DatePicker } from '@/components/DatePicker';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
     PieChart as RechartsPieChart,
     Pie,
@@ -123,6 +141,7 @@ export default function DailyExpensesPage() {
     const [description, setDescription] = React.useState<string>('');
     const [paymentMethod, setPaymentMethod] = React.useState<string>('Cash');
     const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
+    const [viewMode, setViewMode] = React.useState<'day' | 'week' | 'month' | 'history'>('day');
 
     const expensesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -131,13 +150,53 @@ export default function DailyExpensesPage() {
 
     const { data: allExpenses, isLoading } = useCollection<Expense>(expensesQuery);
 
-    const selectedExpensesList = React.useMemo(() => 
-        allExpenses?.filter(e => isSameDay(new Date(e.timestamp), selectedDate)) || []
-    , [allExpenses, selectedDate]);
+    const dateRange = React.useMemo(() => {
+        if (viewMode === 'day') return { start: selectedDate, end: selectedDate };
+        if (viewMode === 'week') return { start: startOfWeek(selectedDate), end: endOfWeek(selectedDate) };
+        if (viewMode === 'month') return { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) };
+        if (viewMode === 'history') return { start: new Date(0), end: new Date() }; // Beginning of time to now
+        return { start: selectedDate, end: selectedDate };
+    }, [selectedDate, viewMode]);
+
+    const selectedExpensesList = React.useMemo(() => {
+        if (!allExpenses) return [];
+        return allExpenses.filter(e => {
+            const d = new Date(e.timestamp);
+            if (viewMode === 'day') return isSameDay(d, selectedDate);
+            return isWithinInterval(d, { start: dateRange.start, end: dateRange.end });
+        });
+    }, [allExpenses, selectedDate, viewMode, dateRange]);
+
+    const groupedExpenses = React.useMemo(() => {
+        if (!selectedExpensesList) return [];
+        const groups: Record<string, { date: Date; total: number; categories: Record<string, number>; count: number; items: Expense[] }> = {};
+        
+        selectedExpensesList.forEach(exp => {
+            const dateStr = format(new Date(exp.timestamp), 'yyyy-MM-dd');
+            if (!groups[dateStr]) {
+                groups[dateStr] = { 
+                    date: new Date(exp.timestamp), 
+                    total: 0, 
+                    categories: {}, 
+                    count: 0,
+                    items: []
+                };
+            }
+            groups[dateStr].total += exp.amount;
+            groups[dateStr].count += 1;
+            groups[dateStr].items.push(exp);
+            groups[dateStr].categories[exp.category] = (groups[dateStr].categories[exp.category] || 0) + exp.amount;
+        });
+
+        return Object.values(groups).sort((a, b) => b.date.getTime() - a.date.getTime());
+    }, [selectedExpensesList]);
 
     const olderExpensesList = React.useMemo(() => 
-        allExpenses?.filter(e => !isSameDay(new Date(e.timestamp), selectedDate)) || []
-    , [allExpenses, selectedDate]);
+        allExpenses?.filter(e => {
+            const d = new Date(e.timestamp);
+            return !isWithinInterval(d, { start: dateRange.start, end: dateRange.end });
+        }) || []
+    , [allExpenses, dateRange]);
 
     const paymentMethodData = React.useMemo(() => {
         const methodMap: Record<string, number> = {};
@@ -148,18 +207,22 @@ export default function DailyExpensesPage() {
     }, [selectedExpensesList]);
 
     const stats = React.useMemo(() => {
-        if (!allExpenses) return { todayTotal: 0, monthTotal: 0, todayCount: 0, topCategory: 'N/A' };
+        if (!allExpenses) return { currentTotal: 0, monthTotal: 0, currentCount: 0, topCategory: 'N/A' };
 
-        let todayTotal = 0;
+        let currentTotal = 0;
         let monthTotal = 0;
-        let todayCount = 0;
+        let currentCount = 0;
         const categoryMap: Record<string, number> = {};
 
         allExpenses.forEach(expense => {
             const expDate = new Date(expense.timestamp);
-            if (isSameDay(expDate, selectedDate)) {
-                todayTotal += expense.amount;
-                todayCount++;
+            const isInRange = viewMode === 'day' 
+                ? isSameDay(expDate, selectedDate)
+                : isWithinInterval(expDate, { start: dateRange.start, end: dateRange.end });
+
+            if (isInRange) {
+                currentTotal += expense.amount;
+                currentCount++;
                 categoryMap[expense.category] = (categoryMap[expense.category] || 0) + expense.amount;
             }
             if (isThisMonth(expDate)) {
@@ -176,8 +239,8 @@ export default function DailyExpensesPage() {
             }
         });
 
-        return { todayTotal, monthTotal, todayCount, topCategory };
-    }, [allExpenses]);
+        return { currentTotal, monthTotal, currentCount, topCategory };
+    }, [allExpenses, viewMode, dateRange, selectedDate]);
 
     const resetForm = () => {
         setAmount('');
@@ -296,7 +359,18 @@ export default function DailyExpensesPage() {
 
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="flex flex-col gap-1">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Filter by Date</Label>
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Range Mode</Label>
+                        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-[400px]">
+                            <TabsList className="grid w-full grid-cols-4 h-9">
+                                <TabsTrigger value="day" className="text-xs">Day</TabsTrigger>
+                                <TabsTrigger value="week" className="text-xs">Week</TabsTrigger>
+                                <TabsTrigger value="month" className="text-xs">Month</TabsTrigger>
+                                <TabsTrigger value="history" className="text-xs">History</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select {viewMode === 'day' ? 'Date' : 'Anchor Date'}</Label>
                         <DatePicker date={selectedDate} onDateChange={(d) => d && setSelectedDate(d)} />
                     </div>
                     <Separator orientation="vertical" className="h-10 hidden md:block" />
@@ -356,21 +430,23 @@ export default function DailyExpensesPage() {
                 <Card className="bg-primary/5 border-primary/20">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary font-semibold uppercase tracking-wider text-[10px]">
-                            {isToday(selectedDate) ? "Today's" : format(selectedDate, 'PP')} Expenses
+                            {viewMode === 'day' 
+                                ? (isToday(selectedDate) ? "Today's" : format(selectedDate, 'PP')) 
+                                : viewMode === 'history' ? "All Time" : `${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`} Expenses
                         </CardDescription>
-                        <CardTitle className="text-3xl font-bold">{stats.todayTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
+                        <CardTitle className="text-3xl font-bold">{stats.currentTotal.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Rs</span></CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <TrendingUp className="h-3 w-3" /> From {stats.todayCount} transactions
+                            <TrendingUp className="h-3 w-3" /> From {stats.currentCount} transactions
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">Highest Category Today</CardDescription>
-                        <CardTitle className="text-3xl font-bold">{stats.topCategory}</CardTitle>
+                        <CardDescription className="font-semibold uppercase tracking-wider text-[10px]">Highest Category In Range</CardDescription>
+                        <CardTitle className="text-3xl font-bold line-clamp-1">{stats.topCategory}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -400,7 +476,12 @@ export default function DailyExpensesPage() {
                             <PieChart className="h-5 w-5 text-primary" />
                             Payment Method Distribution
                         </CardTitle>
-                        <CardDescription>Breakdown of expenses for {format(selectedDate, 'PP')}</CardDescription>
+                        <CardDescription>
+                            {viewMode === 'day' 
+                                ? `Breakdown of expenses for ${format(selectedDate, 'PP')}`
+                                : viewMode === 'history' ? "Historical breakdown by payment method" : `Breakdown from ${format(dateRange.start, 'MMM dd')} to ${format(dateRange.end, 'MMM dd')}`
+                            }
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="h-[250px]">
                         {paymentMethodData.length === 0 ? (
@@ -437,7 +518,11 @@ export default function DailyExpensesPage() {
                     </div>
                     <h3 className="text-xl font-bold text-teal-900 mb-2">Detailed Financial Insight</h3>
                     <p className="text-sm text-teal-700 max-w-xs">
-                        View exactly how your clinic's funds are being utilized across different payment channels for {format(selectedDate, 'PP')}.
+                        View exactly how your clinic's funds are being utilized across different payment channels for 
+                        {viewMode === 'day' 
+                            ? ` ${format(selectedDate, 'PP')}`
+                            : viewMode === 'history' ? " your entire clinic history" : ` the period of ${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`
+                        }.
                     </p>
                 </Card>
             </div>
@@ -489,77 +574,192 @@ export default function DailyExpensesPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <DollarSign className="h-5 w-5 text-red-500" />
-                        Expenses Log: {format(selectedDate, 'PP')}
+                        {viewMode === 'day' 
+                            ? `Expenses Log: ${format(selectedDate, 'PP')}`
+                            : viewMode === 'history' ? `Master Expense History (${stats.currentCount} items)` : `Detailed Summary Report: ${format(dateRange.start, 'MMM dd')} - ${format(dateRange.end, 'MMM dd')}`
+                        }
                     </CardTitle>
-                    <CardDescription>All expenses recorded for the selected date.</CardDescription>
+                    <CardDescription>
+                        {viewMode === 'day' 
+                            ? "All expenses recorded for the selected date."
+                            : "Detailed day-wise history with individual transaction breakdown."
+                        }
+                    </CardDescription>
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">
-                    {selectedExpensesList.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
-                            <Receipt className="h-12 w-12 opacity-10 mb-2" />
-                            <p className="italic">No expenses recorded for this date.</p>
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Time</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Payment</TableHead>
-                                    <TableHead className="text-right">Amount (Rs)</TableHead>
-                                    <TableHead className="w-[100px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {selectedExpensesList.map((expense) => (
-                                    <TableRow key={expense.id}>
-                                        <TableCell className="text-xs text-muted-foreground">
-                                            {format(new Date(expense.timestamp), 'p')}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">{expense.category}</Badge>
-                                        </TableCell>
-                                        <TableCell className="max-w-[200px] truncate" title={expense.description}>
-                                            {expense.description}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className="font-bold">{expense.paymentMethod}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right font-bold text-red-600">
-                                            - {expense.amount.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => openEditForm(expense)}>
-                                                    <Edit2 className="h-4 w-4" />
-                                                </Button>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Expense?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                This action cannot be undone. This will permanently delete the expense record for Rs {expense.amount}.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteExpense(expense.id!)}>Delete</AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </div>
-                                        </TableCell>
+                    {viewMode === 'day' ? (
+                        selectedExpensesList.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
+                                <Receipt className="h-12 w-12 opacity-10 mb-2" />
+                                <p className="italic">No expenses recorded for this date.</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Time</TableHead>
+                                        <TableHead>Category</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead>Payment</TableHead>
+                                        <TableHead className="text-right">Amount (Rs)</TableHead>
+                                        <TableHead className="w-[100px]"></TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {selectedExpensesList.map((expense) => (
+                                        <TableRow key={expense.id}>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {format(new Date(expense.timestamp), 'p')}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline">{expense.category}</Badge>
+                                            </TableCell>
+                                            <TableCell className="max-w-[200px] truncate" title={expense.description}>
+                                                {expense.description}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary" className="font-bold">{expense.paymentMethod}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold text-red-600">
+                                                - {expense.amount.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => openEditForm(expense)}>
+                                                        <Edit2 className="h-4 w-4" />
+                                                    </Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-red-500">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Expense?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This action cannot be undone. This will permanently delete the expense record for Rs {expense.amount}.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteExpense(expense.id!)}>Delete</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )
+                    ) : (
+                        groupedExpenses.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center text-muted-foreground py-8">
+                                <Calendar className="h-12 w-12 opacity-10 mb-2" />
+                                <p className="italic">No expenses recorded for this period.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <Accordion type="multiple" className="space-y-3">
+                                    {groupedExpenses.map((group) => {
+                                        const topCat = Object.entries(group.categories).sort((a, b) => b[1] - a[1])[0][0];
+                                        return (
+                                            <AccordionItem 
+                                                key={format(group.date, 'yyyy-MM-dd')} 
+                                                value={format(group.date, 'yyyy-MM-dd')}
+                                                className="border rounded-lg bg-card overflow-hidden"
+                                            >
+                                                <AccordionTrigger className="px-4 py-4 hover:no-underline bg-muted/20">
+                                                    <div className="flex justify-between items-center w-full pr-4">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="flex flex-col items-start gap-1">
+                                                                <span className="font-bold text-sm">{format(group.date, 'eeee, MMM dd, yyyy')}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge variant="secondary" className="text-[10px]">{group.count} Transactions</Badge>
+                                                                    <Badge variant="outline" className="text-[10px]">{topCat}</Badge>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Total Day Expense</span>
+                                                            <span className="font-black text-red-600">Rs {group.total.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                </AccordionTrigger>
+                                                <AccordionContent className="p-0">
+                                                    <div className="bg-background">
+                                                        <Table>
+                                                            <TableHeader className="bg-muted/30">
+                                                                <TableRow>
+                                                                    <TableHead className="text-[10px] font-bold">Time</TableHead>
+                                                                    <TableHead className="text-[10px] font-bold">Category</TableHead>
+                                                                    <TableHead className="text-[10px] font-bold">Detailed Reason/Description</TableHead>
+                                                                    <TableHead className="text-[10px] font-bold">Payment</TableHead>
+                                                                    <TableHead className="text-right text-[10px] font-bold">Amount (Rs)</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {group.items.map((item) => (
+                                                                    <TableRow key={item.id} className="hover:bg-muted/10">
+                                                                        <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                                                            {format(new Date(item.timestamp), 'p')}
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <Badge variant="secondary" className="text-[10px] px-1 py-0">{item.category}</Badge>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-[12px] font-medium italic">
+                                                                            {item.description}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-[11px] font-semibold text-teal-600">
+                                                                            {item.paymentMethod}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-bold text-slate-700">
+                                                                            {item.amount.toLocaleString()}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                        <div className="flex justify-end p-2 bg-muted/5 border-t">
+                                                            <Button 
+                                                                variant="link" 
+                                                                size="sm" 
+                                                                className="text-[10px] h-6"
+                                                                onClick={() => {
+                                                                    setSelectedDate(group.date);
+                                                                    setViewMode('day');
+                                                                }}
+                                                            >
+                                                                Go to Single Day View for Actions →
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        );
+                                    })}
+                                </Accordion>
+
+                                <Card className="bg-red-50 border-red-100 overflow-hidden">
+                                    <div className="flex justify-between items-center px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] uppercase font-black text-red-500 tracking-widest">Selected Period Grand Total</span>
+                                            <span className="text-muted-foreground text-xs">
+                                                Based on {stats.currentCount} total recorded transactions
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-3xl font-black text-red-600">
+                                                Rs {stats.currentTotal.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </Card>
+                            </div>
+                        )
                     )}
                 </CardContent>
             </Card>
