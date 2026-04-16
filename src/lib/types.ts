@@ -156,15 +156,24 @@ export type Visit = {
 
 export type BillingRecord = {
   id: string;
-  patientMobileNumber: string;
+  patientMobileNumber?: string;
+  patientMobile?: string;   // alias used in some records
+  patientName?: string;
+  patientId?: string;
   consultationCharges?: number;
   procedureCharges?: number;
   medicineCharges?: number;
   grandTotal?: number;
   totalAmount?: number;
+  subTotal?: number;
+  discountAmount?: number;
   paymentMethod: string;
-  billingDate: string; // ISO String
+  billingDate?: string;  // ISO String — legacy field
+  timestamp?: string;   // ISO String — actual field saved by billing module
+  status?: string;
+  items?: Array<{ id: string; name: string; type: string; price: number; qty: number }>;
 }
+
 
 export type PharmacyRack = {
   id: string;

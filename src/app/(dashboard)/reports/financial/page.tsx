@@ -120,7 +120,10 @@ export default function FinancialReportPage() {
   const filteredBilling = React.useMemo(() => {
     if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
     return billingRecords.filter(b => {
-        const date = new Date(b.billingDate);
+        const dateStr = b.timestamp || b.billingDate;
+        if (!dateStr) return false;
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return false;
         return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
     });
   }, [billingRecords, selectedRange]);
@@ -128,15 +131,18 @@ export default function FinancialReportPage() {
   const filteredExpenses = React.useMemo(() => {
     if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
     return allExpenses.filter((e: any) => {
-        const date = new Date(e.timestamp);
+        const dateStr = e.timestamp || e.date || e.createdAt;
+        if (!dateStr) return false;
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return false;
         return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
     });
   }, [allExpenses, selectedRange]);
 
   const financialKPIs = React.useMemo(() => {
-    const revenue = filteredBilling.reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+    const revenue = filteredBilling.reduce((sum, b) => sum + (b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0))), 0);
     const burn = filteredExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-    const debt = allSuppliers?.reduce((sum, s) => sum + (s.currentBalance || 0), 0) || 0;
+    const debt = allSuppliers?.reduce((sum, s) => sum + ((s.currentBalance ?? (s as any).balance ?? (s as any).totalBalance) || 0), 0) || 0;
     
     return {
         grossRevenue: revenue,
@@ -151,18 +157,19 @@ export default function FinancialReportPage() {
     const patientsMap = new Map(patients.map(p => [p.mobileNumber, p]));
 
     return filteredBilling.map(record => {
-      const patient = patientsMap.get(record.patientMobileNumber);
-      const total = (record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0);
+      const patient = record.patientMobileNumber ? patientsMap.get(record.patientMobileNumber) : undefined;
+      const total = record.grandTotal ?? record.totalAmount ?? ((record.consultationCharges ?? 0) + (record.procedureCharges ?? 0) + (record.medicineCharges ?? 0));
+      const dateStr = record.timestamp || record.billingDate;
       
       return {
         invoice: record.id.slice(0, 6).toUpperCase(),
         mrn: patient?.id?.slice(0, 8) || 'N/A',
-        patientName: patient?.name || 'Unknown',
+        patientName: patient?.name || record.patientName || 'Unknown',
         referredBy: '-',
         description: `Charges: Consult(${record.consultationCharges ?? 0}), Proc(${record.procedureCharges ?? 0}), Med(${record.medicineCharges ?? 0})`,
         total: total,
         paid: total, // Assuming fully paid if recorded
-        discount: 0.0,
+        discount: record.discountAmount || 0,
         dues: 0.0,
         deductionsInsurance: 0.0,
         taxDeductions: 0.0,
@@ -171,7 +178,7 @@ export default function FinancialReportPage() {
         paymentMode: record.paymentMethod || 'Unknown',
         doctorRevenue: '-',
         departmentRevenue: 'OPD',
-        paymentDate: record.billingDate ? format(new Date(record.billingDate), 'dd/MM/yyyy - hh:mm a') : 'N/A'
+        paymentDate: dateStr && !isNaN(new Date(dateStr).getTime()) ? format(new Date(dateStr), 'dd/MM/yyyy - hh:mm a') : 'N/A'
       };
     });
   }, [billingRecords, patients]);
@@ -193,11 +200,15 @@ export default function FinancialReportPage() {
         const dayStart = startOfDay(day);
         const dayEnd = endOfDay(day);
         
-        const rev = filteredBilling.filter(b => isWithinInterval(new Date(b.billingDate), { start: dayStart, end: dayEnd }))
-          .reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+        const rev = filteredBilling.filter(b => {
+          const d = b.timestamp || b.billingDate;
+          return d && !isNaN(new Date(d).getTime()) && isWithinInterval(new Date(d), { start: dayStart, end: dayEnd });
+        }).reduce((sum, b) => sum + (b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0))), 0);
           
-        const burn = filteredExpenses.filter((e: any) => isWithinInterval(new Date(e.timestamp), { start: dayStart, end: dayEnd }))
-          .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+        const burn = filteredExpenses.filter((e: any) => {
+          const d = e.timestamp || e.date || e.createdAt;
+          return d && !isNaN(new Date(d).getTime()) && isWithinInterval(new Date(d), { start: dayStart, end: dayEnd });
+        }).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
           
         return {
           name: format(day, 'MMM dd'),
@@ -209,11 +220,15 @@ export default function FinancialReportPage() {
       // Group by Hour for a single day
       const hours = Array.from({ length: 24 }, (_, i) => {
         const hour = i;
-        const rev = filteredBilling.filter(b => new Date(b.billingDate).getHours() === hour)
-          .reduce((sum, b) => sum + (b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0), 0);
+        const rev = filteredBilling.filter(b => {
+          const d = b.timestamp || b.billingDate;
+          return d && !isNaN(new Date(d).getTime()) && new Date(d).getHours() === hour;
+        }).reduce((sum, b) => sum + (b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0))), 0);
           
-        const burn = filteredExpenses.filter((e: any) => new Date(e.timestamp).getHours() === hour)
-          .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+        const burn = filteredExpenses.filter((e: any) => {
+          const d = e.timestamp || e.date || e.createdAt;
+          return d && !isNaN(new Date(d).getTime()) && new Date(d).getHours() === hour;
+        }).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
           
         return {
           name: `${hour.toString().padStart(2, '0')}:00`,
@@ -476,7 +491,7 @@ export default function FinancialReportPage() {
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Balance Due</p>
-                                                        <p className="text-2xl font-black text-indigo-600">Rs {supplier.currentBalance?.toLocaleString() || 0}</p>
+                                                        <p className="text-2xl font-black text-indigo-600">Rs {(supplier.currentBalance ?? (supplier as any).balance ?? (supplier as any).totalBalance ?? 0).toLocaleString()}</p>
                                                     </div>
                                                 </div>
                                                 <div className="mt-6 flex items-center gap-3">
@@ -503,12 +518,13 @@ export default function FinancialReportPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {allDoctors?.map((doctor, i) => {
-                                            const doctorRevenue = transactionData.filter(t => t.description.toLowerCase().includes(doctor.name.toLowerCase())).reduce((sum, t) => sum + t.total, 0);
+                                            const docName = doctor.fullName || (doctor as any).name || '';
+                                            const doctorRevenue = transactionData.filter(t => t.description.toLowerCase().includes(docName.toLowerCase())).reduce((sum, t) => sum + t.total, 0);
                                             return (
                                                 <TableRow key={i} className="border-slate-50 h-16">
-                                                    <TableCell className="font-black text-slate-900">{doctor.name}</TableCell>
+                                                    <TableCell className="font-black text-slate-900">{docName}</TableCell>
                                                     <TableCell className="text-right font-bold text-slate-600">Rs {doctorRevenue.toLocaleString()}</TableCell>
-                                                    <TableCell className="text-right font-black text-indigo-600">Rs {(doctorRevenue * 0.4).toLocaleString()}</TableCell> {/* Mock 40% share */}
+                                                    <TableCell className="text-right font-black text-indigo-600">Rs {(doctorRevenue * 0.4).toLocaleString()}</TableCell>
                                                     <TableCell className="text-right">
                                                         <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-black uppercase">Unsettled</span>
                                                     </TableCell>

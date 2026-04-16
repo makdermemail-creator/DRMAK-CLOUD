@@ -43,7 +43,7 @@ import {
     deleteDocumentNonBlocking
 } from '@/firebase';
 import type { FollowUp, Patient } from '@/lib/types';
-import { collection, doc, query, orderBy, where } from 'firebase/firestore';
+import { collection, doc, query, orderBy, where, addDoc } from 'firebase/firestore';
 import {
     Dialog,
     DialogContent,
@@ -61,6 +61,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useRouter } from 'next/navigation';
 import { useSearch } from '@/context/SearchProvider';
 import { format, startOfWeek, addDays, eachDayOfInterval, startOfHour, addHours, isSameDay, isSameHour, isPast, isToday, isTomorrow } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { Calendar } from '@/components/ui/calendar';
 import { DatePicker } from '@/components/DatePicker';
 
 // ─── Add Follow-up Dialog ───────────────────────────────────────────────────
@@ -74,6 +76,7 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     const [reason, setReason] = React.useState('');
     const [notes, setNotes] = React.useState('');
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
     const { data: patients } = useCollection<Patient>(patientsQuery);
@@ -95,43 +98,59 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
     }, [patients, patientId]);
 
     const handleSubmit = async () => {
-        if (!firestore || !date || !patientId) {
+        if (!firestore) return;
+        
+        if (!date || !patientId) {
             toast({
                 variant: 'destructive',
                 title: 'Missing Information',
-                description: 'Please select a patient and date to schedule the follow-up.',
+                description: 'Please select a patient and a follow-up date.',
             });
             return;
         }
 
-        const newFollowUp: Omit<FollowUp, 'id'> = {
-            patientId,
-            patientName: selectedPatientData?.name || 'Unknown',
-            patientMobile: selectedPatientData?.mobileNumber || '',
-            followUpDate: date.toISOString(),
-            reason,
-            notes,
-            status: 'Pending',
-            createdAt: new Date().toISOString(),
-        };
+        setIsSubmitting(true);
+        try {
+            const newFollowUp: Omit<FollowUp, 'id'> = {
+                patientId,
+                patientName: selectedPatientData?.name || 'Unknown',
+                patientMobile: selectedPatientData?.mobileNumber || '',
+                followUpDate: date.toISOString(),
+                reason: reason.trim() || 'General Follow-up',
+                notes: notes.trim(),
+                status: 'Pending',
+                createdAt: new Date().toISOString(),
+            };
 
-        await addDocumentNonBlocking(collection(firestore, 'followUps'), newFollowUp);
-        toast({
-            title: 'Follow-up Scheduled',
-            description: `Follow-up for ${selectedPatientData?.name} set for ${format(date, 'PPP')}.`,
-        });
-        onFollowUpAdded();
-        onOpenChange(false);
-        // Reset form
-        setPatientId('');
-        setReason('');
-        setNotes('');
-        setDate(new Date());
+            await addDoc(collection(firestore, 'followUps'), newFollowUp);
+            
+            toast({
+                title: 'Successfully Scheduled',
+                description: `Follow-up for ${selectedPatientData?.name} set for ${format(date, 'PPP')}.`,
+            });
+            
+            // Success cleanup
+            onFollowUpAdded();
+            onOpenChange(false);
+            setPatientId('');
+            setReason('');
+            setNotes('');
+            setDate(new Date());
+        } catch (error: any) {
+            console.error("Error scheduling follow-up:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Scheduling Failed',
+                description: error.message || 'An error occurred while saving. Please try again.',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Schedule New Follow-up</DialogTitle>
                     <DialogDescription>
@@ -200,7 +219,25 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                     </div>
                     <div className="grid gap-2">
                         <Label>Follow-up Date</Label>
-                        <DatePicker date={date} onDateChange={setDate} />
+                        <div className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl">
+                            {date ? format(date, 'PPP') : 'No date selected'}
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            <Button type="button" variant="outline" size="sm" className="rounded-lg text-xs h-7"
+                                onClick={() => setDate(new Date())}>Today</Button>
+                            <Button type="button" variant="outline" size="sm" className="rounded-lg text-xs h-7"
+                                onClick={() => setDate(addDays(new Date(), 1))}>Tomorrow</Button>
+                            <Button type="button" variant="outline" size="sm" className="rounded-lg text-xs h-7"
+                                onClick={() => setDate(addDays(new Date(), 7))}>+1 Week</Button>
+                            <Button type="button" variant="outline" size="sm" className="rounded-lg text-xs h-7"
+                                onClick={() => setDate(addDays(new Date(), 30))}>+1 Month</Button>
+                        </div>
+                        <Calendar
+                            mode="single"
+                            selected={date}
+                            onSelect={(d) => { if (d) setDate(d); }}
+                            className="rounded-xl border shadow-sm"
+                        />
                     </div>
                     <div className="grid gap-2">
                         <Label>Reason</Label>
@@ -221,7 +258,21 @@ const AddFollowUpDialog = ({ open, onOpenChange, onFollowUpAdded }: { open: bool
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleSubmit}>Schedule Follow-up</Button>
+                    <Button 
+                        onClick={handleSubmit} 
+                        disabled={isSubmitting}
+                        className={cn(
+                            "w-full h-12 rounded-xl font-bold transition-all shadow-lg",
+                            (!patientId || !date) ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100"
+                        )}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Saving Details...
+                            </>
+                        ) : 'Confirm & Schedule Follow-up'}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -302,7 +353,8 @@ export default function FollowUpCalendarPage() {
 
     const followUpsQuery = useMemoFirebase(() => {
         if (!firestore) return null;
-        return query(collection(firestore, 'followUps'), orderBy('followUpDate', 'asc'));
+        // Simplified query to avoid index requirements during initial setup
+        return collection(firestore, 'followUps');
     }, [firestore]);
 
     const { data: allFollowUps, isLoading, forceRerender } = useCollection<FollowUp>(followUpsQuery);

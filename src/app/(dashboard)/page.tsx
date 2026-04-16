@@ -39,6 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { DateRange } from 'react-day-picker';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -523,13 +524,28 @@ const OrganizationDashboard = () => {
     const stats = React.useMemo(() => {
         const today = startOfDay(new Date()).getTime();
         
-        const revenue = (billingRecords || []).filter(r => startOfDay(new Date(r.billingDate)).getTime() === today)
-            .reduce((acc, r) => acc + (r.grandTotal || r.totalAmount || ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+        const revenue = (billingRecords || []).filter(r => {
+            const dateStr = r.timestamp || r.billingDate;
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return false;
+            return startOfDay(date).getTime() === today;
+        }).reduce((acc, r) => acc + (r.grandTotal ?? r.totalAmount ?? ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
             
-        const expenses = (allExpenses || []).filter((e: any) => startOfDay(new Date(e.timestamp)).getTime() === today)
-            .reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const expenses = (allExpenses || []).filter((e: any) => {
+            const dateStr = e.timestamp || e.date || e.createdAt;
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return false;
+            return startOfDay(date).getTime() === today;
+        }).reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
             
-        const dailyAppointments = (appointments || []).filter(a => startOfDay(new Date(a.appointmentDateTime)).getTime() === today);
+        const dailyAppointments = (appointments || []).filter(a => {
+            if (!a.appointmentDateTime) return false;
+            const date = new Date(a.appointmentDateTime);
+            if (isNaN(date.getTime())) return false;
+            return startOfDay(date).getTime() === today;
+        });
         const completed = dailyAppointments.filter(a => a.status === 'Completed').length;
 
         return { revenue, expenses, profit: revenue - expenses, totalAppointments: dailyAppointments.length, completed };
@@ -844,20 +860,29 @@ const AdminDashboard = () => {
         if (!selectedDate) return { revenue: 0, expenses: 0, profit: 0 };
         
         const filter = (itemDate: Date) => {
+            if (isNaN(itemDate.getTime())) return false;
             if (periodMode === 'day') return startOfDay(itemDate).getTime() === startOfDay(selectedDate).getTime();
             if (periodMode === 'month') return isSameMonth(itemDate, selectedDate) && isSameYear(itemDate, selectedDate);
             if (periodMode === 'year') return isSameYear(itemDate, selectedDate);
             return false;
         };
 
-        const revenue = (billingRecords || []).filter(r => filter(new Date(r.billingDate)))
-            .reduce((acc, r) => acc + (r.grandTotal || r.totalAmount || ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+        // Use timestamp (actual field) with billingDate as fallback
+        const revenue = (billingRecords || [])
+            .filter(r => {
+                const dateStr = r.timestamp || r.billingDate;
+                return dateStr ? filter(new Date(dateStr)) : false;
+            })
+            .reduce((acc, r) => acc + (r.grandTotal ?? r.totalAmount ?? ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
             
-        const expenses = (allExpenses || []).filter((e: any) => filter(new Date(e.timestamp)))
-            .reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
+        const expenses = (allExpenses || []).filter((e: any) => {
+            const dateStr = e.timestamp || e.date || e.createdAt;
+            return dateStr ? filter(new Date(dateStr)) : false;
+        }).reduce((acc: number, e: any) => acc + (e.amount || 0), 0);
 
         return { revenue, expenses, profit: revenue - expenses };
     }, [billingRecords, allExpenses, selectedDate, periodMode]);
+
 
     const { todaysPatients, appointmentStats } = React.useMemo(() => {
         if (!selectedDate || !appointments) {
@@ -1448,7 +1473,10 @@ const ReportsDashboard = () => {
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
         return billingRecords.filter(b => {
-            const date = new Date(b.billingDate);
+            const dateStr = b.timestamp || b.billingDate;
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return false;
             return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
         });
     }, [billingRecords, selectedRange]);
@@ -1456,7 +1484,10 @@ const ReportsDashboard = () => {
     const filteredExpenses = React.useMemo(() => {
         if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
         return allExpenses.filter((e: any) => {
-            const date = new Date(e.timestamp);
+            const dateStr = e.timestamp || e.date || e.createdAt;
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return false;
             return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
         });
     }, [allExpenses, selectedRange]);
@@ -1464,7 +1495,9 @@ const ReportsDashboard = () => {
     const filteredAppointments = React.useMemo(() => {
         if (!appointments || !selectedRange?.from || !selectedRange?.to) return appointments || [];
         return appointments.filter(a => {
+            if (!a.appointmentDateTime) return false;
             const date = new Date(a.appointmentDateTime);
+            if (isNaN(date.getTime())) return false;
             return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
         });
     }, [appointments, selectedRange]);
