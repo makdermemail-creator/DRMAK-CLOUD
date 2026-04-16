@@ -1178,7 +1178,11 @@ const AdminDashboard = () => {
     const { searchTerm } = useSearch();
     const firestore = useFirestore();
     const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
-    const [periodMode, setPeriodMode] = React.useState<'day' | 'month' | 'year'>('day');
+    const [periodMode, setPeriodMode] = React.useState<'day' | 'month' | 'year' | 'range'>('day');
+    const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
+        from: startOfMonth(new Date()),
+        to: new Date(),
+    });
 
     React.useEffect(() => {
         setSelectedDate(new Date());
@@ -1232,13 +1236,16 @@ const AdminDashboard = () => {
     }, [enrichedAppointments, selectedDate]);
 
     const financialMetrics = React.useMemo(() => {
-        if (!selectedDate) return { revenue: 0, expenses: 0, profit: 0 };
+        if (!selectedDate && periodMode !== 'range') return { revenue: 0, expenses: 0, profit: 0 };
         
         const filter = (itemDate: Date) => {
             if (isNaN(itemDate.getTime())) return false;
-            if (periodMode === 'day') return startOfDay(itemDate).getTime() === startOfDay(selectedDate).getTime();
-            if (periodMode === 'month') return isSameMonth(itemDate, selectedDate) && isSameYear(itemDate, selectedDate);
-            if (periodMode === 'year') return isSameYear(itemDate, selectedDate);
+            if (periodMode === 'day') return startOfDay(itemDate).getTime() === startOfDay(selectedDate!).getTime();
+            if (periodMode === 'month') return isSameMonth(itemDate, selectedDate!) && isSameYear(itemDate, selectedDate!);
+            if (periodMode === 'year') return isSameYear(itemDate, selectedDate!);
+            if (periodMode === 'range' && selectedRange?.from && selectedRange?.to) {
+                return isWithinInterval(itemDate, { start: startOfDay(selectedRange.from), end: endOfDay(selectedRange.to) });
+            }
             return false;
         };
 
@@ -1260,15 +1267,18 @@ const AdminDashboard = () => {
 
 
     const { todaysPatients, appointmentStats } = React.useMemo(() => {
-        if (!selectedDate || !appointments) {
+        if (!appointments || (!selectedDate && periodMode !== 'range')) {
             return { todaysPatients: 0, appointmentStats: { completed: 0, total: 0 } };
         }
 
         const filteredAppointments = appointments.filter(apt => {
             const aptDate = new Date(apt.appointmentDateTime);
-            if (periodMode === 'day') return startOfDay(aptDate).getTime() === startOfDay(selectedDate).getTime();
-            if (periodMode === 'month') return isSameMonth(aptDate, selectedDate) && isSameYear(aptDate, selectedDate);
-            if (periodMode === 'year') return isSameYear(aptDate, selectedDate);
+            if (periodMode === 'day') return startOfDay(aptDate).getTime() === startOfDay(selectedDate!).getTime();
+            if (periodMode === 'month') return isSameMonth(aptDate, selectedDate!) && isSameYear(aptDate, selectedDate!);
+            if (periodMode === 'year') return isSameYear(aptDate, selectedDate!);
+            if (periodMode === 'range' && selectedRange?.from && selectedRange?.to) {
+                return isWithinInterval(aptDate, { start: startOfDay(selectedRange.from), end: endOfDay(selectedRange.to) });
+            }
             return false;
         });
 
@@ -1284,10 +1294,16 @@ const AdminDashboard = () => {
 
     const activeConsultations = React.useMemo(() => {
         if (!appointments || !selectedDate) return 0;
-        const selectedDayStart = startOfDay(selectedDate);
         return appointments.filter(apt => {
-            const aptDate = startOfDay(new Date(apt.appointmentDateTime));
-            return aptDate.getTime() === selectedDayStart.getTime() && apt.status === 'In Consultation';
+            const aptDate = new Date(apt.appointmentDateTime);
+            let isInPeriod = false;
+            if (periodMode === 'day') isInPeriod = startOfDay(aptDate).getTime() === startOfDay(selectedDate!).getTime();
+            else if (periodMode === 'month') isInPeriod = isSameMonth(aptDate, selectedDate!) && isSameYear(aptDate, selectedDate!);
+            else if (periodMode === 'year') isInPeriod = isSameYear(aptDate, selectedDate!);
+            else if (periodMode === 'range' && selectedRange?.from && selectedRange?.to) {
+                isInPeriod = isWithinInterval(aptDate, { start: startOfDay(selectedRange.from), end: endOfDay(selectedRange.to) });
+            }
+            return isInPeriod && apt.status === 'In Consultation';
         }).length;
     }, [appointments, selectedDate]);
 
@@ -1316,11 +1332,12 @@ const AdminDashboard = () => {
                     <p className="text-sm text-muted-foreground">Detailed metrics for your selected period</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Tabs value={periodMode} onValueChange={(v: any) => setPeriodMode(v)} className="w-[300px]">
-                        <TabsList className="grid w-full grid-cols-3">
+                    <Tabs value={periodMode} onValueChange={(v: any) => setPeriodMode(v)} className="w-[400px]">
+                        <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="day">Day</TabsTrigger>
                             <TabsTrigger value="month">Month</TabsTrigger>
                             <TabsTrigger value="year">Year</TabsTrigger>
+                            <TabsTrigger value="range">Range</TabsTrigger>
                         </TabsList>
                     </Tabs>
                     {periodMode === 'day' && <DatePicker date={selectedDate} onDateChange={setSelectedDate} />}
@@ -1376,6 +1393,7 @@ const AdminDashboard = () => {
                             </SelectContent>
                         </Select>
                     )}
+                    {periodMode === 'range' && <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />}
                 </div>
             </div>
 
@@ -1456,7 +1474,8 @@ const AdminDashboard = () => {
                 appointments={appointments || []}
                 patients={patients || []}
                 selectedDate={selectedDate || new Date()}
-                periodMode={periodMode}
+                periodMode={periodMode === 'range' ? undefined : periodMode}
+                dateRange={periodMode === 'range' ? selectedRange : undefined}
             />
 
             <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
