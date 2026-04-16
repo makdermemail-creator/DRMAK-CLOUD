@@ -306,25 +306,26 @@ export default function BillingPage() {
 
     // Calculations
     const subTotal = billItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    
-    // Calculate how much of the subtotal comes from non-pharmacy
-    const nonPharmacySubTotal = billItems.filter(i => i.type !== 'pharmacy').reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+    // Calculate items eligible for tax: Non-pharmacy procedures, EXCLUDING Consultation
+    const taxableItemsSubTotal = billItems
+        .filter(i => i.type !== 'pharmacy' && !(i.name || '').toLowerCase().includes('consultation'))
+        .reduce((sum, item) => sum + (item.price * item.qty), 0);
 
     const discountAmount = discountType === 'percentage' ? (subTotal * (discountValue / 100)) : discountValue;
     const reimbursementTotal = reimbursements.reduce((sum, r) => sum + r.amount, 0);
 
-    // Apply discount and reimbursements proportionally to non-pharmacy items for tax calculation
-    const nonPharmacyDiscount = discountType === 'percentage' 
-        ? (nonPharmacySubTotal * (discountValue / 100)) 
-        : (discountValue * (nonPharmacySubTotal / (subTotal || 1)));
+    // Apply discount and reimbursements proportionally to taxable items for accurate net-tax calculation
+    const taxableDiscount = discountType === 'percentage' 
+        ? (taxableItemsSubTotal * (discountValue / 100)) 
+        : (discountValue * (taxableItemsSubTotal / (subTotal || 1)));
         
-    const nonPharmacyReimbursement = reimbursementTotal * (nonPharmacySubTotal / (subTotal || 1));
+    const taxableReimbursement = reimbursementTotal * (taxableItemsSubTotal / (subTotal || 1));
 
-    // Taxable amount is strictly the non-pharmacy portion after its share of deductions
-    const taxableAmount = Math.max(0, nonPharmacySubTotal - nonPharmacyDiscount - nonPharmacyReimbursement);
+    // Taxable amount is strictly the taxable portion after its share of deductions
+    const taxableAmount = Math.max(0, taxableItemsSubTotal - taxableDiscount - taxableReimbursement);
 
     const taxRate = paymentMethod === 'Cash' ? 0.18 : (paymentMethod === 'Card' || paymentMethod === 'Online') ? 0.05 : 0;
-    // Note: paymentMethod === 'Nill' or '' will result in taxRate 0
     const taxAmount = taxableAmount * taxRate;
     
     // Total cost after all global deductions, plus the tax calculated ONLY on non-pharmacy items
@@ -877,9 +878,9 @@ export default function BillingPage() {
                                         <SelectValue placeholder="Select payment method..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="Cash">Cash (18% Tax)</SelectItem>
-                                        <SelectItem value="Card">Card (5% Tax)</SelectItem>
-                                        <SelectItem value="Online">Online Transfer (5% Tax)</SelectItem>
+                                        <SelectItem value="Cash">Cash (18% Tax — Consultation 0%)</SelectItem>
+                                        <SelectItem value="Card">Card (5% Tax — Consultation 0%)</SelectItem>
+                                        <SelectItem value="Online">Online Transfer (5% Tax — Consultation 0%)</SelectItem>
                                         <SelectItem value="Nill">Nill (0% Tax)</SelectItem>
                                     </SelectContent>
                                 </Select>

@@ -180,6 +180,7 @@ export default function TodaySummaryPage() {
 
     const stats = React.useMemo(() => {
         const totalRevenue = filteredRecords.reduce((sum, r) => sum + (r.grandTotal || 0), 0);
+        const totalTax = filteredRecords.reduce((sum, r) => sum + (r.taxAmount || 0), 0);
         const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
         const uniquePatients = new Set(filteredRecords.map(r => r.patientId)).size;
 
@@ -189,6 +190,7 @@ export default function TodaySummaryPage() {
         const expenseCategoriesMap: { [key: string]: number } = {};
 
         let expectedCash = 0;
+        let onlineTransferRevenue = 0;
         filteredRecords.forEach(record => {
             // Count procedures
             record.items?.forEach(item => {
@@ -202,15 +204,20 @@ export default function TodaySummaryPage() {
             });
 
             // Count payments
-            const method = record.paymentMethod || 'Unknown';
-            if (method.toLowerCase() === 'cash') {
+            const method = (record.paymentMethod || 'Unknown').toLowerCase();
+            if (method === 'cash' || method === 'nill') {
                 expectedCash += record.grandTotal || 0;
             }
-            if (!paymentsMap[method]) {
-                paymentsMap[method] = { count: 0, amount: 0 };
+            if (method === 'online') {
+                onlineTransferRevenue += record.grandTotal || 0;
             }
-            paymentsMap[method].count += 1;
-            paymentsMap[method].amount += record.grandTotal || 0;
+            
+            const originalMethod = record.paymentMethod || 'Unknown';
+            if (!paymentsMap[originalMethod]) {
+                paymentsMap[originalMethod] = { count: 0, amount: 0 };
+            }
+            paymentsMap[originalMethod].count += 1;
+            paymentsMap[originalMethod].amount += record.grandTotal || 0;
         });
 
         filteredExpenses.forEach(e => {
@@ -224,10 +231,15 @@ export default function TodaySummaryPage() {
             netProfit: totalRevenue - totalExpenses,
             uniquePatients,
             procedures: Object.entries(proceduresMap).map(([name, data]) => ({ name, ...data })),
-            payments: Object.entries(paymentsMap).map(([method, data]) => ({ method, ...data })),
+            payments: Object.entries(paymentsMap).map(([method, data]) => ({ 
+                method: method === 'Nill' ? 'Cash (Nill)' : method, 
+                ...data 
+            })),
             expenseCategories: Object.entries(expenseCategoriesMap).map(([name, amount]) => ({ name, amount })),
             totalTransactions: filteredRecords.length,
-            expectedCash
+            expectedCash,
+            onlineTransferRevenue,
+            totalTax
         };
     }, [filteredRecords, filteredExpenses]);
 
@@ -410,8 +422,15 @@ export default function TodaySummaryPage() {
                         <CardTitle className="text-4xl font-black text-emerald-900 tracking-tighter">{stats.totalRevenue.toLocaleString()} <span className="text-xs font-bold opacity-40">PKR</span></CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-600 font-black uppercase tracking-tight">
-                            <TrendingUp className="h-3 w-3" /> {stats.totalTransactions} Orders Completed
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1 text-[10px] text-emerald-600 font-black uppercase tracking-tight">
+                                <TrendingUp className="h-3 w-3" /> {stats.totalTransactions} Orders Completed
+                            </div>
+                            {stats.totalTax > 0 && (
+                                <div className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                                    {stats.totalTax.toLocaleString()} GST
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -452,7 +471,10 @@ export default function TodaySummaryPage() {
                                 </div>
                                 <div>
                                     <h4 className="text-xl font-black tracking-tight">Cash Discrepancy Alert!</h4>
-                                    <p className="font-bold opacity-90 text-sm">This cash amount is not given by counter. Expected: Rs {stats.expectedCash.toLocaleString()} (Excluding Card/Online payments)</p>
+                                    <p className="font-bold opacity-90 text-sm">
+                                        This cash amount is not given by counter. Expected: Rs {stats.expectedCash.toLocaleString()} (Includes Cash & Nill)
+                                        {stats.onlineTransferRevenue > 0 && ` | Online Transfer: Rs ${stats.onlineTransferRevenue.toLocaleString()}`}
+                                    </p>
                                 </div>
                             </div>
                             <div className="text-right">
@@ -647,6 +669,7 @@ export default function TodaySummaryPage() {
                                     <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Reference</TableHead>
                                     <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Patient / Client</TableHead>
                                     <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Payment</TableHead>
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Tax</TableHead>
                                     <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Inflow (PKR)</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -671,6 +694,9 @@ export default function TodaySummaryPage() {
                                             }`}>
                                                 {record.paymentMethod || 'N/A'}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-center font-bold text-rose-600 bg-rose-50/50 rounded-lg">
+                                            {(record.taxAmount || 0).toLocaleString()}
                                         </TableCell>
                                         <TableCell className="text-right font-black text-slate-900">
                                             {record.grandTotal.toLocaleString()}
