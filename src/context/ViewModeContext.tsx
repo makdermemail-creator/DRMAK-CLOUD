@@ -22,7 +22,8 @@ export function ViewModeProvider({ children }: { children: ReactNode }) {
             const stored = localStorage.getItem(VIEW_MODE_KEY);
             if (stored === 'organization' || stored === 'clinic' || stored === 'reports') return stored;
         }
-        return 'none';
+        // Default to 'reports' for main admin on first login
+        return 'reports';
     });
 
     const auth = useAuth();

@@ -50,7 +50,8 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
       // onAuthStateChanged will handle the redirect
     } catch (error: any) {
-      let description = 'An unexpected error occurred during login.';
+      console.error("Login error:", error);
+      let description = error.message || 'An unexpected error occurred during login.';
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         description = 'Invalid email or password. Please try again.';
       }

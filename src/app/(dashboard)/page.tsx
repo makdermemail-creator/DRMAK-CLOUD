@@ -1,5 +1,8 @@
 'use client';
 import * as React from 'react';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
     Activity,
     ArrowUpRight,
@@ -499,6 +502,43 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
 };
 
 
+// ─── Shared Admin View Switcher ──────────────────────────────────────────────
+
+const AdminViewSwitcher = () => {
+    const { viewMode, setViewMode } = useViewMode();
+    return (
+        <div className="flex items-center gap-1 p-1 bg-white rounded-2xl border border-slate-200 shadow-sm w-fit">
+            <Button
+                variant={viewMode === 'clinic' ? 'default' : 'ghost'}
+                size="sm"
+                className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'clinic' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setViewMode('clinic')}
+            >
+                <Hospital className="h-3.5 w-3.5 mr-1.5" />
+                Manage SkinSmith
+            </Button>
+            <Button
+                variant={viewMode === 'organization' ? 'default' : 'ghost'}
+                size="sm"
+                className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'organization' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setViewMode('organization')}
+            >
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                Organization
+            </Button>
+            <Button
+                variant={viewMode === 'reports' ? 'default' : 'ghost'}
+                size="sm"
+                className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setViewMode('reports')}
+            >
+                <FileBarChart className="h-3.5 w-3.5 mr-1.5" />
+                Reports & Analytics
+            </Button>
+        </div>
+    );
+};
+
 const OrganizationDashboard = () => {
     const { searchTerm } = useSearch();
     const firestore = useFirestore();
@@ -580,6 +620,9 @@ const OrganizationDashboard = () => {
 
     return (
         <div className="grid flex-1 items-start gap-8 auto-rows-max animate-in fade-in duration-500">
+            {/* View Mode Switcher */}
+            <AdminViewSwitcher />
+
             {/* Financial Multi-Pillar Executive Summary */}
             <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-3">
                 <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2.5rem] overflow-hidden border border-emerald-100/30">
@@ -799,6 +842,338 @@ const OrganizationDashboard = () => {
     );
 };
 
+// ─── Admin Daily Intelligence Boxes ──────────────────────────────────────────
+
+const AdminDailyIntelligence = ({
+    billingRecords,
+    allExpenses,
+    appointments,
+    patients,
+    selectedDate,
+    periodMode,
+    dateRange,
+}: {
+    billingRecords: (BillingRecord & { id: string })[];
+    allExpenses: any[];
+    appointments: (Appointment & { id: string })[];
+    patients: (Patient & { id: string })[];
+    selectedDate?: Date;
+    periodMode?: 'day' | 'month' | 'year';
+    dateRange?: DateRange;
+}) => {
+    const [showPatients, setShowPatients] = React.useState(false);
+    const [showPurchases, setShowPurchases] = React.useState(false);
+    const [showExpenses, setShowExpenses] = React.useState(false);
+
+    const patientsMap = React.useMemo(() => new Map(patients.map(p => [p.mobileNumber, p])), [patients]);
+
+    const dateFilter = React.useCallback((dateStr: string | undefined) => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        
+        if (dateRange?.from && dateRange?.to) {
+            return isWithinInterval(d, { start: startOfDay(dateRange.from), end: endOfDay(dateRange.to) });
+        }
+        
+        if (!selectedDate || !periodMode) return true; // Fallback if no filter provided
+
+        if (periodMode === 'day') return startOfDay(d).getTime() === startOfDay(selectedDate).getTime();
+        if (periodMode === 'month') return isSameMonth(d, selectedDate) && isSameYear(d, selectedDate);
+        if (periodMode === 'year') return isSameYear(d, selectedDate);
+        return false;
+    }, [selectedDate, periodMode, dateRange]);
+
+    // Today's patients from appointments
+    const todayPatients = React.useMemo(() => {
+        const filtered = appointments.filter(a => dateFilter(a.appointmentDateTime));
+        const uniqueMap = new Map<string, { name: string; mobile: string; status: string; time: string }>();
+        filtered.forEach(a => {
+            const patient = patientsMap.get(a.patientMobileNumber);
+            if (!uniqueMap.has(a.patientMobileNumber)) {
+                uniqueMap.set(a.patientMobileNumber, {
+                    name: patient?.name || 'Unknown',
+                    mobile: a.patientMobileNumber,
+                    status: a.status,
+                    time: format(new Date(a.appointmentDateTime), 'h:mm a'),
+                });
+            }
+        });
+        return Array.from(uniqueMap.values());
+    }, [appointments, dateFilter, patientsMap]);
+
+    // Today's billing/purchases
+    const todayPurchases = React.useMemo(() => {
+        return billingRecords.filter(r => dateFilter(r.timestamp || r.billingDate)).map(r => ({
+            id: r.id,
+            patientName: r.patientName || 'Walk-in',
+            total: r.grandTotal ?? r.totalAmount ?? ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0)),
+            consultation: r.consultationCharges || 0,
+            procedure: r.procedureCharges || 0,
+            medicine: r.medicineCharges || 0,
+            time: r.timestamp || r.billingDate ? format(new Date(r.timestamp || r.billingDate || ''), 'h:mm a') : '',
+        }));
+    }, [billingRecords, dateFilter]);
+
+    const totalPurchases = todayPurchases.reduce((acc, p) => acc + p.total, 0);
+
+    // Today's expenses
+    const todayExpenses = React.useMemo(() => {
+        return allExpenses.filter((e: any) => dateFilter(e.timestamp || e.date || e.createdAt)).map((e: any) => ({
+            id: e.id,
+            description: e.description || e.category || 'Misc Expense',
+            category: e.category || 'General',
+            amount: e.amount || 0,
+            time: (e.timestamp || e.date || e.createdAt) ? format(new Date(e.timestamp || e.date || e.createdAt), 'h:mm a') : '',
+        }));
+    }, [allExpenses, dateFilter]);
+
+    const totalExpenses = todayExpenses.reduce((acc, e) => acc + e.amount, 0);
+
+    return (
+        <>
+            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
+                {/* Patients Today */}
+                <Card
+                    className="border-none bg-gradient-to-br from-sky-50 to-cyan-50/50 shadow-xl shadow-sky-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-sky-100/30 cursor-pointer"
+                    onClick={() => setShowPatients(true)}
+                >
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-sky-600 text-white rounded-xl shadow-lg shadow-sky-200"><Users className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-sky-600/60 leading-none">Patient Traffic</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                {todayPatients.length}
+                            </div>
+                            <p className="text-[10px] font-bold text-sky-600/80 uppercase tracking-tighter">
+                                Patients Visited Today
+                            </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-sky-500 group-hover:text-sky-700 transition-colors">
+                            <span>Click to view details</span>
+                            <ArrowRight className="h-3 w-3" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Purchases Today */}
+                <Card
+                    className="border-none bg-gradient-to-br from-amber-50 to-yellow-50/50 shadow-xl shadow-amber-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-amber-100/30 cursor-pointer"
+                    onClick={() => setShowPurchases(true)}
+                >
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-200"><Receipt className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-600/60 leading-none">Billing Activity</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {totalPurchases.toLocaleString()}
+                            </div>
+                            <p className="text-[10px] font-bold text-amber-600/80 uppercase tracking-tighter">
+                                {todayPurchases.length} Bills Generated
+                            </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-amber-500 group-hover:text-amber-700 transition-colors">
+                            <span>Click to view breakdown</span>
+                            <ArrowRight className="h-3 w-3" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Expenses Today */}
+                <Card
+                    className="border-none bg-gradient-to-br from-rose-50 to-pink-50/50 shadow-xl shadow-rose-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-rose-100/30 cursor-pointer"
+                    onClick={() => setShowExpenses(true)}
+                >
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-rose-600 text-white rounded-xl shadow-lg shadow-rose-200"><CircleDollarSign className="h-5 w-5" /></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Expense Tracker</span>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                                Rs {totalExpenses.toLocaleString()}
+                            </div>
+                            <p className="text-[10px] font-bold text-rose-600/80 uppercase tracking-tighter">
+                                {todayExpenses.length} Expense Entries
+                            </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-rose-500 group-hover:text-rose-700 transition-colors">
+                            <span>Click to view expenses</span>
+                            <ArrowRight className="h-3 w-3" />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* ── Patients Detail Dialog ── */}
+            <Dialog open={showPatients} onOpenChange={setShowPatients}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-sky-600" />
+                            Today's Patient Traffic
+                        </DialogTitle>
+                        <DialogDescription>
+                            {todayPatients.length} unique patients visited for {dateRange?.from && dateRange?.to ? `${format(dateRange.from, 'PPP')} - ${format(dateRange.to, 'PPP')}` : format(selectedDate || new Date(), 'PPP')}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4">
+                        {todayPatients.length === 0 ? (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <Users className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                                <p className="text-sm">No patients recorded for this period.</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="font-black text-xs uppercase">#</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Patient</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Mobile</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Time</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Status</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {todayPatients.map((p, i) => (
+                                        <TableRow key={p.mobile}>
+                                            <TableCell className="font-bold text-slate-400">{i + 1}</TableCell>
+                                            <TableCell className="font-semibold">{p.name}</TableCell>
+                                            <TableCell className="text-muted-foreground text-xs">{p.mobile}</TableCell>
+                                            <TableCell className="text-xs">{p.time}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={p.status === 'Completed' ? 'default' : 'secondary'} className="text-[10px]">
+                                                    {p.status}
+                                                </Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Purchases Detail Dialog ── */}
+            <Dialog open={showPurchases} onOpenChange={setShowPurchases}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Receipt className="h-5 w-5 text-amber-600" />
+                            Today's Billing & Purchases
+                        </DialogTitle>
+                        <DialogDescription>
+                            {todayPurchases.length} bills totalling Rs {totalPurchases.toLocaleString()} for {dateRange?.from && dateRange?.to ? `${format(dateRange.from, 'PPP')} - ${format(dateRange.to, 'PPP')}` : format(selectedDate || new Date(), 'PPP')}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4">
+                        {todayPurchases.length === 0 ? (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <Receipt className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                                <p className="text-sm">No billing records for this period.</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="font-black text-xs uppercase">#</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Patient</TableHead>
+                                        <TableHead className="font-black text-xs uppercase text-right">Consultation</TableHead>
+                                        <TableHead className="font-black text-xs uppercase text-right">Procedure</TableHead>
+                                        <TableHead className="font-black text-xs uppercase text-right">Medicine</TableHead>
+                                        <TableHead className="font-black text-xs uppercase text-right">Total</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Time</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {todayPurchases.map((p, i) => (
+                                        <TableRow key={p.id}>
+                                            <TableCell className="font-bold text-slate-400">{i + 1}</TableCell>
+                                            <TableCell className="font-semibold">{p.patientName}</TableCell>
+                                            <TableCell className="text-right text-xs">Rs {p.consultation.toLocaleString()}</TableCell>
+                                            <TableCell className="text-right text-xs">Rs {p.procedure.toLocaleString()}</TableCell>
+                                            <TableCell className="text-right text-xs">Rs {p.medicine.toLocaleString()}</TableCell>
+                                            <TableCell className="text-right font-bold text-emerald-600">Rs {p.total.toLocaleString()}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{p.time}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                                <tfoot>
+                                    <TableRow className="bg-slate-50 font-black">
+                                        <TableCell colSpan={5} className="text-right text-xs uppercase tracking-wider">Grand Total</TableCell>
+                                        <TableCell className="text-right text-emerald-700 font-black">Rs {totalPurchases.toLocaleString()}</TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </tfoot>
+                            </Table>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Expenses Detail Dialog ── */}
+            <Dialog open={showExpenses} onOpenChange={setShowExpenses}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CircleDollarSign className="h-5 w-5 text-rose-600" />
+                            Today's Expenses
+                        </DialogTitle>
+                        <DialogDescription>
+                            {todayExpenses.length} entries totalling Rs {totalExpenses.toLocaleString()} for {dateRange?.from && dateRange?.to ? `${format(dateRange.from, 'PPP')} - ${format(dateRange.to, 'PPP')}` : format(selectedDate || new Date(), 'PPP')}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4">
+                        {todayExpenses.length === 0 ? (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <CircleDollarSign className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                                <p className="text-sm">No expenses recorded for this period.</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="font-black text-xs uppercase">#</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Description</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Category</TableHead>
+                                        <TableHead className="font-black text-xs uppercase text-right">Amount</TableHead>
+                                        <TableHead className="font-black text-xs uppercase">Time</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {todayExpenses.map((e, i) => (
+                                        <TableRow key={e.id}>
+                                            <TableCell className="font-bold text-slate-400">{i + 1}</TableCell>
+                                            <TableCell className="font-semibold">{e.description}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-[10px]">{e.category}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold text-rose-600">Rs {e.amount.toLocaleString()}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{e.time}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                                <tfoot>
+                                    <TableRow className="bg-slate-50 font-black">
+                                        <TableCell colSpan={3} className="text-right text-xs uppercase tracking-wider">Total Expenses</TableCell>
+                                        <TableCell className="text-right text-rose-700 font-black">Rs {totalExpenses.toLocaleString()}</TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </tfoot>
+                            </Table>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+};
+
 const AdminDashboard = () => {
     const { searchTerm } = useSearch();
     const firestore = useFirestore();
@@ -932,6 +1307,9 @@ const AdminDashboard = () => {
 
     return (
         <div className="grid flex-1 items-start gap-4 md:gap-8 auto-rows-max">
+            {/* View Mode Switcher */}
+            <AdminViewSwitcher />
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border border-border/50">
                 <div className="space-y-1">
                     <h2 className="text-2xl font-bold tracking-tight">Today's Summary</h2>
@@ -1070,6 +1448,17 @@ const AdminDashboard = () => {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* ─── Admin Daily Intelligence Boxes ──────────────────────────── */}
+            <AdminDailyIntelligence
+                billingRecords={billingRecords || []}
+                allExpenses={allExpenses || []}
+                appointments={appointments || []}
+                patients={patients || []}
+                selectedDate={selectedDate || new Date()}
+                periodMode={periodMode}
+            />
+
             <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
                 <DailySchedule appointments={appointmentsForSelectedDate} date={selectedDate || new Date()} onDateChange={handleDateChange} />
                 <Card>
@@ -1464,11 +1853,13 @@ const ReportsDashboard = () => {
     const usersRef = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
     const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
+    const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
     const { data: allExpenses } = useCollection<any>(expensesRef);
+    const { data: patients } = useCollection<Patient>(patientsRef);
 
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
@@ -1532,8 +1923,168 @@ const ReportsDashboard = () => {
         }).sort((a, b) => b.completed - a.completed);
     }, [users, filteredAppointments]);
 
+    const handleExportXLSX = () => {
+        const rows: any[][] = [];
+        
+        // Header & Summary
+        rows.push(['SkinSmith Clinic - Executive Financial Report']);
+        rows.push([`Generated On: ${format(new Date(), 'PPPP p')}`]);
+        rows.push([`Reporting Period: ${selectedRange?.from ? format(selectedRange.from, 'MMM dd, yyyy') : ''} to ${selectedRange?.to ? format(selectedRange.to, 'MMM dd, yyyy') : ''}`]);
+        rows.push([]);
+        
+        rows.push(['OVERVIEW METRICS']);
+        rows.push(['Metric', 'Value', 'Unit']);
+        rows.push(['Gross Revenue', financialStats.totalRevenue, 'Rs']);
+        rows.push(['Consultation Fees', financialStats.consultation, 'Rs']);
+        rows.push(['Procedure Charges', financialStats.procedures, 'Rs']);
+        rows.push(['Medicine Sales', financialStats.medicines, 'Rs']);
+        rows.push(['Total Operational Burn', financialStats.totalExpense, 'Rs']);
+        rows.push(['Net Financial Position', financialStats.netProfit, 'Rs']);
+        rows.push([]);
+
+        // Billing Table
+        rows.push(['DETAILED BILLING RECORDS']);
+        rows.push(['Bill ID', 'Patient Name', 'Consultation', 'Procedure', 'Medicine', 'Grand Total', 'Timestamp']);
+        filteredBilling.forEach(b => {
+            const total = b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0));
+            rows.push([
+                b.id || 'N/A',
+                b.patientName || 'Walk-in',
+                b.consultationCharges || 0,
+                b.procedureCharges || 0,
+                b.medicineCharges || 0,
+                total,
+                b.timestamp || b.billingDate ? format(new Date(b.timestamp || b.billingDate || ''), 'MM/dd/yyyy HH:mm') : ''
+            ]);
+        });
+        rows.push([]);
+
+        // Expenses Table
+        rows.push(['EXPENSE LOGS']);
+        rows.push(['Log ID', 'Description', 'Category', 'Amount', 'Date']);
+        filteredExpenses.forEach((e: any) => {
+            rows.push([
+                e.id || 'N/A',
+                e.description || e.category || 'Misc',
+                e.category || 'General',
+                e.amount || 0,
+                e.timestamp || e.date || e.createdAt ? format(new Date(e.timestamp || e.date || e.createdAt), 'MM/dd/yyyy') : ''
+            ]);
+        });
+        rows.push([]);
+
+        // Staff Table
+        rows.push(['STAFF PERFORMANCE']);
+        rows.push(['Employee', 'Role', 'Appointments Completed', 'Total Targeted', 'Efficiency %']);
+        employeePerformance.forEach(emp => {
+            rows.push([emp.name, emp.role, emp.completed, emp.appointments, emp.efficiency]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Financial Data");
+        
+        // Auto-sizing columns roughly
+        const wscols = [{wch:15}, {wch:25}, {wch:15}, {wch:15}, {wch:15}, {wch:15}, {wch:20}];
+        ws['!cols'] = wscols;
+
+        XLSX.writeFile(wb, `SkinSmith_Report_${format(selectedRange?.from || new Date(), 'yyyyMMdd')}.xlsx`);
+    };
+
+    const handleExportPDF = () => {
+        const doc = new jsPDF() as any;
+        const pageTitle = "SkinSmith Clinic - Executive Report";
+        const dateStr = `Period: ${selectedRange?.from ? format(selectedRange.from, 'MMM dd, yyyy') : ''} - ${selectedRange?.to ? format(selectedRange.to, 'MMM dd, yyyy') : ''}`;
+
+        // Header Design
+        doc.setFontSize(22);
+        doc.setTextColor(79, 70, 229); // Indigo 600
+        doc.text(pageTitle, 14, 22);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(dateStr, 14, 30);
+        doc.text(`Exported on: ${format(new Date(), 'PPPP p')}`, 14, 35);
+
+        // Summary Boxes representation
+        doc.setFillColor(248, 250, 252); // Slate 50
+        doc.rect(14, 45, 182, 40, 'F');
+        
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.text("Financial Summary", 20, 55);
+        
+        doc.setFontSize(10);
+        doc.text(`Gross Revenue: Rs ${financialStats.totalRevenue.toLocaleString()}`, 20, 65);
+        doc.text(`Total Expenses: Rs ${financialStats.totalExpense.toLocaleString()}`, 20, 75);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Net Position: Rs ${financialStats.netProfit.toLocaleString()}`, 120, 70);
+        doc.setFont("helvetica", "normal");
+
+        // Billing Table
+        autoTable(doc, {
+            startY: 95,
+            head: [['#', 'Patient', 'Consultation', 'Procedure', 'Medicine', 'Total (Rs)']],
+            body: filteredBilling.map((b, i) => [
+                i + 1,
+                b.patientName || 'Walk-in',
+                b.consultationCharges || 0,
+                b.procedureCharges || 0,
+                b.medicineCharges || 0,
+                (b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0))).toLocaleString()
+            ]),
+            theme: 'grid',
+            headStyles: { fillColor: [79, 70, 229], fontSize: 10 },
+            styles: { fontSize: 8 },
+            margin: { top: 10 }
+        });
+
+        doc.addPage();
+        doc.text("Expense Details & Staff Productivity", 14, 20);
+
+        // Expenses Table
+        autoTable(doc, {
+            startY: 30,
+            head: [['#', 'Description', 'Category', 'Amount (Rs)', 'Date']],
+            body: filteredExpenses.map((e: any, i: number) => [
+                i + 1,
+                e.description || e.category || 'Misc',
+                e.category || 'General',
+                e.amount?.toLocaleString() || '0',
+                e.timestamp || e.date || e.createdAt ? format(new Date(e.timestamp || e.date || e.createdAt), 'MMM dd, yyyy') : ''
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [225, 29, 72] }, // Rose 600
+            styles: { fontSize: 8 }
+        });
+
+        // Staff Productivity
+        autoTable(doc, {
+            startY: ((doc as any).lastAutoTable?.cursor?.y || 150) + 20,
+            head: [['Employee', 'Role', 'Appointments', 'Efficiency']],
+            body: employeePerformance.map(emp => [
+                emp.name,
+                emp.role,
+                `${emp.completed} / ${emp.appointments}`,
+                `${emp.efficiency}%`
+            ]),
+            headStyles: { fillColor: [15, 23, 42] }, // Slate 900
+            styles: { fontSize: 9 }
+        });
+
+        doc.save(`SkinSmith_Full_Report_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    };
+
+    const handleExport = () => {
+        // Fallback or trigger CSV/XLSX
+        handleExportXLSX();
+    };
+
     return (
         <div className="grid flex-1 items-start gap-8 auto-rows-max animate-in fade-in duration-700">
+            {/* View Mode Switcher */}
+            <AdminViewSwitcher />
+
             {/* Executive Summary Header */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-200/60 shadow-sm">
                 <div className="space-y-1">
@@ -1542,9 +2093,21 @@ const ReportsDashboard = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
-                    <Button variant="outline" className="rounded-2xl border-slate-200 h-12 px-6 font-black hover:bg-white shadow-sm transition-all active:scale-95">
-                        <Download className="mr-2 h-4 w-4" /> Export
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button className="relative h-12 px-6 rounded-2xl bg-indigo-600 text-white font-black shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 border-none">
+                                <Download className="mr-2 h-4 w-4" /> Export Report
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 rounded-xl border-slate-200 shadow-xl">
+                            <DropdownMenuItem onClick={handleExportXLSX} className="py-3 font-bold cursor-pointer hover:bg-emerald-50 text-emerald-700">
+                                <FileText className="mr-2 h-4 w-4" /> Download as Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportPDF} className="py-3 font-bold cursor-pointer hover:bg-rose-50 text-rose-700">
+                                <FileBarChart className="mr-2 h-4 w-4" /> Download as PDF (.pdf)
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 
@@ -1596,14 +2159,23 @@ const ReportsDashboard = () => {
                 </Card>
             </div>
 
+            {/* Admin Daily Intelligence (Summary Boxes) */}
+            <AdminDailyIntelligence
+                billingRecords={billingRecords || []}
+                allExpenses={allExpenses || []}
+                appointments={appointments || []}
+                patients={patients || []}
+                dateRange={selectedRange}
+            />
+
             {/* Performance & Attribution Grid */}
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-4 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden">
+            <div className="grid gap-8 lg:grid-cols-7">
+                <Card className="lg:col-span-4 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
                     <CardHeader className="p-8 pb-0">
                         <div className="flex items-center justify-between">
                             <div>
                                 <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Staff Productivity</CardTitle>
-                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Efficiency Metrics</CardDescription>
+                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Efficiency Metrics for Selected Period</CardDescription>
                             </div>
                             <Users2 className="h-6 w-6 text-slate-300" />
                         </div>
@@ -1613,27 +2185,34 @@ const ReportsDashboard = () => {
                             <TableHeader>
                                 <TableRow className="hover:bg-transparent border-slate-100">
                                     <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Employee</TableHead>
-                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Completed</TableHead>
-                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Efficiency</TableHead>
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Completed Work</TableHead>
+                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Efficiency Score</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {employeePerformance.map((emp) => (
-                                    <TableRow key={emp.id} className="border-slate-50 h-16 hover:bg-slate-50/50 transition-colors">
+                                    <TableRow key={emp.id} className="border-slate-50 h-20 hover:bg-slate-50/50 transition-colors">
                                         <TableCell>
-                                            <div className="flex flex-col">
-                                                <span className="font-black text-slate-900">{emp.name}</span>
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="h-10 w-10 border-2 border-slate-100 shadow-sm">
+                                                    <AvatarFallback className="bg-slate-900 text-white font-black text-xs uppercase">{emp.name?.slice(0, 2)}</AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex flex-col">
+                                                    <span className="font-black text-slate-900">{emp.name}</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center text-emerald-600 font-black">
-                                            {emp.completed} <span className="text-slate-300 font-bold ml-1">/ {emp.appointments}</span>
+                                            {emp.completed} <span className="text-slate-300 font-bold ml-1 text-[10px]">/ {emp.appointments} Total</span>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-3">
-                                                <span className="text-xs font-black text-slate-900">{emp.efficiency}%</span>
-                                                <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${emp.efficiency}%` }} />
+                                                <div className="text-right">
+                                                    <div className="text-lg font-black text-slate-900">{emp.efficiency}%</div>
+                                                </div>
+                                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-full transition-all duration-1000" style={{ width: `${emp.efficiency}%` }} />
                                                 </div>
                                             </div>
                                         </TableCell>
@@ -1644,7 +2223,7 @@ const ReportsDashboard = () => {
                     </CardContent>
                 </Card>
 
-                <Card className="col-span-3 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden">
+                <Card className="lg:col-span-3 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
                     <CardHeader className="p-8 pb-0">
                         <div className="flex items-center justify-between">
                             <div>
@@ -1918,12 +2497,8 @@ export default function Dashboard() {
 
     if (user?.role === 'Operations Manager') return <AdminDashboard />;
 
-    // Main Admin Logic
+    // Main Admin Logic — skip welcome screen, go directly to selected view
     if (isMainAdmin) {
-        if (viewMode === 'none') {
-            return <ViewModeSelection user={user} onSelect={setViewMode} />;
-        }
-
         if (viewMode === 'organization') {
             return <OrganizationDashboard />;
         }
@@ -1932,13 +2507,9 @@ export default function Dashboard() {
             return <AdminDashboard />;
         }
 
-        if (viewMode === 'reports') {
-            return <ReportsDashboard />;
-        }
+        // Default: reports (also handles 'none' and 'reports')
+        return <ReportsDashboard />;
     }
-
-    // Default Fallback for Admins who haven't selected a mode or failed profile
-    if (isMainAdmin) return <ViewModeSelection user={user} onSelect={setViewMode} />;
 
     // Default Fallback for regular accounts with no role or unhandled role
     return (
