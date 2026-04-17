@@ -456,7 +456,7 @@ export default function TodaySummaryPage() {
                     </CardContent>
                 </Card>
 
-                {/* Cash vs Expected Warning */}
+                {/* Cash vs Expected Handover */}
                 {periodMode === 'Day' && Math.abs(parseFloat(cashHandedOver || '0') - stats.expectedCash) > 1 && (
                     <Card className="bg-rose-600 border-none shadow-xl shadow-rose-200 rounded-[2rem] overflow-hidden col-span-1 md:col-span-3 lg:col-span-5 animate-pulse">
                         <CardContent className="p-6 flex items-center justify-between text-white">
@@ -465,15 +465,14 @@ export default function TodaySummaryPage() {
                                     <ShieldAlert className="h-8 w-8" />
                                 </div>
                                 <div>
-                                    <h4 className="text-xl font-black tracking-tight">Cash Discrepancy Alert!</h4>
+                                    <h4 className="text-xl font-black tracking-tight">Handover Discrepancy Alert!</h4>
                                     <p className="font-bold opacity-90 text-sm">
-                                        This cash amount is not given by counter. Net Expected: Rs {stats.expectedCash.toLocaleString()} (Revenue - Expenses)
-                                        {stats.onlineTransferRevenue > 0 && ` | Online Transfer: Rs ${stats.onlineTransferRevenue.toLocaleString()}`}
+                                        The physical cash entered does not match the system record. After deducting all expenses, the counter should have exactly <span className="underline decoration-white/50">Rs {stats.expectedCash.toLocaleString()}</span> for handover.
                                     </p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">System Recorded</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Handover Requirement</span>
                                 <div className="text-2xl font-black">{stats.expectedCash.toLocaleString()} PKR</div>
                             </div>
                         </CardContent>
