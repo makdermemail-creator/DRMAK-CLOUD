@@ -1873,12 +1873,14 @@ const ReportsDashboard = () => {
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
     const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
     const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
+    const closingsRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyClosings') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
     const { data: allExpenses } = useCollection<any>(expensesRef);
     const { data: patients } = useCollection<Patient>(patientsRef);
+    const { data: allClosings } = useCollection<any>(closingsRef);
 
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
@@ -1912,19 +1914,32 @@ const ReportsDashboard = () => {
         });
     }, [appointments, selectedRange]);
 
+    const filteredClosings = React.useMemo(() => {
+        if (!allClosings || !selectedRange?.from || !selectedRange?.to) return allClosings || [];
+        return allClosings.filter((c: any) => {
+            if (!c.date) return false;
+            const date = new Date(c.date);
+            if (isNaN(date.getTime())) return false;
+            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        });
+    }, [allClosings, selectedRange]);
+
     const financialStats = React.useMemo(() => {
         const revenue = filteredBilling.reduce((acc, curr) => acc + (curr.grandTotal || curr.totalAmount || ((curr.consultationCharges || 0) + (curr.procedureCharges || 0) + (curr.medicineCharges || 0))), 0);
         const expense = filteredExpenses.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
+        const physicalCash = filteredClosings.reduce((acc: number, curr: any) => acc + (curr.cashHandedOver || 0), 0);
         
         return {
             totalRevenue: revenue,
             totalExpense: expense,
             netProfit: revenue - expense,
+            physicalCash,
+            cashDifference: physicalCash - (revenue - expense),
             consultation: filteredBilling.reduce((acc, curr) => acc + (curr.consultationCharges || 0), 0),
             procedures: filteredBilling.reduce((acc, curr) => acc + (curr.procedureCharges || 0), 0),
             medicines: filteredBilling.reduce((acc, curr) => acc + (curr.medicineCharges || 0), 0),
         };
-    }, [filteredBilling, filteredExpenses]);
+    }, [filteredBilling, filteredExpenses, filteredClosings]);
 
     const employeePerformance = React.useMemo(() => {
         if (!users || !filteredAppointments) return [];
@@ -1958,7 +1973,9 @@ const ReportsDashboard = () => {
         rows.push(['Procedure Charges', financialStats.procedures, 'Rs']);
         rows.push(['Medicine Sales', financialStats.medicines, 'Rs']);
         rows.push(['Total Operational Burn', financialStats.totalExpense, 'Rs']);
-        rows.push(['Net Financial Position', financialStats.netProfit, 'Rs']);
+        rows.push(['Net Financial Position (System)', financialStats.netProfit, 'Rs']);
+        rows.push(['Physical Cash Handed Over', financialStats.physicalCash, 'Rs']);
+        rows.push(['Cash Discrepancy', financialStats.cashDifference, 'Rs']);
         rows.push([]);
 
         // Billing Table
@@ -2036,8 +2053,13 @@ const ReportsDashboard = () => {
         doc.setFontSize(10);
         doc.text(`Gross Revenue: Rs ${financialStats.totalRevenue.toLocaleString()}`, 20, 65);
         doc.text(`Total Expenses: Rs ${financialStats.totalExpense.toLocaleString()}`, 20, 75);
+        doc.text(`Physical Cash: Rs ${financialStats.physicalCash.toLocaleString()}`, 20, 85);
+
         doc.setFont("helvetica", "bold");
-        doc.text(`Net Position: Rs ${financialStats.netProfit.toLocaleString()}`, 120, 70);
+        doc.text(`Net Position (System): Rs ${financialStats.netProfit.toLocaleString()}`, 120, 70);
+        doc.setTextColor(financialStats.cashDifference >= 0 ? 0 : 200, 0, 0);
+        doc.text(`Discrepancy: Rs ${financialStats.cashDifference.toLocaleString()}`, 120, 80);
+        doc.setTextColor(0);
         doc.setFont("helvetica", "normal");
 
         // Billing Table

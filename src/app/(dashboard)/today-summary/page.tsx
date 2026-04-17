@@ -108,7 +108,25 @@ export default function TodaySummaryPage() {
     const { data: closings, isLoading: closingsLoading } = useCollection<DailyClosing>(closingQuery);
     const existingClosing = closings?.[0];
 
+    const allClosingsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'dailyClosings'));
+    }, [firestore]);
+
+    const { data: allClosings, isLoading: allClosingsLoading } = useCollection<DailyClosing>(allClosingsQuery);
+
     const [sessionUnlocked, setSessionUnlocked] = React.useState(false);
+
+    // Sync state with existing closing
+    React.useEffect(() => {
+        if (existingClosing) {
+            setCashHandedOver(existingClosing.cashHandedOver.toString());
+            setSessionUnlocked(true);
+        } else {
+            setCashHandedOver('');
+            setSessionUnlocked(false);
+        }
+    }, [existingClosing]);
 
     const isReportUnlocked = (sessionUnlocked || periodMode !== 'Day');
 
@@ -147,6 +165,26 @@ export default function TodaySummaryPage() {
             return false;
         });
     }, [allRecords, periodMode, selectedDate, selectedMonth, selectedYear, selectedRange]);
+
+    const filteredClosings = React.useMemo(() => {
+        if (!allClosings) return [];
+        return allClosings.filter(c => {
+            const date = safeDate(c.date);
+            if (!date) return false;
+            
+            if (periodMode === 'Day') {
+                return isSameDay(date, selectedDate);
+            } else if (periodMode === 'Month') {
+                const targetMonth = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1);
+                return isSameMonth(date, targetMonth) && isSameYear(date, targetMonth);
+            } else if (periodMode === 'Year') {
+                return isSameYear(date, new Date(parseInt(selectedYear), 0));
+            } else if (periodMode === 'Range' && selectedRange?.from && selectedRange?.to) {
+                return isWithinInterval(date, { start: startOfDay(selectedRange.from), end: endOfDay(selectedRange.to) });
+            }
+            return false;
+        });
+    }, [allClosings, periodMode, selectedDate, selectedMonth, selectedYear, selectedRange]);
 
     const filteredExpenses = React.useMemo(() => {
         if (!allExpenses) return [];
@@ -228,6 +266,8 @@ export default function TodaySummaryPage() {
         // Net Cash Handover = (Cash + Nill Revenue) - Total Expenses
         const netExpectedCash = Math.max(0, expectedCash - totalExpenses);
 
+        const totalPhysicalCash = filteredClosings.reduce((sum, c) => sum + (c.cashHandedOver || 0), 0);
+
         return {
             totalRevenue,
             totalExpenses,
@@ -241,10 +281,11 @@ export default function TodaySummaryPage() {
             expenseCategories: Object.entries(expenseCategoriesMap).map(([name, amount]) => ({ name, amount })),
             totalTransactions: filteredRecords.length,
             expectedCash: netExpectedCash,
+            totalPhysicalCash,
             onlineTransferRevenue,
             totalTax
         };
-    }, [filteredRecords, filteredExpenses]);
+    }, [filteredRecords, filteredExpenses, filteredClosings]);
 
     const handleSaveCash = async () => {
         if (!firestore || !user || !cashHandedOver) return;
@@ -277,7 +318,7 @@ export default function TodaySummaryPage() {
         window.print();
     };
 
-    if (billingLoading || closingsLoading || expensesLoading) {
+    if (billingLoading || closingsLoading || expensesLoading || allClosingsLoading) {
         return (
             <div className="flex flex-col items-center justify-center h-[400px] gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -348,9 +389,9 @@ export default function TodaySummaryPage() {
                                     <p className="text-sm font-bold text-slate-500 opacity-60">Enter the exact physical cash amount handed over at session close.</p>
                                 </div>
                                     <div className="flex flex-col gap-1 w-full md:w-auto">
-                                        <div className="flex items-center justify-between px-2">
+                                        <div className="flex items-center justify-between px-2 gap-4">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Physical Cash Input</span>
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Net Expected (After Exp): Rs {stats.expectedCash.toLocaleString()}</span>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">Net Expected (After Exp): Rs {stats.expectedCash.toLocaleString()}</span>
                                         </div>
                                         <div className="relative flex-1 md:w-64">
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rs</div>
@@ -402,9 +443,15 @@ export default function TodaySummaryPage() {
                                 <h1 className="text-4xl font-black uppercase tracking-tight">Verification Report</h1>
                                 <p className="text-sm font-bold text-slate-500 font-mono">Date Reference: {selectedDateKey}</p>
                             </div>
-                            <div className="text-right">
-                                <p className="text-xs font-black uppercase text-slate-400 mb-1">Physical Cash Handed Over</p>
-                                <p className="text-6xl font-black text-black tracking-tighter">Rs {parseFloat(cashHandedOver || '0').toLocaleString()}</p>
+                            <div className="text-right flex items-center gap-8">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-black uppercase text-slate-400 mb-1">System Record</p>
+                                    <p className="text-2xl font-black text-slate-400 tracking-tighter">Rs {stats.expectedCash.toLocaleString()}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs font-black uppercase text-indigo-600 mb-1">Physical Cash Handed Over</p>
+                                    <p className="text-6xl font-black text-black tracking-tighter">Rs {(periodMode === 'Day' ? parseFloat(cashHandedOver || '0') : stats.totalPhysicalCash).toLocaleString()}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
