@@ -365,7 +365,7 @@ const NavContent = () => {
                                         return item.isMenu ? (
                                             <DropdownMenu key={item.id}>
                                                 <SidebarMenuItem>
-                                                    <Link href={item.href}>
+                                                    <Link prefetch={false} href={item.href}>
                                                         <DropdownMenuTrigger asChild>
                                                             <SidebarMenuButton
                                                                 isActive={isActive}
@@ -389,14 +389,14 @@ const NavContent = () => {
                                                 <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                                                     {item.subItems?.map(subItem => (
                                                         <DropdownMenuItem key={subItem.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
-                                                            <Link href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
+                                                            <Link prefetch={false} href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
                                                         </DropdownMenuItem>
                                                     ))}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         ) : (
                                             <SidebarMenuItem key={item.id}>
-                                                <Link href={item.href}>
+                                                <Link prefetch={false} href={item.href}>
                                                     <SidebarMenuButton
                                                         isActive={isActive}
                                                         tooltip={item.label}
@@ -445,7 +445,7 @@ const NavContent = () => {
                         <SidebarMenu className="gap-1">
                             {overviewItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
-                                    <Link href={item.href}>
+                                    <Link prefetch={false} href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
                                             "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
                                             pathname === item.href 
@@ -468,7 +468,7 @@ const NavContent = () => {
                         <SidebarMenu className="gap-1">
                             {toolItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
-                                    <Link href={item.href}>
+                                    <Link prefetch={false} href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
                                             "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
                                             pathname === item.href 
@@ -491,7 +491,7 @@ const NavContent = () => {
                         <SidebarMenu className="gap-1">
                             {insightItems.map((item) => (
                                 <SidebarMenuItem key={item.id}>
-                                    <Link href={item.href}>
+                                    <Link prefetch={false} href={item.href}>
                                         <SidebarMenuButton isActive={pathname === item.href} tooltip={item.label} className={cn(
                                             "w-full transition-all duration-300 rounded-xl px-4 h-11 group/btn",
                                             pathname === item.href 
@@ -518,7 +518,7 @@ const NavContent = () => {
                 return item.isMenu ? (
                     <DropdownMenu key={item.id}>
                         <SidebarMenuItem>
-                            <Link href={item.href}>
+                            <Link prefetch={false} href={item.href}>
                                 <DropdownMenuTrigger asChild>
                                     <SidebarMenuButton
                                         isActive={isActive}
@@ -542,14 +542,14 @@ const NavContent = () => {
                         <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                             {item.subItems?.map(subItem => (
                                 <DropdownMenuItem key={subItem.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
-                                    <Link href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
+                                    <Link prefetch={false} href={subItem.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === subItem.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{subItem.label}</Link>
                                 </DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 ) : (
                     <SidebarMenuItem key={item.id}>
-                        <Link href={item.href}>
+                        <Link prefetch={false} href={item.href}>
                             <SidebarMenuButton
                                 isActive={isActive}
                                 tooltip={item.label}
@@ -589,7 +589,7 @@ const NavContent = () => {
                     <DropdownMenuContent side="right" align="start" className="min-w-[200px] border-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl p-2 ml-4 animate-in fade-in zoom-in-95 duration-200">
                         {moreMenuItems.map(item => (
                             <DropdownMenuItem key={item.href} asChild className="rounded-lg mb-1 focus:bg-indigo-50 focus:text-indigo-600 dark:focus:bg-indigo-950">
-                                <Link href={item.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === item.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{item.label}</Link>
+                                <Link prefetch={false} href={item.href} className={cn("px-3 py-2 text-sm transition-colors", pathname === item.href && 'bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300')}>{item.label}</Link>
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuContent>
@@ -630,7 +630,7 @@ export default function Nav() {
             <SidebarFooter className="p-3 border-t border-indigo-50/50 dark:border-slate-800/50 bg-indigo-50/20 dark:bg-slate-900/20">
                 <SidebarMenu className="gap-1">
                     <SidebarMenuItem>
-                        <Link href="/settings">
+                        <Link prefetch={false} href="/settings">
                             <SidebarMenuButton className="h-10 rounded-xl hover:bg-white dark:hover:bg-slate-800 transition-all duration-300 group" tooltip="Settings">
                                 <Settings className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
                                 <span className="text-sm font-medium text-slate-600 group-hover:text-slate-900 dark:group-hover:text-slate-200">Settings</span>
