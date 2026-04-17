@@ -513,71 +513,91 @@ export default function BillingPage() {
 
         try {
             await runTransaction(firestore, async (transaction) => {
-                const pharmacyItems = items.filter(i => i.type === 'pharmacy' && i.supplierId && i.productId);
-                const oldPharmacyItems = oldItems.filter(i => i.type === 'pharmacy' && i.supplierId && i.productId);
+                const pharmacyItems = items.filter(i => i.type === 'pharmacy' && i.supplierId && (i.productId || i.id));
+                const oldPharmacyItems = oldItems.filter(i => i.type === 'pharmacy' && i.supplierId && (i.productId || i.id));
+
+                if (pharmacyItems.length === 0 && oldPharmacyItems.length === 0) return;
 
                 // Map of supplierId -> { productId: adjustmentAmount }
                 const adjustments: Record<string, Record<string, number>> = {};
 
+                const processItem = (item: BillItem, multiplier: number) => {
+                    const sId = item.supplierId!;
+                    const pId = item.productId || item.id;
+                    if (!adjustments[sId]) adjustments[sId] = {};
+                    adjustments[sId][pId] = (adjustments[sId][pId] || 0) + (item.qty * multiplier);
+                };
+
                 if (type === 'deduct') {
-                    pharmacyItems.forEach(item => {
-                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
-                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) + item.qty;
-                    });
+                    pharmacyItems.forEach(item => processItem(item, 1));
                 } else if (type === 'return') {
-                    pharmacyItems.forEach(item => {
-                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
-                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) - item.qty;
-                    });
+                    pharmacyItems.forEach(item => processItem(item, -1));
                 } else if (type === 'diff') {
-                    // Reduce stock for new/increased qty
                     pharmacyItems.forEach(item => {
-                        if (!adjustments[item.supplierId!]) adjustments[item.supplierId!] = {};
-                        const oldItem = oldPharmacyItems.find(oi => oi.supplierId === item.supplierId && oi.productId === item.productId);
+                        const oldItem = oldPharmacyItems.find(oi => oi.supplierId === item.supplierId && (oi.productId === item.productId || oi.id === item.id));
                         const oldQty = oldItem ? oldItem.qty : 0;
-                        adjustments[item.supplierId!][item.productId!] = (adjustments[item.supplierId!][item.productId!] || 0) + (item.qty - oldQty);
+                        processItem(item, 1); // Add new qty
+                        if (oldItem) processItem(oldItem, -1); // Subtract old qty
                     });
-                    // Return stock for removed items completely
+                    // Handle items removed completely
                     oldPharmacyItems.forEach(oldItem => {
-                        const stillExists = pharmacyItems.find(i => i.supplierId === oldItem.supplierId && i.productId === oldItem.productId);
-                        if (!stillExists) {
-                            if (!adjustments[oldItem.supplierId!]) adjustments[oldItem.supplierId!] = {};
-                            adjustments[oldItem.supplierId!][oldItem.productId!] = (adjustments[oldItem.supplierId!][oldItem.productId!] || 0) - oldItem.qty;
-                        }
+                        const stillExists = pharmacyItems.find(i => i.supplierId === oldItem.supplierId && (i.productId === oldItem.productId || i.id === oldItem.id));
+                        if (!stillExists) processItem(oldItem, -1);
                     });
                 }
 
-                // 1. COLLECT ALL READS FIRST (Firestore requirement: all reads before all writes)
-                const supplierDataMap: Record<string, Supplier> = {};
+                // Collect all needed reads
+                const supplierDataMap: Record<string, any> = {};
+                const pharmacyItemDocs: Record<string, any> = {};
+
                 for (const supplierId of Object.keys(adjustments)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
                     const supplierDoc = await transaction.get(supplierDocRef);
                     if (supplierDoc.exists()) {
-                        supplierDataMap[supplierId] = supplierDoc.data() as Supplier;
+                        supplierDataMap[supplierId] = supplierDoc.data();
+                    }
+
+                    // Also fetch individual pharmacyItems doc (used by POS)
+                    for (const productId of Object.keys(adjustments[supplierId])) {
+                        const pItemRef = doc(firestore, 'pharmacyItems', productId);
+                        const pItemDoc = await transaction.get(pItemRef);
+                        if (pItemDoc.exists()) {
+                            pharmacyItemDocs[productId] = pItemDoc.data();
+                        }
                     }
                 }
 
-                // 2. PERFORM ALL WRITES AFTER READS
+                // Perform Writes
                 for (const supplierId of Object.keys(supplierDataMap)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
-                    const supplierData = supplierDataMap[supplierId];
-                    const products = supplierData.products || [];
+                    const products = supplierDataMap[supplierId].products || [];
                     const supplierAdjustments = adjustments[supplierId];
 
-                    const updatedProducts = products.map(p => {
+                    const updatedProducts = products.map((p: any) => {
                         if (supplierAdjustments[p.id]) {
                             const currentQty = Number(p.quantity) || 0;
-                            const adjustment = Number(supplierAdjustments[p.id]) || 0;
-                            return { ...p, quantity: Math.max(0, currentQty - adjustment) };
+                            const adj = Number(supplierAdjustments[p.id]) || 0;
+                            return { ...p, quantity: Math.max(0, currentQty - adj) };
                         }
                         return p;
                     });
 
                     transaction.update(supplierDocRef, { products: updatedProducts });
+
+                    // Sync to pharmacyItems collection
+                    for (const productId of Object.keys(supplierAdjustments)) {
+                        if (pharmacyItemDocs[productId]) {
+                            const currentQty = Number(pharmacyItemDocs[productId].quantity) || 0;
+                            const adj = Number(supplierAdjustments[productId]) || 0;
+                            transaction.update(doc(firestore, 'pharmacyItems', productId), { 
+                                quantity: Math.max(0, currentQty - adj) 
+                            });
+                        }
+                    }
                 }
             });
         } catch (error) {
-            console.error('Error updating inventory stock:', error);
+            console.error('Critical Error updating inventory stock:', error);
             throw error;
         }
     };
@@ -881,7 +901,7 @@ export default function BillingPage() {
                                         <SelectItem value="Cash">Cash (18% Tax — Consultation 0%)</SelectItem>
                                         <SelectItem value="Card">Card (5% Tax — Consultation 0%)</SelectItem>
                                         <SelectItem value="Online">Online Transfer (5% Tax — Consultation 0%)</SelectItem>
-                                        <SelectItem value="Nill">Nill (0% Tax)</SelectItem>
+                                        <SelectItem value="Nill">Complementary (No Collection - 0% Tax)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

@@ -74,7 +74,7 @@ import {
     Factory,
     Activity,
 } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Supplier, SupplierProduct, SupplierType } from '@/lib/types';
@@ -191,16 +191,39 @@ export default function SupplierPage() {
         }
         setIsSaving(true);
         try {
+            let supplierId = editingSupplier?.id;
             if (editingSupplier) {
                 await updateDocumentNonBlocking(doc(firestore, 'suppliers', editingSupplier.id), formData);
                 toast({ title: 'Supplier Updated', description: `${formData.name} has been updated.` });
             } else {
-                await addDocumentNonBlocking(suppliersRef, {
+                const res = await addDocumentNonBlocking(suppliersRef, {
                     ...formData,
                     createdAt: new Date().toISOString(),
                 });
+                supplierId = (res as any)?.id;
                 toast({ title: 'Supplier Added', description: `${formData.name} has been added to Suppliers.` });
             }
+
+            // Sync products to pharmacyItems collection for POS visibility
+            if (formData.products && formData.products.length > 0) {
+                for (const p of formData.products) {
+                    const pDocRef = doc(firestore, 'pharmacyItems', p.id);
+                    await setDocumentNonBlocking(pDocRef, {
+                        id: p.id,
+                        productName: p.name,
+                        sellingPrice: p.sellingPrice || 0,
+                        purchasePrice: p.price || 0,
+                        quantity: p.quantity || 0,
+                        supplier: formData.name,
+                        supplierId: supplierId || editingSupplier?.id,
+                        category: formData.category,
+                        rack: p.rack || '',
+                        expiryDate: p.expiryDate || '',
+                        active: true
+                    }, { merge: true });
+                }
+            }
+
             setDialogOpen(false);
         } finally {
             setIsSaving(false);

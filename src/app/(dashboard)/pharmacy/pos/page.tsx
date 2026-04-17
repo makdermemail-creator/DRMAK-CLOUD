@@ -109,33 +109,53 @@ export default function POSPage() {
                     }
                 });
 
-                // 1. COLLECT ALL READS FIRST (Firestore requirement: all reads before all writes)
+                // 1. COLLECT ALL READS FIRST
                 const supplierDataMap: Record<string, Supplier> = {};
+                const pharmacyItemDocs: Record<string, any> = {};
+
                 for (const supplierId of Object.keys(adjustments)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
                     const supplierDoc = await transaction.get(supplierDocRef);
                     if (supplierDoc.exists()) {
                         supplierDataMap[supplierId] = supplierDoc.data() as Supplier;
                     }
+
+                    for (const productId of Object.keys(adjustments[supplierId])) {
+                        const pItemRef = doc(firestore, 'pharmacyItems', productId);
+                        const pItemDoc = await transaction.get(pItemRef);
+                        if (pItemDoc.exists()) {
+                            pharmacyItemDocs[productId] = pItemDoc.data();
+                        }
+                    }
                 }
 
-                // 2. PERFORM ALL WRITES AFTER READS
+                // 2. PERFORM ALL WRITES
                 for (const supplierId of Object.keys(supplierDataMap)) {
                     const supplierDocRef = doc(firestore, 'suppliers', supplierId);
-                    const supplierData = supplierDataMap[supplierId];
-                    const products = supplierData.products || [];
+                    const products = supplierDataMap[supplierId].products || [];
                     const supplierAdjustments = adjustments[supplierId];
 
                     const updatedProducts = products.map(p => {
                         if (supplierAdjustments[p.id]) {
                             const currentQty = Number(p.quantity) || 0;
-                            const adjustment = Number(supplierAdjustments[p.id]) || 0;
-                            return { ...p, quantity: Math.max(0, currentQty - adjustment) };
+                            const adj = Number(supplierAdjustments[p.id]) || 0;
+                            return { ...p, quantity: Math.max(0, currentQty - adj) };
                         }
                         return p;
                     });
 
                     transaction.update(supplierDocRef, { products: updatedProducts });
+
+                    // Sync to pharmacyItems collection
+                    for (const productId of Object.keys(supplierAdjustments)) {
+                        if (pharmacyItemDocs[productId]) {
+                            const currentQty = Number(pharmacyItemDocs[productId].quantity) || 0;
+                            const adj = Number(supplierAdjustments[productId]) || 0;
+                            transaction.update(doc(firestore, 'pharmacyItems', productId), { 
+                                quantity: Math.max(0, currentQty - adj) 
+                            });
+                        }
+                    }
                 }
             });
         } catch (error) {

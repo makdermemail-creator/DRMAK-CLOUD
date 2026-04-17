@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,7 +123,21 @@ export default function InventoryPage() {
                     return p;
                 });
                 updateDocumentNonBlocking(doc(firestore, 'suppliers', supplier.id), { products: newProducts });
-                toast({ title: 'Inventory Updated', description: 'Changes synced to supplier records.' });
+                
+                // Sync to pharmacyItems for POS
+                const pDocRef = doc(firestore, 'pharmacyItems', editingItem.id);
+                setDocumentNonBlocking(pDocRef, {
+                    productName: editingItem.name,
+                    sellingPrice: numSellingPrice,
+                    purchasePrice: numPrice,
+                    quantity: numQty,
+                    rack: rack,
+                    supplier: supplier.name,
+                    supplierId: supplier.id,
+                    active: true
+                }, { merge: true });
+
+                toast({ title: 'Inventory Updated', description: 'Changes synced to supplier and POS records.' });
             }
             setIsDialogOpen(false);
         } catch (error: any) {

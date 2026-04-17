@@ -205,7 +205,7 @@ export default function TodaySummaryPage() {
 
             // Count payments
             const method = (record.paymentMethod || 'Unknown').toLowerCase();
-            if (method === 'cash' || method === 'nill') {
+            if (method === 'cash') {
                 expectedCash += record.grandTotal || 0;
             }
             if (method === 'online') {
@@ -225,6 +225,9 @@ export default function TodaySummaryPage() {
             expenseCategoriesMap[cat] = (expenseCategoriesMap[cat] || 0) + (e.amount || 0);
         });
 
+        // Net Cash Handover = (Cash + Nill Revenue) - Total Expenses
+        const netExpectedCash = Math.max(0, expectedCash - totalExpenses);
+
         return {
             totalRevenue,
             totalExpenses,
@@ -232,12 +235,12 @@ export default function TodaySummaryPage() {
             uniquePatients,
             procedures: Object.entries(proceduresMap).map(([name, data]) => ({ name, ...data })),
             payments: Object.entries(paymentsMap).map(([method, data]) => ({ 
-                method: method === 'Nill' ? 'Cash (Nill)' : method, 
+                method: method === 'Nill' ? 'Complementary (Nill)' : method, 
                 ...data 
             })),
             expenseCategories: Object.entries(expenseCategoriesMap).map(([name, amount]) => ({ name, amount })),
             totalTransactions: filteredRecords.length,
-            expectedCash,
+            expectedCash: netExpectedCash,
             onlineTransferRevenue,
             totalTax
         };
@@ -327,7 +330,7 @@ export default function TodaySummaryPage() {
                         variant="default" 
                         className="gap-2 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-lg"
                     >
-                        <Printer className="h-4 w-4" /> Print Report
+                        <Printer className="h-4 w-4" /> {!isReportUnlocked ? 'Unlock to Print' : 'Print Report'}
                     </Button>
                 </div>
             </div>
@@ -347,7 +350,7 @@ export default function TodaySummaryPage() {
                                     <div className="flex flex-col gap-1 w-full md:w-auto">
                                         <div className="flex items-center justify-between px-2">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Physical Cash Input</span>
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Expected: Rs {stats.expectedCash.toLocaleString()}</span>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Net Expected (After Exp): Rs {stats.expectedCash.toLocaleString()}</span>
                                         </div>
                                         <div className="relative flex-1 md:w-64">
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rs</div>
@@ -384,18 +387,10 @@ export default function TodaySummaryPage() {
                 </div>
             )}
 
-            {!isReportUnlocked ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                    <div className="p-8 bg-slate-50 rounded-[3rem] border-4 border-dashed border-slate-200 flex flex-col items-center gap-4 max-w-lg text-center">
-                        <div className="p-6 bg-amber-100 text-amber-600 rounded-3xl"><ShieldAlert className="h-12 w-12" /></div>
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Report Temporarily Locked</h2>
-                        <p className="text-slate-500 font-medium px-8">The Clinical Performance Summary is restricted until physical cash verification is completed. Please input and save the cash handover total above to proceed.</p>
-                    </div>
-                </div>
-            ) : (
-                <div className="animate-in fade-in duration-1000">
-                    {/* Print Only Cash Info - ABSOLUTE TOP */}
-                    <div className="hidden print:block mb-10 p-8 border-4 border-black rounded-[2.5rem] bg-slate-50 relative overflow-hidden">
+            {/* Dashboard Content */}
+            <div className="animate-in fade-in duration-1000">
+                {/* Print Only Cash Info */}
+                <div className="hidden print:block mb-10 p-8 border-4 border-black rounded-[2.5rem] bg-slate-50 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-5">
                             <CheckCircle2 className="h-32 w-32" />
                         </div>
@@ -472,7 +467,7 @@ export default function TodaySummaryPage() {
                                 <div>
                                     <h4 className="text-xl font-black tracking-tight">Cash Discrepancy Alert!</h4>
                                     <p className="font-bold opacity-90 text-sm">
-                                        This cash amount is not given by counter. Expected: Rs {stats.expectedCash.toLocaleString()} (Includes Cash & Nill)
+                                        This cash amount is not given by counter. Net Expected: Rs {stats.expectedCash.toLocaleString()} (Revenue - Expenses)
                                         {stats.onlineTransferRevenue > 0 && ` | Online Transfer: Rs ${stats.onlineTransferRevenue.toLocaleString()}`}
                                     </p>
                                 </div>
@@ -764,9 +759,7 @@ export default function TodaySummaryPage() {
                     )}
                 </CardContent>
             </Card>
-
-                </div>
-            )}
+            </div>
 
             {/* Print Only Section */}
             <div className="hidden print:block mt-8">
