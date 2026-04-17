@@ -208,12 +208,16 @@ export default function SupplierPage() {
             if (formData.products && formData.products.length > 0) {
                 for (const p of formData.products) {
                     const pDocRef = doc(firestore, 'pharmacyItems', p.id);
+                    const sellingPrice = p.sellingPrice !== undefined ? Number(p.sellingPrice) : 0;
+                    const purchasePrice = p.price !== undefined ? Number(p.price) : 0;
+                    const quantity = p.quantity !== undefined ? Number(p.quantity) : 0;
+
                     await setDocumentNonBlocking(pDocRef, {
                         id: p.id,
                         productName: p.name,
-                        sellingPrice: p.sellingPrice || 0,
-                        purchasePrice: p.price || 0,
-                        quantity: p.quantity || 0,
+                        sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+                        purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
+                        quantity: isNaN(quantity) ? 0 : quantity,
                         supplier: formData.name,
                         supplierId: supplierId || editingSupplier?.id,
                         category: formData.category,
@@ -286,8 +290,10 @@ export default function SupplierPage() {
             ...prev,
             products: prev.products?.map((p, i) => {
                 if (i !== idx) return p;
-                if (field === 'price' || field === 'quantity' || field === 'minThreshold') {
-                    const numVal = typeof value === 'string' ? (value === '' ? 0 : parseFloat(value)) : value;
+                if (field === 'price' || field === 'sellingPrice' || field === 'quantity' || field === 'minThreshold') {
+                    // Allow empty string to be handled by the input while keeping state numeric where possible
+                    if (value === '') return { ...p, [field]: 0 };
+                    const numVal = typeof value === 'string' ? parseFloat(value) : value;
                     return { ...p, [field]: isNaN(numVal as number) ? 0 : numVal };
                 }
                 return { ...p, [field]: value };

@@ -102,8 +102,10 @@ export default function InventoryPage() {
     };
 
     const handleSave = async () => {
-        if (price === '' || isNaN(Number(price)) || quantity === '' || isNaN(Number(quantity))) {
-            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please provide valid values for all fields.' });
+        if (price === '' || isNaN(Number(price)) || 
+            sellingPrice === '' || isNaN(Number(sellingPrice)) || 
+            quantity === '' || isNaN(Number(quantity))) {
+            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please provide valid numeric values for all price and quantity fields.' });
             return;
         }
 
