@@ -117,16 +117,11 @@ export default function TodaySummaryPage() {
 
     const [sessionUnlocked, setSessionUnlocked] = React.useState(false);
 
-    // Sync state with existing closing
+    // Require blind verification: Do NOT pre-fill or auto-unlock based on existingClosing.
     React.useEffect(() => {
-        if (existingClosing) {
-            setCashHandedOver(existingClosing.cashHandedOver.toString());
-            setSessionUnlocked(true);
-        } else {
-            setCashHandedOver('');
-            setSessionUnlocked(false);
-        }
-    }, [existingClosing]);
+        setCashHandedOver('');
+        setSessionUnlocked(false);
+    }, [selectedDateKey]);
 
     const isReportUnlocked = (sessionUnlocked || periodMode !== 'Day');
 
@@ -263,8 +258,8 @@ export default function TodaySummaryPage() {
             expenseCategoriesMap[cat] = (expenseCategoriesMap[cat] || 0) + (e.amount || 0);
         });
 
-        // Net Cash Handover = (Cash + Nill Revenue) - Total Expenses
-        const netExpectedCash = Math.max(0, expectedCash - totalExpenses);
+        // Net Cash Handover = Cash collected (Do not deduct general expenses as they might be paid via bank/corporate card)
+        const netExpectedCash = expectedCash;
 
         const totalPhysicalCash = filteredClosings.reduce((sum, c) => sum + (c.cashHandedOver || 0), 0);
 
@@ -391,7 +386,7 @@ export default function TodaySummaryPage() {
                                     <div className="flex flex-col gap-1 w-full md:w-auto">
                                         <div className="flex items-center justify-between px-2 gap-4">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Physical Cash Input</span>
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">Net Expected (After Exp): Rs {stats.expectedCash.toLocaleString()}</span>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">Net Expected: Rs {stats.expectedCash.toLocaleString()}</span>
                                         </div>
                                         <div className="relative flex-1 md:w-64">
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rs</div>
@@ -407,19 +402,31 @@ export default function TodaySummaryPage() {
                                     </div>
                                     {!sessionUnlocked ? (
                                         <Button
-                                            onClick={existingClosing ? handleVerifySession : handleSaveCash}
+                                            onClick={handleSaveCash}
                                             disabled={isSavingCash || !cashHandedOver}
-                                            className={`h-[3.75rem] px-8 ${existingClosing ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-black rounded-[1.5rem] shadow-lg shadow-indigo-200`}
+                                            className={`h-[3.75rem] px-8 ${existingClosing && cashHandedOver !== existingClosing.cashHandedOver.toString() ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-black rounded-[1.5rem] shadow-lg shadow-indigo-200`}
                                         >
-                                            {isSavingCash ? <Loader2 className="animate-spin" /> : (existingClosing ? 'CASH HANDED OVER & UNLOCK' : 'SAVE & UNLOCK')}
+                                            {isSavingCash ? <Loader2 className="animate-spin" /> : (existingClosing && cashHandedOver !== existingClosing.cashHandedOver.toString() ? 'UPDATE CASH & UNLOCK' : 'SAVE & UNLOCK')}
                                         </Button>
                                     ) : (
-                                        <div className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-lg shadow-emerald-200 flex items-center gap-2">
-                                            <div className="p-2 bg-white/20 rounded-lg"><CheckCircle2 className="h-4 w-4" /></div>
-                                            <div>
-                                                <div className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">Status</div>
-                                                <div className="text-sm font-bold tracking-tight">Access Granted</div>
+                                        <div className="flex gap-2">
+                                            <div className="p-4 bg-emerald-600 text-white rounded-[1.5rem] shadow-lg shadow-emerald-200 flex items-center gap-2">
+                                                <div className="p-2 bg-white/20 rounded-lg"><CheckCircle2 className="h-4 w-4" /></div>
+                                                <div>
+                                                    <div className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">Status</div>
+                                                    <div className="text-sm font-bold tracking-tight">Access Granted</div>
+                                                </div>
                                             </div>
+                                            <Button 
+                                                variant="outline" 
+                                                onClick={() => {
+                                                    setSessionUnlocked(false);
+                                                    setCashHandedOver('');
+                                                }}
+                                                className="h-[3.75rem] px-6 rounded-[1.5rem] border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50"
+                                            >
+                                                Edit Amount
+                                            </Button>
                                         </div>
                                     )}
                                 </div>
@@ -514,7 +521,7 @@ export default function TodaySummaryPage() {
                                 <div>
                                     <h4 className="text-xl font-black tracking-tight">Handover Discrepancy Alert!</h4>
                                     <p className="font-bold opacity-90 text-sm">
-                                        The physical cash entered does not match the system record. After deducting all expenses, the counter should have exactly <span className="underline decoration-white/50">Rs {stats.expectedCash.toLocaleString()}</span> for handover.
+                                        The physical cash entered does not match the system record. The counter should have exactly <span className="underline decoration-white/50">Rs {stats.expectedCash.toLocaleString()}</span> for handover based on today's cash collections.
                                     </p>
                                 </div>
                             </div>
