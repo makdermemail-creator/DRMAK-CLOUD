@@ -506,6 +506,11 @@ const DailySchedule = ({ appointments, date, onDateChange }: { appointments: (Ap
 
 const AdminViewSwitcher = () => {
     const { viewMode, setViewMode } = useViewMode();
+    const { user } = useUser();
+    
+    // Only super users get access to the actual organization or reporting tabs
+    const isSuperUser = user?.role === 'Admin' || user?.email === 'admin1@skinsmith.com';
+
     return (
         <div className="flex items-center gap-1 p-1 bg-white rounded-2xl border border-slate-200 shadow-sm w-fit">
             <Button
@@ -517,24 +522,28 @@ const AdminViewSwitcher = () => {
                 <Hospital className="h-3.5 w-3.5 mr-1.5" />
                 Manage SkinSmith
             </Button>
-            <Button
-                variant={viewMode === 'organization' ? 'default' : 'ghost'}
-                size="sm"
-                className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'organization' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
-                onClick={() => setViewMode('organization')}
-            >
-                <Building2 className="h-3.5 w-3.5 mr-1.5" />
-                Organization
-            </Button>
-            <Button
-                variant={viewMode === 'reports' ? 'default' : 'ghost'}
-                size="sm"
-                className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
-                onClick={() => setViewMode('reports')}
-            >
-                <FileBarChart className="h-3.5 w-3.5 mr-1.5" />
-                Reports & Analytics
-            </Button>
+            {isSuperUser && (
+                <>
+                    <Button
+                        variant={viewMode === 'organization' ? 'default' : 'ghost'}
+                        size="sm"
+                        className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'organization' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        onClick={() => setViewMode('organization')}
+                    >
+                        <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                        Organization
+                    </Button>
+                    <Button
+                        variant={viewMode === 'reports' ? 'default' : 'ghost'}
+                        size="sm"
+                        className={`rounded-xl text-xs font-bold h-9 px-4 transition-all ${viewMode === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        onClick={() => setViewMode('reports')}
+                    >
+                        <FileBarChart className="h-3.5 w-3.5 mr-1.5" />
+                        Reports & Analytics
+                    </Button>
+                </>
+            )}
         </div>
     );
 };
