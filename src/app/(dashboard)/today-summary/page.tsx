@@ -329,7 +329,7 @@ export default function TodaySummaryPage() {
                 <div className="flex-1">
                     <div className="flex items-center gap-3">
                         <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200 text-white">
-                            <TrendingUp className="h-6 w-6" />
+                            <Activity className="h-6 w-6" />
                         </div>
                         <div>
                             <h2 className="text-4xl font-black tracking-tight text-slate-900 leading-none">
