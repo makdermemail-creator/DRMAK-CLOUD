@@ -128,6 +128,11 @@ const allMenuItems: MenuItem[] = [
     { id: 'rep_expenses', href: '/daily-expenses', label: 'Expenses', icon: Receipt },
     { id: 'rep_salaries', href: '/reports/salaries', label: 'Employee Salary', icon: Wallet },
 
+    // Administrative / Organization
+    { id: 'userManagement', href: '/user-creation', label: 'User Management', icon: UserCog },
+    { id: 'featureControl', href: '/settings', label: 'Feature Control', icon: Shield },
+    { id: 'employeeReports', href: '/employee-reports', label: 'Employee Reports', icon: Users2 },
+
     { id: 'taskManagement', href: '/admin/manage-tasks', label: 'Manage Tasks', icon: ListTodo },
     { id: 'admin_trainings', href: '/admin/trainings', label: 'Manage Trainings', icon: GraduationCap },
 
