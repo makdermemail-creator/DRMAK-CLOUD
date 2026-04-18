@@ -84,7 +84,7 @@ const allMenuItems: MenuItem[] = [
     { id: 'dashboard', href: '/', label: 'Dashboard', icon: LayoutDashboard },
 
     // Designer Specific
-    { id: 'designerWork', href: '/designer-dashboard', label: 'Workstation', icon: LayoutDashboard },
+    { id: 'designerWork', href: '/designer-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
 
     { id: 'printPrescription', href: '/print-prescription', label: 'Print Prescription', icon: Printer },
@@ -291,7 +291,8 @@ const NavContent = () => {
         } else if (userProfile?.role === 'Social Media Manager') {
             baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
         } else if (userProfile?.role === 'Designer') {
-            baseAccessIds = ['dashboard', 'designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'dailyTasks', 'aiTools'];
+            // Remove global 'dashboard' to prevent duplicate links. 'designerWork' is now their Dashboard.
+            baseAccessIds = ['designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
