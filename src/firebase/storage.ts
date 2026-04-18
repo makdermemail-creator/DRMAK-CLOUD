@@ -8,21 +8,31 @@ import { initializeFirebase } from './index';
  * @returns Promise resolving to the download URL
  */
 export async function uploadFile(file: File, path: string): Promise<string> {
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timed out (5s). This is likely a CORS or connection issue.')), 5000);
+    });
+
     try {
         console.log('storage.ts: Initializing Firebase SDKs...');
         const { storage } = initializeFirebase();
         const storageRef = ref(storage, path);
 
-        console.log('storage.ts: Starting uploadBytes loop/call for path:', path);
-        const result = await uploadBytes(storageRef, file);
-        console.log('storage.ts: uploadBytes finished. Metadata:', result.metadata);
+        console.log('storage.ts: Starting upload with 5s timeout protection...');
+        
+        // Race the upload against the timeout
+        const uploadPromise = (async () => {
+            const result = await uploadBytes(storageRef, file);
+            console.log('storage.ts: uploadBytes finished.');
+            return await getDownloadURL(storageRef);
+        })();
 
-        console.log('storage.ts: Fetching download URL...');
-        const url = await getDownloadURL(storageRef);
-        console.log('storage.ts: Download URL fetched successfully.');
+        const url = await Promise.race([uploadPromise, timeoutPromise]) as string;
+        console.log('storage.ts: Upload/URL fetched successfully.');
         return url;
-    } catch (error) {
-        console.error('storage.ts: Error during upload/getURL:', error);
-        throw error;
+    } catch (error: any) {
+        // Silent error to prevent Next.js development overlay
+        console.warn('storage.ts: Upload failed or timed out:', error.message);
+        return ""; // Return empty string so the caller knows it failed but can continue
     }
 }

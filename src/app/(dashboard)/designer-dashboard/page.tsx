@@ -481,44 +481,57 @@ export default function DesignerDashboardPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Dialog open={selectedRequestId === req.id} onOpenChange={(open) => !open && setSelectedRequestId(null)}>
-                                                    <DialogTrigger asChild>
-                                                        <Button
-                                                            variant="default"
-                                                            size="sm"
-                                                            className="bg-blue-600 hover:bg-blue-700 text-white font-black h-8 px-4 rounded-lg"
-                                                            onClick={() => setSelectedRequestId(req.id)}
-                                                        >
-                                                            SUBMIT
-                                                        </Button>
-                                                    </DialogTrigger>
-                                                    <DialogContent>
-                                                        <DialogHeader>
-                                                            <DialogTitle>Submit Design</DialogTitle>
-                                                            <DialogDescription>Paste the link to your completed design for {req.title}.</DialogDescription>
-                                                        </DialogHeader>
-                                                        <div className="py-4 space-y-4">
-                                                            <div className="space-y-2">
-                                                                <Label>Submission URL (Canva, Drive, Link)</Label>
-                                                                <Input
-                                                                    placeholder="Paste link here..."
-                                                                    value={submissionUrl}
-                                                                    onChange={e => setSubmissionUrl(e.target.value)}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <DialogFooter>
-                                                            <Button variant="outline" onClick={() => setSelectedRequestId(null)}>Cancel</Button>
+                                                {req.status === 'Submitted' ? (
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-black px-3 py-1">
+                                                            ✓ SUBMITTED
+                                                        </Badge>
+                                                        {req.submissionUrl && (
+                                                            <a href={req.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1">
+                                                                View Submission <ExternalLink className="h-2 w-2" />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <Dialog open={selectedRequestId === req.id} onOpenChange={(open) => !open && setSelectedRequestId(null)}>
+                                                        <DialogTrigger asChild>
                                                             <Button
-                                                                className="bg-blue-600 hover:bg-blue-700"
-                                                                onClick={handleSubmitRequest}
-                                                                disabled={isSubmittingAsset}
+                                                                variant="default"
+                                                                size="sm"
+                                                                className="bg-blue-600 hover:bg-blue-700 text-white font-black h-8 px-4 rounded-lg"
+                                                                onClick={() => setSelectedRequestId(req.id)}
                                                             >
-                                                                {isSubmittingAsset ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Fulfill Request"}
+                                                                SUBMIT
                                                             </Button>
-                                                        </DialogFooter>
-                                                    </DialogContent>
-                                                </Dialog>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogHeader>
+                                                                <DialogTitle>Submit Design</DialogTitle>
+                                                                <DialogDescription>Paste the link to your completed design for {req.title}.</DialogDescription>
+                                                            </DialogHeader>
+                                                            <div className="py-4 space-y-4">
+                                                                <div className="space-y-2">
+                                                                    <Label>Submission URL (Canva, Drive, Link)</Label>
+                                                                    <Input
+                                                                        placeholder="Paste link here..."
+                                                                        value={submissionUrl}
+                                                                        onChange={e => setSubmissionUrl(e.target.value)}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <DialogFooter>
+                                                                <Button variant="outline" onClick={() => setSelectedRequestId(null)}>Cancel</Button>
+                                                                <Button
+                                                                    className="bg-blue-600 hover:bg-blue-700"
+                                                                    onClick={handleSubmitRequest}
+                                                                    disabled={isSubmittingAsset}
+                                                                >
+                                                                    {isSubmittingAsset ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Fulfill Request"}
+                                                                </Button>
+                                                            </DialogFooter>
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}

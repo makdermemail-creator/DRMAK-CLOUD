@@ -7,6 +7,20 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -15,26 +29,45 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Upload, Loader2, Video, Send, Instagram, Facebook, Share2 } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser, useDoc } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
 import { uploadFile } from '@/firebase/storage';
 import type { DailyPosting } from '@/lib/types';
-import { collection, query, where, orderBy, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import {
+    Loader2,
+    Send,
+    Video,
+    History,
+    ExternalLink,
+    Instagram,
+    Facebook,
+    Share2,
+    MessageCircle,
+    MoreHorizontal,
+    Image as ImageIcon,
+    FileText,
+    Pencil,
+    Trash2,
+    Eye
+} from 'lucide-react';
+import { cn } from "@/lib/utils";
+
+const PLATFORM_ICONS = {
+    Instagram: Instagram,
+    Facebook: Facebook,
+    WhatsApp: MessageCircle,
+    TikTok: Video,
+    Other: Share2,
+};
 
 export default function DailyPostingPage() {
     const firestore = useFirestore();
-    const { toast } = useToast();
     const { user } = useUser();
+    const { toast } = useToast();
 
+    // Form Stats
     const [platform, setPlatform] = React.useState<string>('Instagram');
     const [activityType, setActivityType] = React.useState<string>('Post');
     const [description, setDescription] = React.useState('');
@@ -42,254 +75,385 @@ export default function DailyPostingPage() {
     const [screenshotFile, setScreenshotFile] = React.useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+    // Edit State
+    const [editingLog, setEditingLog] = React.useState<DailyPosting | null>(null);
+    const [viewingLog, setViewingLog] = React.useState<DailyPosting | null>(null);
+
+    // Fetch History
     const postingsQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
-        return query(collection(firestore, 'dailyPostings'), where('userId', '==', user.id), orderBy('postedAt', 'desc'));
+        return query(collection(firestore, 'dailyPostings'), where('userId', '==', user.id));
     }, [firestore, user]);
 
-    const { data: postings, isLoading, forceRerender } = useCollection<DailyPosting>(postingsQuery);
+    const { data: rawPostings, isLoading, forceRerender } = useCollection<DailyPosting>(postingsQuery);
 
-    // DAILY GOALS LOGIC
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const goalsDocRef = useMemoFirebase(
-        () => (firestore && user ? doc(firestore, 'dailySocialProgress', `${user.id}_${todayStr}`) : null),
-        [firestore, user, todayStr]
-    );
-    const { data: goalData, isLoading: isGoalLoading } = useDoc<any>(goalsDocRef);
-
-    const platforms = ['Instagram', 'Facebook', 'WhatsApp', 'TikTok'];
-    const completedPlatforms: string[] = goalData?.completedPlatforms || [];
-    const progress = Math.round((completedPlatforms.length / platforms.length) * 100);
-
-    const togglePlatform = async (plt: string, checked: boolean) => {
-        if (!firestore || !user) return;
-        const ref = doc(firestore, 'dailySocialProgress', `${user.id}_${todayStr}`);
-        const current = new Set(goalData?.completedPlatforms || []);
-        if (checked) current.add(plt);
-        else current.delete(plt);
-
-        await setDoc(ref, {
-            userId: user.id,
-            date: todayStr,
-            completedPlatforms: Array.from(current)
-        }, { merge: true });
-    };
+    const postings = React.useMemo(() => {
+        if (!rawPostings) return [];
+        return [...rawPostings].sort((a, b) => {
+            const dateA = a.postedAt ? new Date(a.postedAt).getTime() : 0;
+            const dateB = b.postedAt ? new Date(b.postedAt).getTime() : 0;
+            return dateB - dateA;
+        });
+    }, [rawPostings]);
 
     const handleSubmit = async () => {
-        if (!firestore || !user) return;
+        if (!firestore || !user) {
+            toast({ variant: 'destructive', title: 'System Error', description: 'Not authenticated.' });
+            return;
+        }
+
         if (!description.trim()) {
-            toast({ variant: 'destructive', title: 'Missing Information', description: 'Please provide a description.' });
+            toast({ variant: 'destructive', title: 'Missing Info', description: 'Please describe what you posted.' });
             return;
         }
 
         setIsSubmitting(true);
-        const posting: Omit<DailyPosting, 'id'> = {
-            userId: user.id,
-            platform: platform as any,
-            activityType: activityType as any,
-            description,
-            link: link.trim() || undefined,
-            screenshotUrl: undefined,
-            postedAt: new Date().toISOString(),
-        };
-
         try {
+            let uploadedUrl = editingLog?.screenshotUrl || "";
+            let uploadFailed = false;
+            
+            // 1. Handle File Upload if exists
             if (screenshotFile) {
                 const path = `daily-postings/${user.id}/${Date.now()}_${screenshotFile.name}`;
-                const url = await uploadFile(screenshotFile, path);
-                posting.screenshotUrl = url;
+                const result = await uploadFile(screenshotFile, path);
+                if (result) {
+                    uploadedUrl = result;
+                } else {
+                    uploadFailed = true;
+                }
             }
 
-            await addDocumentNonBlocking(collection(firestore, 'dailyPostings'), posting);
-            toast({ title: 'Post Logged', description: 'Your social media activity has been recorded.' });
-            setDescription('');
-            setLink('');
-            setScreenshotFile(null);
-            forceRerender();
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not log your activity.' });
+            // 2. Prepare Data
+            const logData: Omit<DailyPosting, 'id'> = {
+                userId: user.id,
+                platform: platform as any,
+                activityType: activityType as any,
+                description: description.trim(),
+                link: link.trim() || "",
+                screenshotUrl: uploadedUrl,
+                postedAt: editingLog ? editingLog.postedAt : new Date().toISOString(),
+            };
+
+            // 3. Save to Firestore
+            if (editingLog) {
+                await updateDoc(doc(firestore, 'dailyPostings', editingLog.id), logData);
+            } else {
+                await addDocumentNonBlocking(collection(firestore, 'dailyPostings'), logData);
+            }
+            
+            // 4. Combined Feedback
+            toast({ 
+                title: editingLog ? 'Log Updated' : 'Post Logged', 
+                description: uploadFailed ? 'Saved without image due to connection.' : 'Your activity has been recorded.' 
+            });
+            
+            // 5. Reset
+            resetForm();
+            if (forceRerender) forceRerender();
+            
+        } catch (error: any) {
+            console.error("Submit Error:", error);
+            toast({ 
+                variant: 'destructive', 
+                title: 'Submission Error', 
+                description: 'Could not save your activity. Please check your connection.' 
+            });
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const getPlatformIcon = (plt: string) => {
-        switch (plt) {
-            case 'Instagram': return <Instagram className="h-4 w-4" />;
-            case 'Facebook': return <Facebook className="h-4 w-4" />;
-            case 'WhatsApp': return <Share2 className="h-4 w-4" />;
-            default: return <Video className="h-4 w-4" />;
+    const handleDelete = async (id: string) => {
+        if (!firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'dailyPostings', id));
+            toast({ title: 'Deleted', description: 'Activity log removed.' });
+            if (forceRerender) forceRerender();
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete.' });
         }
     };
 
+    const handleEdit = (log: DailyPosting) => {
+        setEditingLog(log);
+        setPlatform(log.platform);
+        setActivityType(log.activityType);
+        setDescription(log.description);
+        setLink(log.link || '');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const resetForm = () => {
+        setEditingLog(null);
+        setDescription('');
+        setLink('');
+        setScreenshotFile(null);
+    };
+
     return (
-        <div className="space-y-6">
-            <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 dark:from-purple-950 dark:to-pink-950 dark:border-purple-900">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                        <Share2 className="h-6 w-6" />
-                        Daily Social Progress
-                    </CardTitle>
-                    <CardDescription>Track your daily platform presence goal ({progress}% Complete)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <Progress value={progress} className="h-3 bg-purple-100 dark:bg-purple-900"
-                    // Custom indicator class if needed, or rely on default
-                    />
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {platforms.map(plt => (
-                            <div key={plt} className="flex items-center space-x-2 bg-white dark:bg-slate-900 p-3 rounded-lg border shadow-sm">
-                                <Checkbox
-                                    id={`goal-${plt}`}
-                                    checked={completedPlatforms.includes(plt)}
-                                    onCheckedChange={(c) => togglePlatform(plt, !!c)}
-                                />
-                                <Label htmlFor={`goal-${plt}`} className="flex items-center gap-2 cursor-pointer font-medium">
-                                    {getPlatformIcon(plt)}
-                                    {plt}
-                                </Label>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Video className="h-6 w-6" />
+        <div className="space-y-6 p-1">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-3">
+                        <Video className="h-10 w-10 text-teal-600" />
                         Log Daily Social Posting
+                    </h1>
+                    <p className="text-slate-500 font-medium mt-1">Record your activities to keep the team updated on reach and engagement.</p>
+                </div>
+            </div>
+
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50/50 border-b py-4">
+                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-800">
+                        {editingLog ? 'Edit Posting Log' : 'Log New Activity'}
                     </CardTitle>
-                    <CardDescription>Record your social media updates and video uploads for the day.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Platform</Label>
-                            <Select onValueChange={setPlatform} value={platform}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Platform" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Instagram">Instagram</SelectItem>
-                                    <SelectItem value="Facebook">Facebook</SelectItem>
-                                    <SelectItem value="WhatsApp">WhatsApp</SelectItem>
-                                    <SelectItem value="TikTok">TikTok</SelectItem>
-                                    <SelectItem value="Other">Other</SelectItem>
-                                </SelectContent>
-                            </Select>
+                <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Platform</Label>
+                                    <Select value={platform} onValueChange={setPlatform}>
+                                        <SelectTrigger className="h-11 rounded-2xl border-slate-200 font-bold">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Instagram" className="font-bold">Instagram</SelectItem>
+                                            <SelectItem value="Facebook" className="font-bold">Facebook</SelectItem>
+                                            <SelectItem value="WhatsApp" className="font-bold">WhatsApp</SelectItem>
+                                            <SelectItem value="TikTok" className="font-bold">TikTok</SelectItem>
+                                            <SelectItem value="Other" className="font-bold">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Activity Type</Label>
+                                    <Select value={activityType} onValueChange={setActivityType}>
+                                        <SelectTrigger className="h-11 rounded-2xl border-slate-200 font-bold">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Post" className="font-bold">Post</SelectItem>
+                                            <SelectItem value="Story" className="font-bold">Story</SelectItem>
+                                            <SelectItem value="Reel" className="font-bold">Reel</SelectItem>
+                                            <SelectItem value="Video" className="font-bold">Video</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Content Description / Video Topic</Label>
+                                <Textarea
+                                    placeholder="Briefly describe what was posted today..."
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className="rounded-2xl border-slate-200 resize-none min-h-[100px] font-medium"
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label>Activity Type</Label>
-                            <Select onValueChange={setActivityType} value={activityType}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Post">Post</SelectItem>
-                                    <SelectItem value="Story">Story</SelectItem>
-                                    <SelectItem value="Reel">Reel</SelectItem>
-                                    <SelectItem value="Video">Video</SelectItem>
-                                </SelectContent>
-                            </Select>
+
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Post Link (Optional)</Label>
+                                <Input
+                                    placeholder="https://..."
+                                    value={link}
+                                    onChange={(e) => setLink(e.target.value)}
+                                    className="h-11 rounded-2xl border-slate-200 font-bold"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                                    {editingLog?.screenshotUrl ? 'Update Screenshot / Proof (Optional)' : 'Screenshot / Proof (Optional)'}
+                                </Label>
+                                <div className="flex items-center gap-3">
+                                    <Input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                                        className="h-11 rounded-2xl border-slate-200 font-bold py-2 px-3"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-2 justify-end pt-2">
+                                {editingLog && (
+                                    <Button variant="ghost" onClick={resetForm} className="rounded-2xl font-black text-slate-400">Cancel</Button>
+                                )}
+                                <Button
+                                    onClick={handleSubmit}
+                                    disabled={isSubmitting}
+                                    className="bg-teal-600 hover:bg-teal-700 text-white rounded-2xl px-10 font-bold h-11 shadow-lg shadow-teal-100 transition-all active:scale-95"
+                                >
+                                    {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                                    {editingLog ? 'Update Log' : 'Log Activity'}
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Content Description / Video Topic</Label>
-                        <Textarea
-                            placeholder="Briefly describe what you posted (e.g., 'Skincare routine reel', 'Client testimonial story')..."
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Post Link (Optional)</Label>
-                        <Input
-                            placeholder="https://..."
-                            value={link}
-                            onChange={(e) => setLink(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Screenshot / Proof (Optional)</Label>
-                        <div className="flex items-center gap-2">
-                            <Input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                    if (e.target.files && e.target.files[0]) {
-                                        setScreenshotFile(e.target.files[0]);
-                                    }
-                                }}
-                                className="cursor-pointer"
-                            />
-                            {screenshotFile && <span className="text-sm text-muted-foreground">{screenshotFile.name}</span>}
-                        </div>
-                    </div>
-                    <div className="flex justify-end">
-                        <Button onClick={handleSubmit} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                            Log Activity
-                        </Button>
                     </div>
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Recent Posting History</CardTitle>
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50/50 border-b py-4">
+                    <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                        <History className="h-4 w-4 text-teal-600" />
+                        Recent Posting History
+                    </CardTitle>
                 </CardHeader>
-                <CardContent>
-                    {isLoading ? (
-                        <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-slate-50/30 hover:bg-slate-50/30">
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest p-4">Date</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest p-4">Platform</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest p-4">Type</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest p-4">Description</TableHead>
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest p-4">Action</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? (
                                 <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Platform</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Link</TableHead>
-                                    <TableHead>Proof</TableHead>
+                                    <TableCell colSpan={5} className="text-center py-10">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-teal-600" />
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {postings?.map(post => (
-                                    <TableRow key={post.id}>
-                                        <TableCell className="whitespace-nowrap">{format(new Date(post.postedAt), 'MMM dd, HH:mm')}</TableCell>
-                                        <TableCell>
+                            ) : postings.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-12 text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                                        No activities logged yet.
+                                    </TableCell>
+                                </TableRow>
+                            ) : postings.map((post) => {
+                                const Icon = PLATFORM_ICONS[post.platform as keyof typeof PLATFORM_ICONS] || PLATFORM_ICONS.Other;
+                                return (
+                                    <TableRow key={post.id} className="hover:bg-slate-50/50 group">
+                                        <TableCell className="p-4 whitespace-nowrap text-[11px] font-black text-slate-500">
+                                            {post.postedAt ? format(new Date(post.postedAt), 'MMM dd, HH:mm') : '---'}
+                                        </TableCell>
+                                        <TableCell className="p-4">
                                             <div className="flex items-center gap-2">
-                                                {getPlatformIcon(post.platform)}
-                                                {post.platform}
+                                                <div className="p-1.5 bg-slate-50 rounded-lg group-hover:bg-white border border-transparent group-hover:border-slate-100 transition-all">
+                                                    <Icon className="h-4 w-4 text-slate-600" />
+                                                </div>
+                                                <span className="text-[11px] font-bold text-slate-700">{post.platform}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{post.activityType}</TableCell>
-                                        <TableCell>{post.description}</TableCell>
-                                        <TableCell>
-                                            {post.link ? (
-                                                <a href={post.link} target="_blank" className="text-primary hover:underline">View Post</a>
-                                            ) : '-'}
+                                        <TableCell className="p-4">
+                                            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 bg-slate-100 rounded-full text-slate-500">
+                                                {post.activityType}
+                                            </span>
                                         </TableCell>
-                                        <TableCell>
-                                            {post.screenshotUrl ? (
-                                                <a href={post.screenshotUrl} target="_blank" className="text-primary hover:underline flex items-center gap-1">
-                                                    <Upload className="h-3 w-3" /> View
-                                                </a>
-                                            ) : '-'}
+                                        <TableCell className="p-4">
+                                            <p className="text-[11px] font-bold text-slate-600 line-clamp-1 max-w-[200px]">{post.description}</p>
+                                        </TableCell>
+                                        <TableCell className="p-4">
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-teal-600 hover:bg-teal-50"
+                                                    onClick={() => setViewingLog(post)}
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                                                    onClick={() => handleEdit(post)}
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-rose-500 hover:bg-rose-50"
+                                                    onClick={() => handleDelete(post.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
-                                ))}
-                                {postings?.length === 0 && (
-                                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No activities logged yet.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    )}
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
+
+            {/* VIEW LOG DIALOG */}
+            <Dialog open={!!viewingLog} onOpenChange={() => setViewingLog(null)}>
+                <DialogContent className="max-w-2xl rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+                    {viewingLog && (
+                        <div className="flex flex-col">
+                            {viewingLog.screenshotUrl ? (
+                                <div className="h-64 sm:h-80 w-full overflow-hidden relative group bg-black">
+                                    <img 
+                                        src={viewingLog.screenshotUrl} 
+                                        alt="Proof" 
+                                        className="w-full h-full object-cover opacity-90"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-8">
+                                        <Badge className="w-fit mb-2 bg-teal-600 text-[10px] font-black uppercase tracking-widest">PROVED ACTIVITY</Badge>
+                                        <DialogTitle className="text-white text-2xl font-black">{viewingLog.platform} {viewingLog.activityType}</DialogTitle>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-32 w-full bg-slate-900 flex flex-col justify-center p-8">
+                                    <Badge className="w-fit mb-2 bg-slate-700 text-[10px] font-black uppercase tracking-widest">TEXT LOG ONLY</Badge>
+                                    <DialogTitle className="text-white text-2xl font-black">{viewingLog.platform} {viewingLog.activityType}</DialogTitle>
+                                </div>
+                            )}
+
+                            <div className="p-8 space-y-6">
+                                <div className="grid grid-cols-2 gap-8">
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Posted At</p>
+                                        <p className="font-bold text-slate-800">{format(new Date(viewingLog.postedAt), 'MMMM dd, yyyy · hh:mm a')}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Link Provided</p>
+                                        {viewingLog.link ? (
+                                            <a 
+                                                href={viewingLog.link.startsWith('http') ? viewingLog.link : `https://${viewingLog.link}`} 
+                                                target="_blank" 
+                                                className="font-bold text-teal-600 flex items-center gap-1.5 hover:underline"
+                                            >
+                                                External Link <ExternalLink className="h-3 w-3" />
+                                            </a>
+                                        ) : (
+                                            <p className="font-bold text-slate-400">Not specified</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1 pb-4">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity Description</p>
+                                    <p className="font-medium text-slate-600 leading-relaxed text-sm p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        {viewingLog.description}
+                                    </p>
+                                </div>
+
+                                <div className="flex justify-end pt-2">
+                                    <Button 
+                                        variant="outline" 
+                                        className="rounded-2xl border-slate-200 font-black px-6 hover:bg-slate-50"
+                                        onClick={() => setViewingLog(null)}
+                                    >
+                                        Close Details
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
-
