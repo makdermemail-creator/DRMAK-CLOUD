@@ -1883,6 +1883,9 @@ const ReportsDashboard = () => {
     const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
     const patientsRef = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
     const closingsRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyClosings') : null, [firestore]);
+    const dailyReportsRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyReports') : null, [firestore]);
+    const dailyTasksRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyTasks') : null, [firestore]);
+    const designerWorkRef = useMemoFirebase(() => firestore ? collection(firestore, 'designerWork') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
@@ -1890,6 +1893,9 @@ const ReportsDashboard = () => {
     const { data: allExpenses } = useCollection<any>(expensesRef);
     const { data: patients } = useCollection<Patient>(patientsRef);
     const { data: allClosings } = useCollection<any>(closingsRef);
+    const { data: allDailyReports } = useCollection<any>(dailyReportsRef);
+    const { data: allDailyTasks } = useCollection<any>(dailyTasksRef);
+    const { data: allDesignerWork } = useCollection<any>(designerWorkRef);
 
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
@@ -1950,21 +1956,65 @@ const ReportsDashboard = () => {
         };
     }, [filteredBilling, filteredExpenses, filteredClosings]);
 
+    const today = format(new Date(), 'yyyy-MM-dd');
+
     const employeePerformance = React.useMemo(() => {
-        if (!users || !filteredAppointments) return [];
+        if (!users) return [];
         return users.map(u => {
-            const userAppointments = filteredAppointments.filter(a => a.doctorId === u.id);
-            const completed = userAppointments.filter(a => a.status === 'Completed').length;
+            // Clinic: appointment efficiency
+            const userAppointments = filteredAppointments?.filter(a => a.doctorId === u.id) || [];
+            const completedAppts = userAppointments.filter(a => a.status === 'Completed').length;
+            const apptScore = userAppointments.length > 0 ? Math.round((completedAppts / userAppointments.length) * 100) : null;
+
+            // Daily end-of-day reports (all time, for the selected range)
+            const userReports = (allDailyReports || []).filter((r: any) => r.userId === u.id);
+            const todayReport = userReports.find((r: any) => {
+                const d = r.reportDate?.split('T')[0];
+                return d === today;
+            });
+            const hasReportToday = !!todayReport;
+
+            // Tasks: completion %
+            const userTasks = (allDailyTasks || []).filter((t: any) => t.userId === u.id);
+            const completedTasks = userTasks.filter((t: any) => t.status === 'Completed').length;
+            const taskScore = userTasks.length > 0 ? Math.round((completedTasks / userTasks.length) * 100) : null;
+
+            // Designer output (today)
+            const designerOutputToday = (allDesignerWork || []).filter((w: any) => w.userId === u.id && w.date === today).length;
+            const designerOutputTotal = (allDesignerWork || []).filter((w: any) => w.userId === u.id).length;
+
+            // Overall productivity score (average of available metrics)
+            const scores: number[] = [];
+            if (apptScore !== null) scores.push(apptScore);
+            if (taskScore !== null) scores.push(taskScore);
+            if (hasReportToday) scores.push(100);
+            if (designerOutputToday > 0) scores.push(Math.min(designerOutputToday * 33, 100));
+            const productivity = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
             return {
                 id: u.id,
                 name: u.name || u.email?.split('@')[0] || 'Unknown',
-                role: u.role,
+                role: u.role || 'Staff',
+                // Appointments
                 appointments: userAppointments.length,
-                completed,
-                efficiency: userAppointments.length > 0 ? Math.round((completed / userAppointments.length) * 100) : 0
+                completedAppts,
+                apptScore,
+                // Reports
+                totalReports: userReports.length,
+                hasReportToday,
+                reportSummary: todayReport?.summary || '',
+                // Tasks
+                totalTasks: userTasks.length,
+                completedTasks,
+                taskScore,
+                // Designer
+                designerOutputToday,
+                designerOutputTotal,
+                // Overall
+                productivity,
             };
-        }).sort((a, b) => b.completed - a.completed);
-    }, [users, filteredAppointments]);
+        }).sort((a, b) => b.productivity - a.productivity);
+    }, [users, filteredAppointments, allDailyReports, allDailyTasks, allDesignerWork, today]);
 
     const handleExportXLSX = () => {
         const rows: any[][] = [];
@@ -2218,62 +2268,139 @@ const ReportsDashboard = () => {
                 dateRange={selectedRange}
             />
 
-            {/* Performance & Attribution Grid */}
-            <div className="grid gap-8 lg:grid-cols-7">
-                <Card className="lg:col-span-4 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
-                    <CardHeader className="p-8 pb-0">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Staff Productivity</CardTitle>
-                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Efficiency Metrics for Selected Period</CardDescription>
-                            </div>
-                            <Users2 className="h-6 w-6 text-slate-300" />
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-8">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="hover:bg-transparent border-slate-100">
-                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest">Employee</TableHead>
-                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-center">Completed Work</TableHead>
-                                    <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest text-right">Efficiency Score</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {employeePerformance.map((emp) => (
-                                    <TableRow key={emp.id} className="border-slate-50 h-20 hover:bg-slate-50/50 transition-colors">
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <Avatar className="h-10 w-10 border-2 border-slate-100 shadow-sm">
-                                                    <AvatarFallback className="bg-slate-900 text-white font-black text-xs uppercase">{emp.name?.slice(0, 2)}</AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex flex-col">
-                                                    <span className="font-black text-slate-900">{emp.name}</span>
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.role}</span>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-center text-emerald-600 font-black">
-                                            {emp.completed} <span className="text-slate-300 font-bold ml-1 text-[10px]">/ {emp.appointments} Total</span>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-3">
-                                                <div className="text-right">
-                                                    <div className="text-lg font-black text-slate-900">{emp.efficiency}%</div>
-                                                </div>
-                                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-full transition-all duration-1000" style={{ width: `${emp.efficiency}%` }} />
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+            {/* Staff Productivity - Full Width Redesign */}
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Staff Productivity</h3>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-0.5">Today's Activity · Day-End Reports · Tasks · Output</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                        <Users2 className="h-4 w-4" />
+                        {employeePerformance.length} Members
+                    </div>
+                </div>
 
-                <Card className="lg:col-span-3 border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {employeePerformance.map((emp) => {
+                        const productivityColor = emp.productivity >= 70 ? 'text-emerald-600' : emp.productivity >= 40 ? 'text-amber-600' : emp.productivity > 0 ? 'text-rose-500' : 'text-slate-300';
+                        const barColor = emp.productivity >= 70 ? 'from-emerald-500 to-emerald-600' : emp.productivity >= 40 ? 'from-amber-400 to-amber-500' : emp.productivity > 0 ? 'from-rose-400 to-rose-500' : 'from-slate-200 to-slate-200';
+                        const circumference = 2 * Math.PI * 20;
+                        const dashOffset = circumference - (emp.productivity / 100) * circumference;
+
+                        return (
+                            <div key={emp.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all p-5 space-y-4">
+                                {/* Header */}
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Avatar className="h-10 w-10 border-2 border-slate-100 shadow-sm shrink-0">
+                                            <AvatarFallback className="bg-gradient-to-br from-indigo-600 to-violet-700 text-white font-black text-xs uppercase">{emp.name?.slice(0, 2)}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-black text-slate-900 text-sm leading-tight">{emp.name}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{emp.role}</p>
+                                        </div>
+                                    </div>
+                                    {/* Circular progress */}
+                                    <div className="relative flex items-center justify-center">
+                                        <svg width="52" height="52" className="-rotate-90">
+                                            <circle cx="26" cy="26" r="20" stroke="#f1f5f9" strokeWidth="4" fill="none" />
+                                            <circle
+                                                cx="26" cy="26" r="20"
+                                                stroke={emp.productivity >= 70 ? '#10b981' : emp.productivity >= 40 ? '#f59e0b' : emp.productivity > 0 ? '#f43f5e' : '#e2e8f0'}
+                                                strokeWidth="4" fill="none"
+                                                strokeDasharray={circumference}
+                                                strokeDashoffset={dashOffset}
+                                                strokeLinecap="round"
+                                                className="transition-all duration-1000"
+                                            />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className={`text-[10px] font-black ${productivityColor}`}>{emp.productivity}%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Overall bar */}
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        <span>Overall Productivity</span>
+                                        <span className={productivityColor}>{emp.productivity}%</span>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all duration-1000`} style={{ width: `${emp.productivity}%` }} />
+                                    </div>
+                                </div>
+
+                                {/* Metric Pills */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {/* Day-End Report */}
+                                    <div className={`rounded-2xl px-3 py-2 flex items-center gap-2 ${emp.hasReportToday ? 'bg-emerald-50 border border-emerald-100' : 'bg-slate-50 border border-slate-100'}`}>
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${emp.hasReportToday ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                        <div className="min-w-0">
+                                            <p className={`text-[9px] font-black uppercase tracking-widest ${emp.hasReportToday ? 'text-emerald-700' : 'text-slate-400'}`}>Day Report</p>
+                                            <p className={`text-[10px] font-bold truncate ${emp.hasReportToday ? 'text-emerald-800' : 'text-slate-400'}`}>
+                                                {emp.hasReportToday ? '✓ Submitted' : 'Not submitted'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Tasks */}
+                                    <div className={`rounded-2xl px-3 py-2 flex items-center gap-2 ${emp.totalTasks > 0 ? 'bg-indigo-50 border border-indigo-100' : 'bg-slate-50 border border-slate-100'}`}>
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${emp.taskScore !== null && emp.taskScore >= 60 ? 'bg-indigo-500' : emp.totalTasks > 0 ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                                        <div className="min-w-0">
+                                            <p className={`text-[9px] font-black uppercase tracking-widest ${emp.totalTasks > 0 ? 'text-indigo-700' : 'text-slate-400'}`}>Tasks</p>
+                                            <p className={`text-[10px] font-bold ${emp.totalTasks > 0 ? 'text-indigo-800' : 'text-slate-400'}`}>
+                                                {emp.totalTasks > 0 ? `${emp.completedTasks}/${emp.totalTasks} done` : 'No tasks'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Appointments */}
+                                    {emp.appointments > 0 && (
+                                        <div className="rounded-2xl px-3 py-2 flex items-center gap-2 bg-violet-50 border border-violet-100">
+                                            <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                                            <div className="min-w-0">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-violet-700">Consults</p>
+                                                <p className="text-[10px] font-bold text-violet-800">{emp.completedAppts}/{emp.appointments}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Designer Output */}
+                                    {(emp.designerOutputTotal > 0 || emp.role === 'Designer') && (
+                                        <div className={`rounded-2xl px-3 py-2 flex items-center gap-2 ${emp.designerOutputToday > 0 ? 'bg-purple-50 border border-purple-100' : 'bg-slate-50 border border-slate-100'}`}>
+                                            <div className={`w-2 h-2 rounded-full shrink-0 ${emp.designerOutputToday > 0 ? 'bg-purple-500' : 'bg-slate-300'}`} />
+                                            <div className="min-w-0">
+                                                <p className={`text-[9px] font-black uppercase tracking-widest ${emp.designerOutputToday > 0 ? 'text-purple-700' : 'text-slate-400'}`}>Design</p>
+                                                <p className={`text-[10px] font-bold ${emp.designerOutputToday > 0 ? 'text-purple-800' : 'text-slate-400'}`}>
+                                                    {emp.designerOutputToday > 0 ? `${emp.designerOutputToday} assets today` : '0 today'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Report snippet */}
+                                {emp.reportSummary && (
+                                    <div className="bg-slate-50 rounded-2xl px-3 py-2 border border-slate-100">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Today's Summary</p>
+                                        <p className="text-[10px] text-slate-600 font-medium line-clamp-2 leading-relaxed">{emp.reportSummary}</p>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {employeePerformance.length === 0 && (
+                        <div className="col-span-full text-center py-16 text-slate-300">
+                            <Users2 className="h-10 w-10 mx-auto mb-2" />
+                            <p className="text-sm font-bold">No staff data available</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+                <Card className="border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
                     <CardHeader className="p-8 pb-0">
                         <div className="flex items-center justify-between">
                             <div>
@@ -2294,35 +2421,15 @@ const ReportsDashboard = () => {
                                     { name: 'Medicines', value: financialStats.medicines },
                                 ]}>
                                     <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis 
-                                        dataKey="name" 
-                                        fontSize={10} 
-                                        tickLine={false} 
-                                        axisLine={false} 
-                                        fontWeight="black" 
-                                        tick={{ fill: '#64748b' }} 
-                                    />
-                                    <YAxis 
-                                        fontSize={10} 
-                                        tickLine={false} 
-                                        axisLine={false} 
-                                        fontWeight="black" 
-                                        tick={{ fill: '#64748b' }} 
-                                        tickFormatter={(v) => `Rs${v / 1000}k`} 
-                                    />
+                                    <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} />
+                                    <YAxis fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} tickFormatter={(v) => `Rs${v / 1000}k`} />
                                     <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={<ChartTooltipContent />} />
-                                    <RechartsBar 
-                                        dataKey="value" 
-                                        fill="#4f46e5" 
-                                        radius={[12, 12, 0, 0]} 
-                                        barSize={40}
-                                    />
+                                    <RechartsBar dataKey="value" fill="#4f46e5" radius={[12, 12, 0, 0]} barSize={40} />
                                 </RechartsBarChart>
                             </ResponsiveContainer>
                         </ChartContainer>
                     </CardContent>
                 </Card>
-            </div>
         </div>
     );
 };
@@ -2508,13 +2615,13 @@ export default function Dashboard() {
 
     React.useEffect(() => {
         if (!isUserLoading && user?.role === 'Sales') {
-            router.push('/sales-dashboard');
+            router.replace('/sales-dashboard');
         }
         if (!isUserLoading && user?.role === 'Social Media Manager') {
-            router.push('/social-dashboard');
+            router.replace('/social-dashboard');
         }
         if (!isUserLoading && user?.role === 'Designer') {
-            router.push('/designer-dashboard');
+            router.replace('/designer-dashboard');
         }
     }, [user, isUserLoading, router]);
 
@@ -2531,18 +2638,13 @@ export default function Dashboard() {
     if (user?.role === 'Doctor') return <DoctorDashboard />;
     if (user?.role === 'Receptionist') return <ReceptionistDashboard />;
 
+    // For roles that redirect to their own page, return null to avoid flash
     if (user?.role === 'Social Media Manager') {
-        return <div className="p-8 text-center flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin h-8 w-8" />
-            <p className="text-muted-foreground">Redirecting to Social Dashboard...</p>
-        </div>;
+        return null;
     }
 
     if (user?.role === 'Designer') {
-        return <div className="p-8 text-center flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin h-8 w-8" />
-            <p className="text-muted-foreground">Redirecting to Designer Dashboard...</p>
-        </div>;
+        return null;
     }
 
     if (user?.role === 'Operations Manager') return <AdminDashboard />;

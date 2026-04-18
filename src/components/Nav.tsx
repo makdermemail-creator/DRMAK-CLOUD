@@ -86,6 +86,7 @@ const allMenuItems: MenuItem[] = [
     // Designer Specific
     { id: 'designerWork', href: '/designer-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'creativeBriefs', href: '/daily-tasks', label: 'Creative Briefs', icon: ListTodo },
+    { id: 'designerPlanner', href: '/designer-planner', label: 'My Planner', icon: CalendarCheck },
 
     { id: 'printPrescription', href: '/print-prescription', label: 'Print Prescription', icon: Printer },
     { id: 'appointments', href: '/appointments', label: 'Appointments', icon: Calendar },
@@ -292,7 +293,8 @@ const NavContent = () => {
             baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
         } else if (userProfile?.role === 'Designer') {
             // Remove global 'dashboard' to prevent duplicate links. 'designerWork' is now their Dashboard.
-            baseAccessIds = ['designerWork', 'creativeBriefs', 'socialInbox', 'dailyReporting', 'aiTools'];
+            // Uses designerPlanner (isolated) instead of contentPlanner (belongs to Social Media Manager)
+            baseAccessIds = ['designerWork', 'creativeBriefs', 'designerPlanner', 'socialInbox', 'dailyReporting', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
@@ -311,6 +313,12 @@ const NavContent = () => {
 
         // 2. Filter items based on base access OR explicit feature grants
         return allMenuItems.filter(item => {
+            // Block SMM-specific items for Designer role to prevent mixing
+            if (userProfile?.role === 'Designer') {
+                const smmOnlyItems = ['socialReporting', 'contentPlanner', 'analytics', 'reachTracker'];
+                if (smmOnlyItems.includes(item.id)) return false;
+            }
+
             // Check if it's in their base role
             if (baseAccessIds.includes(item.id)) return true;
 
