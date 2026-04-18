@@ -258,8 +258,8 @@ export default function TodaySummaryPage() {
             expenseCategoriesMap[cat] = (expenseCategoriesMap[cat] || 0) + (e.amount || 0);
         });
 
-        // Net Cash Handover = Cash collected (Do not deduct general expenses as they might be paid via bank/corporate card)
-        const netExpectedCash = expectedCash;
+        // Net Cash Handover = Cash collected - Total Expenses
+        const netExpectedCash = expectedCash - totalExpenses;
 
         const totalPhysicalCash = filteredClosings.reduce((sum, c) => sum + (c.cashHandedOver || 0), 0);
 
@@ -386,7 +386,7 @@ export default function TodaySummaryPage() {
                                     <div className="flex flex-col gap-1 w-full md:w-auto">
                                         <div className="flex items-center justify-between px-2 gap-4">
                                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Physical Cash Input</span>
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">Net Expected: Rs {stats.expectedCash.toLocaleString()}</span>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">Net Expected (After Exp): Rs {stats.expectedCash.toLocaleString()}</span>
                                         </div>
                                         <div className="relative flex-1 md:w-64">
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rs</div>
@@ -521,7 +521,7 @@ export default function TodaySummaryPage() {
                                 <div>
                                     <h4 className="text-xl font-black tracking-tight">Handover Discrepancy Alert!</h4>
                                     <p className="font-bold opacity-90 text-sm">
-                                        The physical cash entered does not match the system record. The counter should have exactly <span className="underline decoration-white/50">Rs {stats.expectedCash.toLocaleString()}</span> for handover based on today's cash collections.
+                                        The physical cash entered does not match the system record. After deducting all expenses, the counter should have exactly <span className="underline decoration-white/50">Rs {stats.expectedCash.toLocaleString()}</span> for handover.
                                     </p>
                                 </div>
                             </div>
