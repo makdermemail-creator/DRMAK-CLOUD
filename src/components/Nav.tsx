@@ -292,8 +292,8 @@ const NavContent = () => {
         } else if (userProfile?.role === 'Social Media Manager') {
             baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
         } else if (userProfile?.role === 'Designer') {
-            // Remove global 'dashboard' to prevent duplicate links. 'designerWork' is now their Dashboard.
-            // Both Social Media Manager and Designer now use the same shared 'contentPlanner'
+            // Designers and SMM now share the exact same unified platform planner.
+            // Removed the private 'My Planner' to prevent data discrepancy.
             baseAccessIds = ['designerWork', 'creativeBriefs', 'contentPlanner', 'socialInbox', 'dailyReporting', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];

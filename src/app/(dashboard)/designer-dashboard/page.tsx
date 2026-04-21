@@ -513,6 +513,12 @@ export default function DesignerDashboardPage() {
                                                     <Badge variant="outline" className="text-[9px] h-4 font-black border-blue-200 text-blue-700 uppercase px-1.5">
                                                         {req.assetType}
                                                     </Badge>
+                                                    {req.deadline && (
+                                                        <span className="text-[9px] font-black text-red-600 flex items-center gap-1 uppercase tracking-widest bg-white/80 w-fit px-1.5 py-0.5 rounded border border-red-100">
+                                                            <Clock className="h-2.5 w-2.5" />
+                                                            Due: {format(new Date(req.deadline), 'MMM dd')}
+                                                        </span>
+                                                    )}
                                                     <Button 
                                                         variant="ghost" 
                                                         size="sm" 

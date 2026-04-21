@@ -524,6 +524,12 @@ export default function SocialDashboardPage() {
                                                 <Badge variant="outline" className="text-[9px] font-black border-indigo-100 text-indigo-600 uppercase h-4 px-1.5">
                                                     {req.assetType}
                                                 </Badge>
+                                                {req.deadline && (
+                                                    <span className="text-[10px] text-purple-600 font-black flex items-center gap-1 uppercase tracking-tighter">
+                                                        <Clock className="h-2.5 w-2.5" />
+                                                        Due: {format(new Date(req.deadline), 'MMM dd')}
+                                                    </span>
+                                                )}
                                                 <Button 
                                                     variant="ghost" 
                                                     size="sm" 
