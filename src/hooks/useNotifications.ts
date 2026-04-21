@@ -1,4 +1,4 @@
-import { useCollection, useFirestore, useUser } from '@/firebase';
+import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import * as React from 'react';
 
@@ -7,7 +7,7 @@ export const useNotifications = () => {
     const { user } = useUser();
 
     // 1. Pending Prescriptions (Operations Manager)
-    const prescQuery = React.useMemo(() => {
+    const prescQuery = useMemoFirebase(() => {
         if (!firestore) return null;
         return query(
             collection(firestore, 'prescriptions'), 
@@ -17,9 +17,7 @@ export const useNotifications = () => {
     const { data: prescriptions } = useCollection(prescQuery);
 
     // 2. New Leads (Sales / Digital)
-    // For Sales: only their assigned new leads
-    // For Social Media Manager (Digital) / Admin: all new leads
-    const leadsQuery = React.useMemo(() => {
+    const leadsQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         
         const baseQuery = collection(firestore, 'leads');
@@ -40,7 +38,7 @@ export const useNotifications = () => {
     const { data: leads } = useCollection(leadsQuery);
 
     // 3. Social Inbox (Digital / Users)
-    const chatsQuery = React.useMemo(() => {
+    const chatsQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return query(
             collection(firestore, 'chats'),
