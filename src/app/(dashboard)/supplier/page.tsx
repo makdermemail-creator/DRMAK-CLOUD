@@ -190,6 +190,22 @@ export default function SupplierPage() {
             return;
         }
         setIsSaving(true);
+
+        // Validation: Sale Price must be greater than Cost Price
+        if (formData.products && formData.products.length > 0) {
+            for (const p of formData.products) {
+                if ((p.sellingPrice || 0) <= (p.price || 0)) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Pricing Error',
+                        description: `Sale price for "${p.name || 'this item'}" must be greater than its cost price.`
+                    });
+                    setIsSaving(false);
+                    return;
+                }
+            }
+        }
+
         try {
             let supplierId = editingSupplier?.id;
             if (editingSupplier) {
@@ -292,10 +308,9 @@ export default function SupplierPage() {
             products: prev.products?.map((p, i) => {
                 if (i !== idx) return p;
                 if (field === 'price' || field === 'sellingPrice' || field === 'quantity' || field === 'minThreshold') {
-                    // Allow empty string to be handled by the input while keeping state numeric where possible
-                    if (value === '') return { ...p, [field]: 0 };
-                    const numVal = typeof value === 'string' ? parseFloat(value) : value;
-                    return { ...p, [field]: isNaN(numVal as number) ? 0 : numVal };
+                    if (value === '') return { ...p, [field]: undefined };
+                    const numVal = parseFloat(value);
+                    return { ...p, [field]: isNaN(numVal) ? 0 : numVal };
                 }
                 return { ...p, [field]: value };
             })
@@ -719,111 +734,104 @@ export default function SupplierPage() {
                                     <div className="grid gap-3">
                                         {formData.products?.map((p, i) => (
                                             <div key={p.id} className={cn(
-                                                "grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-2xl shadow-sm border animate-in fade-in slide-in-from-top-2",
+                                                "grid grid-cols-1 md:grid-cols-12 gap-6 bg-white p-6 rounded-3xl shadow-sm border animate-in fade-in slide-in-from-top-2",
                                                 formData.type === 'Vendor' ? "border-indigo-100" : "border-emerald-100"
                                             )}>
-                                                <div className={cn(
-                                                    "col-span-1 flex items-center justify-center font-black",
-                                                    formData.type === 'Vendor' ? "text-indigo-200" : "text-emerald-200"
-                                                )}>{i + 1}</div>
-                                                <div className="col-span-4">
-                                                    <Input
-                                                        placeholder="Product Name"
-                                                        className={cn(
-                                                            "border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
-                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
+                                                <div className="md:col-span-5 space-y-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={cn(
+                                                            "h-8 w-8 rounded-xl flex items-center justify-center text-xs font-black",
+                                                            formData.type === 'Vendor' ? "bg-indigo-100 text-indigo-600" : "bg-emerald-100 text-emerald-600"
+                                                        )}>{i + 1}</div>
+                                                        <div className="flex-1 space-y-1">
+                                                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Product Identity</Label>
+                                                            <Input
+                                                                placeholder="Enter product name..."
+                                                                className="h-11 rounded-xl border-none bg-muted/20 font-bold focus-visible:ring-indigo-500"
+                                                                value={p.name}
+                                                                onChange={e => updateProduct(i, 'name', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4 pl-11">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Rack Location</Label>
+                                                            <Select value={p.rack} onValueChange={val => updateProduct(i, 'rack', val)}>
+                                                                <SelectTrigger className="h-11 rounded-xl bg-muted/20 border-none font-bold">
+                                                                    <SelectValue placeholder="Select Rack" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
+                                                                        <SelectItem key={r} value={r} className="font-bold">Rack {r}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Expiry Date</Label>
+                                                            <Input
+                                                                type="date"
+                                                                className="h-11 rounded-xl bg-muted/20 border-none font-bold"
+                                                                value={p.expiryDate || ''}
+                                                                onChange={e => updateProduct(i, 'expiryDate', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="md:col-span-7 grid grid-cols-2 gap-4 bg-muted/5 p-5 rounded-3xl border border-muted-200 relative">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-rose-600 ml-1">Cost Price (Rs)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="h-12 rounded-xl font-black text-rose-600 border-rose-200 bg-white focus-visible:ring-rose-500 text-lg px-4"
+                                                            value={p.price === undefined ? '' : p.price}
+                                                            onChange={e => updateProduct(i, 'price', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-teal-600 ml-1">Sale Price (Rs)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="h-12 rounded-xl font-black text-teal-700 border-teal-200 bg-white focus-visible:ring-teal-500 text-lg px-4"
+                                                            value={p.sellingPrice === undefined ? '' : p.sellingPrice}
+                                                            onChange={e => updateProduct(i, 'sellingPrice', e.target.value)}
+                                                        />
+                                                        {(p.sellingPrice || 0) <= (p.price || 0) && (p.price || 0) > 0 && (
+                                                            <p className="text-[9px] font-bold text-rose-500 animate-pulse mt-1 ml-1">
+                                                                Warning: Sale price must exceed cost price
+                                                            </p>
                                                         )}
-                                                        value={p.name}
-                                                        onChange={e => updateProduct(i, 'name', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-span-3 relative">
-                                                    <DollarSign className={cn(
-                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
-                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
-                                                    )} />
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Price"
-                                                        className={cn(
-                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
-                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
-                                                        )}
-                                                        value={p.price || ''}
-                                                        onChange={e => updateProduct(i, 'price', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-span-2 relative">
-                                                    <Package className={cn(
-                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
-                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
-                                                    )} />
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Qty"
-                                                        className={cn(
-                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
-                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
-                                                        )}
-                                                        value={p.quantity || ''}
-                                                        onChange={e => updateProduct(i, 'quantity', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-span-2 relative">
-                                                    <Activity className={cn(
-                                                        "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
-                                                        formData.type === 'Vendor' ? "text-indigo-400" : "text-emerald-400"
-                                                    )} />
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Min"
-                                                        className={cn(
-                                                            "pl-7 border-none shadow-none bg-muted/10 h-10 rounded-lg font-bold",
-                                                            formData.type === 'Vendor' ? "focus-visible:ring-indigo-500" : "focus-visible:ring-emerald-500"
-                                                        )}
-                                                        value={p.minThreshold || ''}
-                                                        onChange={e => updateProduct(i, 'minThreshold', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-span-1 space-y-1">
-                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Sale (Rs)</Label>
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Sale"
-                                                        value={p.sellingPrice}
-                                                        onChange={(e) => updateProduct(i, 'sellingPrice', e.target.value)}
-                                                        className="h-8 text-[10px]"
-                                                    />
-                                                </div>
-                                                <div className="col-span-1 space-y-1">
-                                                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Rack</Label>
-                                                     <Select 
-                                                        value={p.rack} 
-                                                        onValueChange={(val) => updateProduct(i, 'rack', val)}
-                                                     >
-                                                        <SelectTrigger className="h-8 text-[10px] px-1">
-                                                            <SelectValue placeholder="Rack" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
-                                                                <SelectItem key={r} value={r} className="text-[10px]">Rack {r}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                     </Select>
-                                                 </div>
-                                                <div className="col-span-1 space-y-1">
-                                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Expiry</Label>
-                                                    <Input
-                                                        type="date"
-                                                        value={p.expiryDate}
-                                                        onChange={(e) => updateProduct(i, 'expiryDate', e.target.value)}
-                                                        className="h-8 text-[10px] px-1"
-                                                    />
-                                                </div>
-                                                <div className="col-span-1 flex justify-end">
-                                                    <Button variant="ghost" size="icon" onClick={() => removeProduct(i)} className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Inventory Quantity</Label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="h-12 rounded-xl font-black text-slate-700 border-slate-200 bg-white focus-visible:ring-slate-500 text-lg px-4"
+                                                            value={p.quantity === undefined ? '' : p.quantity}
+                                                            onChange={e => updateProduct(i, 'quantity', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-amber-600 ml-1">Min. Alert Threshold</Label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="h-12 rounded-xl font-black text-amber-700 border-amber-200 bg-white focus-visible:ring-amber-500 text-lg px-4"
+                                                            value={p.minThreshold === undefined ? '' : p.minThreshold}
+                                                            onChange={e => updateProduct(i, 'minThreshold', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    
+                                                    <button 
+                                                        onClick={() => removeProduct(i)}
+                                                        className="absolute -top-3 -right-3 h-8 w-8 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-lg hover:bg-rose-600 transition-all hover:scale-110 active:scale-95"
+                                                    >
                                                         <Trash2 size={16} />
-                                                    </Button>
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}

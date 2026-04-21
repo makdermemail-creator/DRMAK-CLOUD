@@ -109,6 +109,15 @@ export default function InventoryPage() {
             return;
         }
 
+        if (Number(sellingPrice) <= Number(price)) {
+            toast({ 
+                variant: 'destructive', 
+                title: 'Pricing Error', 
+                description: 'Sale price must be greater than cost price to maintain profit margins.' 
+            });
+            return;
+        }
+
         if (!firestore || !editingItem) return;
 
         try {
@@ -260,8 +269,22 @@ export default function InventoryPage() {
                                                     {item.rack || '—'}
                                                 </span>
                                             </TableCell>
-                                            <TableCell className="text-right text-xs text-muted-foreground">{item.price.toLocaleString()} Rs</TableCell>
-                                            <TableCell className="text-right font-black text-primary">{item.sellingPrice?.toLocaleString()} Rs</TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-400">Cost</span>
+                                                    <span className="font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">
+                                                        {item.price?.toLocaleString() || 0} Rs
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-400">Sale</span>
+                                                    <span className="font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
+                                                        {item.sellingPrice?.toLocaleString() || 0} Rs
+                                                    </span>
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 {Number(item.quantity) <= 0 ? (
                                                     <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[10px] font-black bg-red-600 text-white animate-pulse">
