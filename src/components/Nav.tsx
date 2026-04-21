@@ -280,9 +280,9 @@ const NavContent = () => {
         if (isUserLoading) return [];
 
         if (isMainAdmin) {
-            // Main admin sees everything, but we filter based on viewMode if requested
-            // In this specific task, we want to group them.
-            return allMenuItems;
+            // Main admin sees everything, but we filter out redundant role-specific dashboards
+            // because they use the unified root dashboard with switcher.
+            return allMenuItems.filter(item => item.id !== 'salesDashboard' && item.id !== 'designerWork');
         }
 
         // 1. Determine base role access
@@ -296,7 +296,7 @@ const NavContent = () => {
             // Removed the private 'My Planner' to prevent data discrepancy.
             baseAccessIds = ['designerWork', 'creativeBriefs', 'contentPlanner', 'socialInbox', 'dailyReporting', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
-            baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
+            baseAccessIds = ['salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
             // Core Operations + AI Tools (Removed Pharmacy and Reports)
             baseAccessIds = [

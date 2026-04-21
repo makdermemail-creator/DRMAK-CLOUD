@@ -38,6 +38,7 @@ export default function DailyTasksPage() {
     const { user } = useUser();
 
     const [newTask, setNewTask] = React.useState('');
+    const [editingTask, setEditingTask] = React.useState<DailyTask | null>(null);
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
@@ -79,22 +80,39 @@ export default function DailyTasksPage() {
             return;
         }
 
-        const task: Omit<DailyTask, 'id'> = {
-            userId: user.id,
-            task: newTask,
-            status: 'Pending',
-            dueDate: new Date().toISOString(),
-        };
-
         try {
-            await addDocumentNonBlocking(collection(firestore, 'dailyTasks'), task);
-            toast({ title: "Task Added", description: "Your new task has been saved." });
+            if (editingTask) {
+                const taskRef = doc(firestore, 'dailyTasks', editingTask.id);
+                await updateDocumentNonBlocking(taskRef, { task: newTask });
+                toast({ title: "Task Updated", description: "Changes have been saved." });
+            } else {
+                const task: Omit<DailyTask, 'id'> = {
+                    userId: user.id,
+                    task: newTask,
+                    status: 'Pending',
+                    dueDate: new Date().toISOString(),
+                };
+                await addDocumentNonBlocking(collection(firestore, 'dailyTasks'), task);
+                toast({ title: "Task Added", description: "Your new task has been saved." });
+            }
             setNewTask('');
+            setEditingTask(null);
             forceRerender();
         } catch (error) {
-            console.error("Failed to add task:", error);
-            toast({ variant: "destructive", title: "Submission Failed", description: "Could not save your task." });
+            console.error("Failed to save task:", error);
+            toast({ variant: "destructive", title: "Save Failed", description: "Could not save your task." });
         }
+    };
+
+    const startEditing = (task: DailyTask) => {
+        setEditingTask(task);
+        setNewTask(task.task);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const cancelEditing = () => {
+        setEditingTask(null);
+        setNewTask('');
     };
 
     const handleTaskStatusChange = (task: DailyTask, isCompleted: boolean) => {
@@ -234,13 +252,18 @@ export default function DailyTasksPage() {
                 <CardContent className="space-y-4">
                     <div className="flex gap-2">
                         <Input
-                            placeholder="Add a new task..."
+                            placeholder={editingTask ? "Update task description..." : "Add a new task..."}
                             value={newTask}
                             onChange={(e) => setNewTask(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
+                            className={editingTask ? "border-indigo-400 bg-indigo-50/30 ring-1 ring-indigo-400/20" : ""}
                         />
-                        <Button onClick={handleAddTask}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Task
+                        {editingTask && (
+                            <Button variant="ghost" onClick={cancelEditing} className="text-slate-500">Cancel</Button>
+                        )}
+                        <Button onClick={handleAddTask} className={editingTask ? "bg-indigo-600 hover:bg-indigo-700" : ""}>
+                            {editingTask ? <Save className="mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                            {editingTask ? "Update Task" : "Add Task"}
                         </Button>
                     </div>
 
@@ -272,11 +295,16 @@ export default function DailyTasksPage() {
                                             <TableCell className={`font-medium ${task.status === 'Completed' ? 'text-muted-foreground line-through' : ''}`}>
                                                 {task.task}
                                             </TableCell>
-                                            <TableCell>{format(new Date(task.dueDate), 'MMM dd, yyyy')}</TableCell>
+                                            <TableCell>{format(new Date(task.dueDate), 'MMM dd, HH:mm')}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteTask(task.id)}>
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => startEditing(task)}>
+                                                        <Pencil className="h-4 w-4 text-indigo-600" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteTask(task.id)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

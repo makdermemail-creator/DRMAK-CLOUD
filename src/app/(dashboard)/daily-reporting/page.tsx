@@ -19,8 +19,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileText, Send, Save, PieChart, Activity, UserPlus, Video, PlusCircle } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
+import { Loader2, FileText, Send, Save, PieChart, Activity, UserPlus, Video, PlusCircle, Trash2 } from 'lucide-react';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
 import type { DailyReport, DailyPosting, Lead } from '@/lib/types';
 import { collection, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -127,6 +127,19 @@ export default function DailyReportingPage() {
             toast({ variant: "destructive", title: "Submission Failed", description: "Could not save your report." });
         } finally {
             setIsSubmitting(false);
+        }
+    }
+
+    const handleDeleteReport = async (reportId: string) => {
+        if (!firestore) return;
+        if (!window.confirm('Are you sure you want to delete this report?')) return;
+
+        try {
+            await deleteDocumentNonBlocking(doc(firestore, 'dailyReports', reportId));
+            toast({ title: "Report Deleted", description: "The daily report has been removed." });
+            if (forceRerender) forceRerender();
+        } catch (error) {
+            toast({ variant: "destructive", title: "Delete Failed", description: "Could not remove the report." });
         }
     }
 
@@ -282,9 +295,14 @@ export default function DailyReportingPage() {
                                         <TableCell><p className="line-clamp-2 text-sm">{report.summary}</p></TableCell>
                                         <TableCell><p className="line-clamp-2 text-sm">{report.plans}</p></TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" onClick={() => startEditing(report)} className="h-8 text-indigo-600 hover:text-indigo-700">
-                                                Edit
-                                            </Button>
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="sm" onClick={() => startEditing(report)} className="h-8 w-8 p-0 text-indigo-600 hover:text-indigo-700">
+                                                    <FileText className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteReport(report.id)} className="h-8 w-8 p-0 text-rose-500 hover:text-rose-600">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
