@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X, Send } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
-import { collection, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, query, where, deleteDoc } from 'firebase/firestore';
 import type { Patient, Doctor } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
@@ -76,6 +76,7 @@ export default function EPrescriptionPage() {
   const [savedId, setSavedId] = React.useState<string | null>(null);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(false);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
+  const [rxToDelete, setRxToDelete] = React.useState<string | null>(null);
 
   const resetForm = () => {
     setSelectedPatient(null);
@@ -169,6 +170,17 @@ export default function EPrescriptionPage() {
       toast({ variant: 'destructive', title: 'Save Failed' });
     }
     setIsSaving(false);
+  };
+
+  const handleDeletePrescription = async () => {
+    if (!firestore || !rxToDelete) return;
+    try {
+      await deleteDoc(doc(firestore, 'prescriptions', rxToDelete));
+      toast({ title: 'Prescription Deleted', description: 'The record has been permanently removed.' });
+      setRxToDelete(null);
+    } catch {
+      toast({ variant: 'destructive', title: 'Deletion Failed' });
+    }
   };
 
   const handleSendForPrint = async () => {
@@ -298,7 +310,8 @@ export default function EPrescriptionPage() {
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
                           <Button size="sm" variant="outline" className="flex-1 sm:flex-none" onClick={() => setPreviewRx(rx)}>View</Button>
-                          <Button size="sm" className="flex-1 sm:flex-none" onClick={() => handleLoadPrescription(rx)}>Load</Button>
+                          <Button size="sm" variant="secondary" className="flex-1 sm:flex-none" onClick={() => handleLoadPrescription(rx)}>Load</Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => setRxToDelete(rx.id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       </div>
                     ))}
@@ -475,6 +488,23 @@ export default function EPrescriptionPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── DELETE CONFIRMATION DIALOG ── */}
+      <Dialog open={!!rxToDelete} onOpenChange={(o) => { if (!o) setRxToDelete(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogTitle className="text-destructive flex items-center gap-2">
+            <Trash2 className="h-5 w-5" /> Warning: Deleting Record
+          </DialogTitle>
+          <DialogDescription className="py-4 font-semibold text-foreground">
+            You are deleting the patient history, are you sure?
+          </DialogDescription>
+          <p className="text-sm text-muted-foreground mb-4">This action is permanent and cannot be undone. The clinical data for this visit will be lost.</p>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="ghost" onClick={() => setRxToDelete(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeletePrescription}>Delete Permanently</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

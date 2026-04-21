@@ -368,6 +368,8 @@ export type Chat = {
   avatarUrl?: string; // For group chats
   lastMessage?: string;
   lastMessageAt?: string; // ISO string
+  lastSenderId?: string; // ID of the user who sent the last message
+  readBy?: string[]; // IDs of users who have read the latest message in this chat
   createdAt: string; // ISO string
   createdBy: string; // User ID
 };

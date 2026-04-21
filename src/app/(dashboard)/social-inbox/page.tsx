@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCollection, useFirestore, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, limit, doc, getDoc, setDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, doc, getDoc, setDoc, Timestamp, addDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import { Chat, Message, User as UserType } from '@/lib/types';
 import { format } from 'date-fns';
 import { safeFormat } from '@/lib/safe-date';
@@ -109,7 +109,9 @@ export default function SocialInboxPage() {
             const chatRef = doc(firestore, 'chats', selectedChatId);
             await updateDocumentNonBlocking(chatRef, {
                 lastMessage: content,
-                lastMessageAt: new Date().toISOString()
+                lastMessageAt: new Date().toISOString(),
+                lastSenderId: currentUser.id,
+                readBy: [currentUser.id]
             });
         } catch (error) {
             console.error("Error sending message:", error);
@@ -208,6 +210,19 @@ export default function SocialInboxPage() {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
+
+    // Mark chat as read when selected
+    React.useEffect(() => {
+        if (selectedChatId && currentUser && firestore) {
+            const chat = chats?.find(c => c.id === selectedChatId);
+            if (chat && (!chat.readBy || !chat.readBy.includes(currentUser.id))) {
+                const chatRef = doc(firestore, 'chats', selectedChatId);
+                updateDocumentNonBlocking(chatRef, {
+                    readBy: arrayUnion(currentUser.id)
+                });
+            }
+        }
+    }, [selectedChatId, currentUser, firestore, chats]);
 
     return (
         <div className="h-[calc(100vh-140px)] flex flex-col space-y-4 max-w-7xl mx-auto">

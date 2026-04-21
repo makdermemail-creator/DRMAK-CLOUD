@@ -23,6 +23,13 @@ export interface PrescriptionPreviewProps {
   medicines: Medicine[];
   investigations: string;
   advice: string;
+  vitals: {
+    bp?: string;
+    pulse?: string;
+    temp?: string;
+    weight?: string;
+    height?: string;
+  };
   followUpDates: string[];
   today: string;
   hideBranding?: boolean;
@@ -66,7 +73,10 @@ function LetterheadLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
       flexDirection: 'column',
       background: 'transparent',
       color: INK,
-    }}>
+      position: 'relative',
+      overflow: 'hidden'
+    }} className="prescription-print-container">
+      <PrintStyles />
 
       {/* Doctor + Date row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3mm', paddingBottom: '2.5mm', borderBottom: '0.6px solid #888' }}>
@@ -202,7 +212,8 @@ function LetterheadLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
 // ─────────────────────────────────────────────────────────────────────────────
 function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
   return (
-    <div style={{ fontFamily: "'Inter','Arial',sans-serif", background: 'white', width: '100%', minHeight: '297mm', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ fontFamily: "'Inter','Arial',sans-serif", background: 'white', width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden' }} className="prescription-print-container digital-mode">
+      <PrintStyles />
 
       {/* ── Decorative layer (behind everything) ── */}
 
@@ -374,8 +385,50 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORT
+// PRINT STYLES & EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
+function PrintStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: `
+      @media print {
+        @page {
+          size: A4;
+          margin: 0 !important;
+        }
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 210mm !important;
+          height: 297mm !important;
+          overflow: hidden !important;
+          -webkit-print-color-adjust: exact;
+        }
+        .prescription-print-container {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 210mm !important;
+          height: 297mm !important;
+          margin: 0 !important;
+          padding-top: 44mm; /* Restore padding for LetterheadLayout if needed, but DigitalLayout has its own */
+          background: white !important;
+          z-index: 99999 !important;
+          page-break-after: avoid !important;
+          page-break-before: avoid !important;
+        }
+        /* Specific adjustments for DigitalLayout which handles its own padding */
+        .prescription-print-container.digital-mode {
+          padding-top: 0 !important;
+        }
+        /* Ensure anything outside the print container is hidden */
+        #root, .main-layout, header, nav, footer, sidebar {
+          display: none !important;
+        }
+      }
+    `}} />
+  );
+}
+
 export function PrescriptionPreview({ hideBranding, ...rest }: PrescriptionPreviewProps) {
   if (hideBranding) return <LetterheadLayout {...rest} />;
   return <DigitalLayout {...rest} />;

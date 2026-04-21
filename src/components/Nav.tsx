@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { useViewMode } from '@/context/ViewModeContext';
+import { useNotifications } from '@/hooks/useNotifications';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -260,11 +261,29 @@ const SidebarMenuSkeleton = ({ showIcon }: { showIcon?: boolean }) => {
 }
 
 
+const NotificationBadge = ({ count }: { count: number }) => {
+    if (count <= 0) return null;
+    return (
+        <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white shadow-lg ring-2 ring-white dark:ring-slate-900 animate-pulse min-w-[18px] px-1">
+            {count > 99 ? '99+' : count}
+        </span>
+    );
+};
+
+
 const NavContent = () => {
     const pathname = usePathname();
     const { state } = useSidebar();
     const { user: userProfile, isUserLoading } = useUser();
     const { viewMode, setViewMode } = useViewMode();
+    const notificationCounts = useNotifications();
+
+    const getCountForId = React.useCallback((id: string) => {
+        if (id === 'printPrescription') return notificationCounts.printPrescription;
+        if (id === 'leads') return notificationCounts.leads;
+        if (id === 'socialInbox') return notificationCounts.socialInbox;
+        return 0;
+    }, [notificationCounts]);
 
     // For sidebar rendering, we determine if we should show the "grouped" view Modes.
     // We show this if the user is a true admin OR if they explicitly have a management flag.
@@ -392,7 +411,10 @@ const NavContent = () => {
                                                                 )}
                                                             >
                                                                 <div className="flex items-center gap-3">
-                                                                    {item.icon && <item.icon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                                    <div className="relative">
+                                                                        {item.icon && <item.icon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                                        <NotificationBadge count={getCountForId(item.id)} />
+                                                                    </div>
                                                                     <span className="text-sm tracking-tight">{item.label}</span>
                                                                 </div>
                                                                 {state === 'expanded' && <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", isActive ? "text-white/70" : "text-slate-400")} />}
@@ -421,8 +443,13 @@ const NavContent = () => {
                                                                 : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
                                                         )}
                                                     >
-                                                        {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
-                                                        <span className="text-sm tracking-tight">{item.label}</span>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                                <NotificationBadge count={getCountForId(item.id)} />
+                                                            </div>
+                                                            <span className="text-sm tracking-tight">{item.label}</span>
+                                                        </div>
                                                         {isActive && <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                                                     </SidebarMenuButton>
                                                 </Link>
@@ -466,8 +493,13 @@ const NavContent = () => {
                                                 ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
                                                 : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
                                         )}>
-                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
-                                            <span className="text-sm tracking-tight">{item.label}</span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                    <NotificationBadge count={getCountForId(item.id)} />
+                                                </div>
+                                                <span className="text-sm tracking-tight">{item.label}</span>
+                                            </div>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -489,8 +521,13 @@ const NavContent = () => {
                                                 ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
                                                 : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
                                         )}>
-                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-indigo-600")} />}
-                                            <span className="text-sm tracking-tight">{item.label}</span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-indigo-600")} />}
+                                                    <NotificationBadge count={getCountForId(item.id)} />
+                                                </div>
+                                                <span className="text-sm tracking-tight">{item.label}</span>
+                                            </div>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -512,8 +549,13 @@ const NavContent = () => {
                                                 ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none font-bold scale-[1.02]" 
                                                 : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
                                         )}>
-                                            {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
-                                            <span className="text-sm tracking-tight">{item.label}</span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", pathname === item.href ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                                    <NotificationBadge count={getCountForId(item.id)} />
+                                                </div>
+                                                <span className="text-sm tracking-tight">{item.label}</span>
+                                            </div>
                                         </SidebarMenuButton>
                                     </Link>
                                 </SidebarMenuItem>
@@ -574,8 +616,13 @@ const NavContent = () => {
                                         : "hover:bg-indigo-50/50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 text-slate-600"
                                 )}
                             >
-                                {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
-                                <span className="text-sm tracking-tight">{item.label}</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        {item.icon && <item.icon className={cn("w-4 h-4 transition-transform group-hover/btn:scale-110", isActive ? "text-white" : "text-slate-400 group-hover:text-indigo-600")} />}
+                                        <NotificationBadge count={getCountForId(item.id)} />
+                                    </div>
+                                    <span className="text-sm tracking-tight">{item.label}</span>
+                                </div>
                                 {isActive && <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                             </SidebarMenuButton>
                         </Link>
