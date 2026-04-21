@@ -269,7 +269,7 @@ export default function SocialInboxPage() {
                                         >
                                             <Avatar className="h-8 w-8">
                                                 <AvatarImage src={u.avatarUrl} />
-                                                <AvatarFallback>{u.name.charAt(0)}</AvatarFallback>
+                                                <AvatarFallback>{(u.name || "U").charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-bold text-slate-800">{u.name}</p>
@@ -337,7 +337,7 @@ export default function SocialInboxPage() {
                                         >
                                             <Avatar className="h-10 w-10 border border-slate-200 shadow-sm">
                                                 <AvatarImage src={getChatAvatar(c)} />
-                                                <AvatarFallback>{getChatName(c).charAt(0)}</AvatarFallback>
+                                                <AvatarFallback>{(getChatName(c) || "C").charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex justify-between items-baseline mb-0.5">
@@ -370,7 +370,7 @@ export default function SocialInboxPage() {
                             <CardHeader className="p-4 border-b flex flex-row items-center gap-4 bg-slate-50/30">
                                 <Avatar className="h-10 w-10 border border-indigo-100 shadow-sm">
                                     <AvatarImage src={activeChat ? getChatAvatar(activeChat) : ''} />
-                                    <AvatarFallback>{activeChat ? getChatName(activeChat).charAt(0) : '?'}</AvatarFallback>
+                                    <AvatarFallback>{activeChat ? (getChatName(activeChat) || "?").charAt(0) : '?'}</AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1">
                                     <CardTitle className="text-base font-black text-slate-800">{activeChat && getChatName(activeChat)}</CardTitle>
@@ -397,7 +397,7 @@ export default function SocialInboxPage() {
                                                 {!isMe && (
                                                     <Avatar className="h-8 w-8 shadow-sm">
                                                         <AvatarImage src={sender?.avatarUrl} />
-                                                        <AvatarFallback>{sender?.name.charAt(0)}</AvatarFallback>
+                                                        <AvatarFallback>{(sender?.name || "U").charAt(0)}</AvatarFallback>
                                                     </Avatar>
                                                 )}
                                                 <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[70%]`}>
