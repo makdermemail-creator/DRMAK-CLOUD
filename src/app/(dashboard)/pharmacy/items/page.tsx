@@ -182,6 +182,10 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode, suppliers }: { ope
                             <Input id="quantity" type="number" value={formData.quantity || ''} onChange={handleChange} />
                         </div>
                         <div className="space-y-2">
+                            <Label htmlFor="minThreshold">Min. Stock Level (Alert)</Label>
+                            <Input id="minThreshold" type="number" value={formData.minThreshold || ''} onChange={handleChange} />
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="stockingUnit">Stocking Unit</Label>
                             <Input id="stockingUnit" type="number" value={formData.stockingUnit || ''} onChange={handleChange} />
                         </div>
@@ -389,9 +393,10 @@ export default function PharmacyItemsPage() {
                                     <TableHead>Manufacturer</TableHead>
                                     <TableHead>Supplier(s)</TableHead>
                                     <TableHead>Rack</TableHead>
-                                    <TableHead>Stocking Unit</TableHead>
-                                    <TableHead>Conversion Unit</TableHead>
-                                    <TableHead className="text-right">Unit Price</TableHead>
+                                    <TableHead>Stock Level</TableHead>
+                                    <TableHead>Qty</TableHead>
+                                    <TableHead className="text-right">Purchase Price</TableHead>
+                                    <TableHead className="text-right">Sale Price</TableHead>
                                     <TableHead><span className="sr-only">Actions</span></TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -419,15 +424,24 @@ export default function PharmacyItemsPage() {
                                                 {item.rack || '—'}
                                             </span>
                                         </TableCell>
-                                        <TableCell>{item.stockingUnit}</TableCell>
-                                        <TableCell>{item.conversionUnit}</TableCell>
-                                        <TableCell className="text-right">Rs{item.sellingPrice.toLocaleString()}</TableCell>
                                         <TableCell>
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenForm('edit', item)}>
+                                            {item.quantity === 0 ? (
+                                                <Badge variant="destructive" className="text-[10px] font-black uppercase tracking-tighter bg-red-600">Out of Stock</Badge>
+                                            ) : item.minThreshold && item.quantity <= item.minThreshold ? (
+                                                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tighter border-amber-500 text-amber-600 bg-amber-50">Low Stock</Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tighter border-emerald-500 text-emerald-600 bg-emerald-50">Healthy</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="font-bold">{item.quantity}</TableCell>
+                                        <TableCell className="text-right font-medium text-slate-500">Rs {item.purchasePrice?.toLocaleString() || 0}</TableCell>
+                                        <TableCell className="text-right font-black text-teal-600 underline decoration-teal-100 decoration-4 underline-offset-4">Rs {item.sellingPrice?.toLocaleString() || 0}</TableCell>
+                                        <TableCell onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => handleOpenForm('edit', item)}>
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(item.id)}>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => handleDelete(item.id)}>
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>

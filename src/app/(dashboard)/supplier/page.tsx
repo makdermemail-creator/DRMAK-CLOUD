@@ -222,6 +222,7 @@ export default function SupplierPage() {
                         supplierId: supplierId || editingSupplier?.id,
                         category: formData.category,
                         rack: p.rack || '',
+                        minThreshold: p.minThreshold !== undefined ? Number(p.minThreshold) : 0,
                         expiryDate: p.expiryDate || '',
                         active: true
                     }, { merge: true });

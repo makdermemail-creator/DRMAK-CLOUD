@@ -137,6 +137,7 @@ export type PharmacyItem = {
   purchasePrice: number;
   sellingPrice: number;
   quantity: number;
+  minThreshold?: number;
   expiryDate: string; // ISO string
   active: boolean;
   rack?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
