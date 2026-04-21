@@ -2,13 +2,7 @@ import * as React from 'react';
 import type { Patient } from '@/lib/types';
 import { format } from 'date-fns';
 
-type Vital = {
-  bp: string;
-  pulse: string;
-  temp: string;
-  weight: string;
-  height: string;
-};
+
 
 type Medicine = {
   id: string;
@@ -24,7 +18,6 @@ export interface PrescriptionPreviewProps {
   doctorQualification: string;
   doctorSpecialization: string;
   patient: Patient | null;
-  vitals: Vital;
   chiefComplaint: string;
   diagnosis: string;
   medicines: Medicine[];
@@ -39,10 +32,12 @@ function safeFormatDate(dateStr: string) {
   try { return format(new Date(dateStr), 'dd MMMM yyyy'); } catch { return ''; }
 }
 
-const GOLD = '#C9A84C';
-const INK  = '#1a1a1a';
+const GOLD = '#D1B057';
+const INK  = '#2D2D2D';
 
-const preciseFace = "M31.2,16.8c-0.2-2.1,0.2-4.2,1.2-6.1c0.4-0.8,1.4-1,2-0.3c0.7,0.8,1.3,1.6,1.9,2.4c0.7,1,1.5,1.9,2.3,2.8c1,1.1,2.2,2.1,3.4,3c1.3,1,2.7,1.8,4.2,2.5c1.6,0.7,3.2,1.3,4.9,1.7c1.7,0.4,3.5,0.7,5.3,0.7c1.8,0,3.6-0.2,5.4-0.6c1.8-0.4,3.5-1.1,5.1-1.9c0.8-0.4,1.8,0,2,0.8c0.2,0.8,0.1,1.8-0.4,2.5c-0.8,1.3-1.8,2.4-2.8,3.5c-1.1,1-2.3,1.9-3.6,2.7c-1.3,0.8-2.7,1.5-4.2,2c-1.5,0.5-3.1,0.8-4.7,1c-1.6,0.2-3.3,0.3-4.9,0.2c-1.7-0.1-3.3-0.3-5-0.7c-1.6-0.4-3.1-1-4.6-1.7c-1.4-0.7-2.8-1.7-3.9-2.7c-0.8-0.8-1.5-1.7-2.1-2.6c-0.6-0.9-1.1-1.9-1.5-2.9C31.5,21.1,31.2,19,31.2,16.8z M50.4,14.4c-2.4,0-4.3,1.9-4.3,4.3c0,2.4,1.9,4.3,4.3,4.3c2.4,0,4.3-1.9,4.3-4.3C54.7,16.3,52.8,14.4,50.4,14.4z";
+// Ultra-Elegant Lady Profile for SkinSmith (Thin Line-Art)
+const preciseFace = "M15.5,10.5c-4.2,0.1-7.8,3.2-8.5,7.3c-0.1,0.5,0.1,1.1,0.5,1.4c4.1,2.8,7.9,6.7,11.2,11.3c2.4,3.3,4.1,7.2,4.8,11.2c0.2,1,1.1,1.7,2,1.7c0.2,0,0.5,0,0.7-0.1c1.1-0.3,1.8-1.5,1.5-2.6c-0.6-3.1-4.7-18.4-12.2-24.1C15,16,15,10.5,15.5,10.5z M25.4,12.5c-5.1,1-9.2,5.2-10.2,10.3c10,2,15,12,15,12s5-15,15-20c-5-2-10-2.3-15-2.3c-1.5,0-3.2,0.1-4.8,0.2c-0.1,2.1,1.8,4.1,4,4.1s4.1-1.8,4.1-4C29.6,12.6,27.5,12.4,25.4,12.5z";
+const swooshHair = "M32.5,5.5c-2.1,0-4,1.8-4,4c0,2.1,1.8,4,4,4s4-1.8,4-4C36.5,7.3,34.7,5.5,32.5,5.5z M18.5,8.5c-1.1,0-2,0.9-2,2c0,1.1,0.9,2,2,2s2-0.9,2-2C20.5,9.4,19.6,8.5,18.5,8.5z";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LETTERHEAD MODE
@@ -218,13 +213,13 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
         </svg>
       </div>
 
-      {/* Top-right corner diamonds — BEHIND content */}
-      <div style={{ position: 'absolute', top: 0, right: 0, width: '160px', height: '160px', pointerEvents: 'none', zIndex: 0 }}>
-        <svg width="160" height="160" viewBox="0 0 160 160">
-          <rect x="90"  y="-5"  width="90" height="90" transform="rotate(45 135 40)"  fill="none" stroke={GOLD} strokeWidth="5" />
-          <rect x="55"  y="30"  width="90" height="90" transform="rotate(45 100 75)"  fill="#2a2a2a" />
-          <rect x="20"  y="65"  width="90" height="90" transform="rotate(45 65  110)" fill="none" stroke={GOLD} strokeWidth="3.5" />
-          <rect x="-15" y="100" width="90" height="90" transform="rotate(45 30  145)" fill="#333" />
+      {/* Top-right corner diamonds — Exact Replication */}
+      <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '200px', height: '200px', pointerEvents: 'none', zIndex: 0 }}>
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <rect x="135" y="-45" width="110" height="110" transform="rotate(45 190 10)" fill="#222" />
+          <rect x="105" y="15"  width="80"  height="80"  transform="rotate(45 145 55)" fill="none" stroke={GOLD} strokeWidth="2" />
+          <rect x="165" y="15"  width="50"  height="50"  transform="rotate(45 190 40)" fill="none" stroke={GOLD} strokeWidth="1.5" />
+          <rect x="150" y="65"  width="40"  height="40"  transform="rotate(45 170 85)" fill="#333" />
         </svg>
       </div>
 
@@ -232,17 +227,19 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
       <div style={{ position: 'relative', zIndex: 1 }}>
 
         {/* Header: Logo + Doctor info */}
-        <div style={{ padding: '48px 65px 20px 55px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '48px 85px 25px 75px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ width: '70px', height: '70px' }}>
-              <svg viewBox="0 0 100 100" style={{ fill: GOLD, width: '100%', height: '100%' }}>
-                <path d={preciseFace} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ width: '60px', height: '80px' }}>
+              <svg viewBox="0 0 80 100" style={{ fill: GOLD, width: '100%', height: '100%' }}>
+                {/* Ultra-Fine Lady Profile */}
+                <path d="M10,20 C10,5 25,2 35,10 C45,18 45,25 42,35 C39,45 35,50 30,58 C25,66 22,75 22,85 C22,95 25,100 25,100 L20,100 C20,100 15,95 15,85 C15,75 18,66 23,58 C28,50 34,45 36,36 C38,27 38,20 32,15 C26,10 15,10 15,25 C15,35 18,40 20,45 L15,48 C15,48 10,40 10,32 Z" />
+                <path d="M45,15 C50,10 60,10 65,15 C70,20 70,30 65,40 C60,50 50,55 45,65 C40,75 38,85 38,95 L33,95 C33,85 35,75 40,65 C45,55 55,50 60,40 C65,30 65,20 60,15 C55,10 45,10 40,25" fill="none" stroke={GOLD} strokeWidth="1.5" />
               </svg>
             </div>
-            <div>
-              <div style={{ fontSize: '34px', fontWeight: 900, letterSpacing: '4px', color: INK, lineHeight: 1 }}>SKINSMITH</div>
-              <div style={{ fontSize: '12px', letterSpacing: '5px', color: '#666', marginTop: '5px', fontWeight: 500 }}>BE BETTER BE YOU</div>
+            <div style={{ transform: 'translateY(-2px)' }}>
+              <div style={{ fontSize: '34px', fontWeight: 900, letterSpacing: '3px', color: '#111', lineHeight: 1, fontFamily: 'Optima, Cardo, "Times New Roman", serif' }}>SKINSMITH</div>
+              <div style={{ fontSize: '10px', letterSpacing: '6px', color: '#777', marginTop: '8px', fontWeight: 600 }}>BE BETTER BE YOU</div>
             </div>
           </div>
           {/* Date + Doctor */}
@@ -256,7 +253,7 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
 
         {/* Patient info */}
         {p.patient && (
-          <div style={{ margin: '0 65px 0 55px', display: 'flex', gap: '35px', flexWrap: 'wrap', borderBottom: '1px solid #eee', paddingBottom: '12px', marginBottom: '12px' }}>
+          <div style={{ margin: '0 85px 0 75px', display: 'flex', gap: '35px', flexWrap: 'wrap', borderBottom: '1px solid #eee', paddingBottom: '15px', marginBottom: '15px' }}>
             <div><span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#999', letterSpacing: '1px' }}>Patient: </span><span style={{ fontSize: '14px', fontWeight: 700, color: INK }}>{p.patient.name}</span></div>
             <div><span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#999', letterSpacing: '1px' }}>Age/Sex: </span><span style={{ fontSize: '14px', fontWeight: 700, color: INK }}>{p.patient.age} / {p.patient.gender}</span></div>
             <div style={{ marginLeft: 'auto' }}><span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#999', letterSpacing: '1px' }}>Contact: </span><span style={{ fontSize: '13px', fontWeight: 600, color: INK }}>{p.patient.mobileNumber}</span></div>
@@ -266,16 +263,7 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
         {/* Body */}
         <div style={{ padding: '20px 65px 160px 55px' }}>
 
-          {/* Vitals */}
-          {(p.vitals.bp || p.vitals.pulse || p.vitals.temp || p.vitals.weight || p.vitals.height) && (
-            <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', marginBottom: '28px', paddingBottom: '10px', borderBottom: '1px dashed #eee', color: '#555' }}>
-              {p.vitals.bp     && <span style={{ fontSize: '11px' }}><strong style={{ color: GOLD }}>BP:</strong> {p.vitals.bp}</span>}
-              {p.vitals.pulse  && <span style={{ fontSize: '11px' }}><strong style={{ color: GOLD }}>PULSE:</strong> {p.vitals.pulse}</span>}
-              {p.vitals.temp   && <span style={{ fontSize: '11px' }}><strong style={{ color: GOLD }}>TEMP:</strong> {p.vitals.temp}</span>}
-              {p.vitals.weight && <span style={{ fontSize: '11px' }}><strong style={{ color: GOLD }}>WT:</strong> {p.vitals.weight}</span>}
-              {p.vitals.height && <span style={{ fontSize: '11px' }}><strong style={{ color: GOLD }}>HT:</strong> {p.vitals.height}</span>}
-            </div>
-          )}
+
 
           {/* Chief Complaint + Diagnosis */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '35px', marginBottom: '32px' }}>
@@ -344,13 +332,14 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
         </div>
       </div>
 
-      {/* ── Bottom-left corner diamonds — BEHIND content ── */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, width: '280px', height: '280px', pointerEvents: 'none', zIndex: 0 }}>
-        <svg width="280" height="280" viewBox="0 0 280 280">
-          <rect x="20"  y="155" width="115" height="115" transform="rotate(45 77 212)"  fill="#222" />
-          <rect x="75"  y="100" width="115" height="115" transform="rotate(45 132 157)" fill="none" stroke={GOLD} strokeWidth="5" />
-          <rect x="130" y="45"  width="115" height="115" transform="rotate(45 187 102)" fill="#2a2a2a" />
-          <rect x="185" y="-10" width="115" height="115" transform="rotate(45 242 47)"  fill="none" stroke={GOLD} strokeWidth="3.5" />
+      {/* ── Bottom-left corner diamonds — Precise Replication ── */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, width: '220px', height: '220px', pointerEvents: 'none', zIndex: 0 }}>
+        <svg width="220" height="220" viewBox="0 0 220 220">
+          <rect x="-30" y="140" width="95"  height="95"  transform="rotate(45 17 187)" fill="#1a1a1a" />
+          <rect x="5"   y="105" width="85"  height="85"  transform="rotate(45 47 147)" fill="none" stroke={GOLD} strokeWidth="2" />
+          <rect x="45"  y="65"  width="75"  height="75"  transform="rotate(45 82 102)" fill="#333" />
+          <rect x="85"  y="25"  width="65"  height="65"  transform="rotate(45 117 57)"  fill="none" stroke={GOLD} strokeWidth="1.5" />
+          <rect x="120" y="-10" width="55"  height="55"  transform="rotate(45 147 17)"  fill="none" stroke={GOLD} strokeWidth="1.2" />
         </svg>
       </div>
 

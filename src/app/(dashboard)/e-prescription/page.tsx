@@ -66,7 +66,6 @@ export default function EPrescriptionPage() {
   const [patientSearch, setPatientSearch] = React.useState('');
   const [chiefComplaint, setChiefComplaint] = React.useState('');
   const [diagnosis, setDiagnosis] = React.useState('');
-  const [vitals, setVitals] = React.useState<Vital>({ bp: '', pulse: '', temp: '', weight: '', height: '' });
   const [medicines, setMedicines] = React.useState<Medicine[]>([defaultMedicine()]);
   const [investigations, setInvestigations] = React.useState('');
   const [advice, setAdvice] = React.useState('');
@@ -75,7 +74,7 @@ export default function EPrescriptionPage() {
   const [notes, setNotes] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [savedId, setSavedId] = React.useState<string | null>(null);
-  const [printOnLetterhead, setPrintOnLetterhead] = React.useState(true);
+  const [printOnLetterhead, setPrintOnLetterhead] = React.useState(false);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
 
   const resetForm = () => {
@@ -83,7 +82,6 @@ export default function EPrescriptionPage() {
     setPatientSearch('');
     setChiefComplaint('');
     setDiagnosis('');
-    setVitals({ bp: '', pulse: '', temp: '', weight: '', height: '' });
     setMedicines([defaultMedicine()]);
     setInvestigations('');
     setAdvice('');
@@ -107,7 +105,6 @@ export default function EPrescriptionPage() {
   const handleLoadPrescription = (rx: any) => {
     setChiefComplaint(rx.chiefComplaint || '');
     setDiagnosis(rx.diagnosis || '');
-    setVitals(rx.vitals || { bp: '', pulse: '', temp: '', weight: '', height: '' });
     setMedicines(rx.medicines && rx.medicines.length > 0 ? rx.medicines : [defaultMedicine()]);
     setInvestigations(rx.investigations || '');
     setAdvice(rx.advice || '');
@@ -161,7 +158,7 @@ export default function EPrescriptionPage() {
         doctorName: linkedDoctor?.fullName || user?.name,
         doctorQualification: linkedDoctor?.qualification || '',
         doctorSpecialization: linkedDoctor?.specialization || '',
-        chiefComplaint, diagnosis, vitals, medicines, investigations, advice,
+        chiefComplaint, diagnosis, medicines, investigations, advice,
         followUp: followUpDates,
         notes,
         createdAt: new Date().toISOString(),
@@ -194,7 +191,7 @@ export default function EPrescriptionPage() {
 
   const previewProps = { 
     doctorName, doctorQualification, doctorSpecialization, 
-    patient: selectedPatient, vitals, chiefComplaint, diagnosis, 
+    patient: selectedPatient, chiefComplaint, diagnosis, 
     medicines, investigations, advice, followUpDates, today,
     hideBranding: printOnLetterhead 
   };
@@ -228,7 +225,7 @@ export default function EPrescriptionPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center space-x-2 bg-muted/30 px-3 py-1.5 rounded-full ring-1 ring-border">
               <Switch id="letterhead-mode" checked={printOnLetterhead} onCheckedChange={setPrintOnLetterhead} />
-              <Label htmlFor="letterhead-mode" className="text-xs font-semibold whitespace-nowrap">Print on Physical Letterhead</Label>
+              <Label htmlFor="letterhead-mode" className="text-xs font-semibold whitespace-nowrap">Use Pre-printed Physical Stationery</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -310,19 +307,7 @@ export default function EPrescriptionPage() {
               </Card>
             )}
 
-            <Card>
-              <CardHeader><CardTitle className="text-base">Vitals</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {(['bp', 'pulse', 'temp', 'weight', 'height'] as (keyof Vital)[]).map(key => (
-                    <div key={key} className="space-y-1">
-                      <Label className="text-xs">{key === 'bp' ? 'Blood Pressure' : key === 'temp' ? 'Temperature' : key.charAt(0).toUpperCase() + key.slice(1)}</Label>
-                      <Input placeholder={key === 'bp' ? '120/80' : key === 'pulse' ? '72 bpm' : key === 'temp' ? '98.6°F' : key === 'weight' ? '65 kg' : '170 cm'} value={vitals[key]} onChange={e => setVitals(prev => ({ ...prev, [key]: e.target.value }))} />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+
 
             <Card>
               <CardHeader><CardTitle className="text-base">Clinical Information</CardTitle></CardHeader>
@@ -478,7 +463,6 @@ export default function EPrescriptionPage() {
                   doctorQualification={previewRx.doctorQualification || ''}
                   doctorSpecialization={previewRx.doctorSpecialization || ''}
                   patient={previewRx.patient || selectedPatient}
-                  vitals={previewRx.vitals || { bp: '', pulse: '', temp: '', weight: '', height: '' }}
                   chiefComplaint={previewRx.chiefComplaint || ''}
                   diagnosis={previewRx.diagnosis || ''}
                   medicines={previewRx.medicines || []}
