@@ -42,7 +42,8 @@ import {
     Activity,
     Trash2,
     Circle,
-    ListTodo as ListIcon
+    ListTodo as ListIcon,
+    CalendarCheck
 } from 'lucide-react';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
@@ -61,6 +62,8 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { updateDoc, doc, deleteDoc, setDoc } from 'firebase/firestore';
+import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 export default function DesignerDashboardPage() {
     const firestore = useFirestore();
@@ -145,6 +148,8 @@ export default function DesignerDashboardPage() {
     const [summary, setSummary] = React.useState('');
     const [plans, setPlans] = React.useState('');
     const [isReporting, setIsReporting] = React.useState(false);
+    const [editingReport, setEditingReport] = React.useState<DailyReport | null>(null);
+    const [viewingBrief, setViewingBrief] = React.useState<DesignRequest | null>(null);
 
     const handleLogWork = async () => {
         if (!title.trim() || !user || !firestore) {
@@ -244,22 +249,43 @@ export default function DesignerDashboardPage() {
 
         setIsReporting(true);
         try {
-            const report: Omit<DailyReport, 'id'> = {
+            const report = {
                 userId: user.id,
-                reportDate: new Date().toISOString(),
+                reportDate: editingReport ? editingReport.reportDate : new Date().toISOString(),
                 summary,
                 plans,
             };
-
-            await addDocumentNonBlocking(collection(firestore, 'dailyReports'), report);
-            toast({ title: 'Reported', description: 'Daily report submitted.' });
+            
+            if (editingReport) {
+                await updateDoc(doc(firestore, 'dailyReports', editingReport.id), report);
+                toast({ title: 'Updated', description: 'Daily report updated.' });
+            } else {
+                await addDocumentNonBlocking(collection(firestore, 'dailyReports'), report);
+                toast({ title: 'Reported', description: 'Daily report submitted.' });
+            }
             setSummary('');
             setPlans('');
+            setEditingReport(null);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to report.' });
         } finally {
             setIsReporting(false);
         }
+    };
+
+    const startEditingReport = (report: DailyReport) => {
+        setEditingReport(report);
+        setSummary(report.summary);
+        setPlans(report.plans);
+        // Scroll to the reporting form
+        const form = document.getElementById('designer-reporting-form');
+        form?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const cancelEditReport = () => {
+        setEditingReport(null);
+        setSummary('');
+        setPlans('');
     };
 
     return (
@@ -272,6 +298,14 @@ export default function DesignerDashboardPage() {
                         Creative Hub
                     </h1>
                     <p className="text-slate-500 font-medium mt-1">Design, iterate, and deliver excellence.</p>
+                    <div className="flex items-center gap-3 mt-4">
+                        <Button variant="outline" className="border-purple-100 text-purple-700 font-black h-10 px-6 rounded-xl hover:bg-purple-50" asChild>
+                            <Link href="/content-planner">
+                                <CalendarCheck className="mr-2 h-4 w-4" />
+                                Shared Planner
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-6 bg-white p-4 rounded-3xl shadow-sm border border-slate-100 pr-8">
@@ -474,11 +508,20 @@ export default function DesignerDashboardPage() {
                                     {inboundRequests?.map(req => (
                                         <TableRow key={req.id} className="hover:bg-blue-100/30 border-blue-100">
                                             <TableCell>
-                                                <p className="font-black text-blue-900">{req.title}</p>
-                                                <p className="text-xs text-blue-800/60 line-clamp-1">{req.description}</p>
-                                                <Badge variant="outline" className="mt-2 text-[10px] font-black border-blue-200 text-blue-700 uppercase">
-                                                    {req.assetType}
-                                                </Badge>
+                                                <p className="font-black text-blue-900 leading-tight mb-1">{req.title}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline" className="text-[9px] h-4 font-black border-blue-200 text-blue-700 uppercase px-1.5">
+                                                        {req.assetType}
+                                                    </Badge>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-6 text-[10px] font-black text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-0"
+                                                        onClick={() => setViewingBrief(req)}
+                                                    >
+                                                        VIEW BRIEF
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {req.status === 'Submitted' ? (
@@ -572,13 +615,15 @@ export default function DesignerDashboardPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="shadow-lg border-none bg-indigo-900 text-white">
+                    <Card className="shadow-lg border-none bg-indigo-900 text-white" id="designer-reporting-form">
                         <CardHeader>
                             <CardTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
                                 <Activity className="h-5 w-5 text-indigo-400" />
-                                Daily Reporting
+                                {editingReport ? 'Edit Daily Report' : 'Daily Reporting'}
                             </CardTitle>
-                            <CardDescription className="text-indigo-200 font-medium">Log your progress and blockers.</CardDescription>
+                            <CardDescription className="text-indigo-200 font-medium">
+                                {editingReport ? 'Modifying your existing report.' : 'Log your progress and blockers.'}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
@@ -599,17 +644,107 @@ export default function DesignerDashboardPage() {
                                     onChange={e => setPlans(e.target.value)}
                                 />
                             </div>
-                            <Button
-                                className="w-full bg-white text-indigo-900 hover:bg-slate-100 font-black h-11"
-                                onClick={handleDailyReport}
-                                disabled={isReporting}
-                            >
-                                {isReporting ? <Loader2 className="animate-spin h-4 w-4" /> : "Submit Day Report"}
-                            </Button>
+                            <div className="flex gap-2">
+                                {editingReport && (
+                                    <Button variant="ghost" className="flex-1 text-white hover:bg-white/10" onClick={cancelEditReport}>
+                                        Cancel
+                                    </Button>
+                                )}
+                                <Button
+                                    className={cn("w-full bg-white text-indigo-900 hover:bg-slate-100 font-black h-11", editingReport && "flex-[2]")}
+                                    onClick={handleDailyReport}
+                                    disabled={isReporting}
+                                >
+                                    {isReporting ? <Loader2 className="animate-spin h-4 w-4" /> : (editingReport ? 'Update Report' : 'Submit Day Report')}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Report History */}
+                    <Card className="shadow-sm border-slate-200">
+                        <CardHeader className="bg-slate-50/50 border-b">
+                            <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Reporting History</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="divide-y divide-slate-100">
+                                {recentReports?.map(report => (
+                                    <div key={report.id} className="p-4 hover:bg-slate-50/30 transition-colors group">
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                                {format(new Date(report.reportDate), 'MMM dd, yyyy')}
+                                            </p>
+                                            <Button variant="ghost" size="sm" className="h-6 text-[10px] font-black p-0 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600" onClick={() => startEditingReport(report)}>
+                                                EDIT
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs font-medium text-slate-700 line-clamp-2 mb-1">{report.summary}</p>
+                                        <p className="text-[10px] text-slate-400 italic line-clamp-1">Plans: {report.plans}</p>
+                                    </div>
+                                ))}
+                                {recentReports?.length === 0 && (
+                                    <div className="p-8 text-center text-slate-400 text-xs italic">No reports yet.</div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
             </div>
+
+            {/* Brief Detail Dialog */}
+            <Dialog open={!!viewingBrief} onOpenChange={open => !open && setViewingBrief(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                            <Palette className="h-6 w-6 text-blue-600" />
+                            {viewingBrief?.title}
+                        </DialogTitle>
+                        <DialogDescription className="text-blue-600 font-bold uppercase tracking-[0.2em] text-[10px] pt-1">
+                            {viewingBrief?.assetType} • Requested Creative
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="py-6 space-y-6">
+                        <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                <Activity className="h-3 w-3" />
+                                Project Brief & Requirements
+                            </Label>
+                            <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 shadow-inner max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-200">
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-semibold italic">
+                                    "{viewingBrief?.description || 'No specific description provided.'}"
+                                </p>
+                            </div>
+                        </div>
+
+                        {viewingBrief?.deadline && (
+                            <div className="flex items-center justify-between p-5 bg-gradient-to-r from-red-50 to-orange-50 rounded-3xl border border-red-100 shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-white rounded-2xl flex items-center justify-center border border-red-100 shadow-sm">
+                                        <Clock className="h-5 w-5 text-red-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase text-red-400 tracking-wider">Priority Deadline</p>
+                                        <p className="text-base font-black text-red-600">
+                                            {format(new Date(viewingBrief.deadline), 'EEEE, MMMM dd, yyyy')}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Badge className="bg-red-600 text-white border-none font-black text-[10px] px-3 h-6">URGENT</Badge>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="sm:justify-start">
+                        <Button 
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-black px-8 h-12 rounded-2xl w-full sm:w-auto" 
+                            onClick={() => setViewingBrief(null)}
+                        >
+                            CLOSE BRIEF
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

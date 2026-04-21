@@ -19,45 +19,36 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, FileText, Send } from 'lucide-react';
-import { useUser } from '@/firebase';
+import { Loader2, FileText, Send, Save, Edit3 } from 'lucide-react';
+import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import type { SocialReport } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
+import { collection, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
 
 export default function SocialReportingPage() {
     const { toast } = useToast();
     const { user } = useUser();
 
+    const firestore = useFirestore();
+
     const [summary, setSummary] = React.useState('');
     const [metrics, setMetrics] = React.useState('');
     const [plans, setPlans] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [reports, setReports] = React.useState<SocialReport[]>([]);
-    const [isLoading, setIsLoading] = React.useState(true);
+    const [editingReport, setEditingReport] = React.useState<SocialReport | null>(null);
 
-    // Mock loading and initial data
-    React.useEffect(() => {
-        setIsLoading(true);
-        setTimeout(() => {
-             setReports([
-                {
-                    id: uuidv4(),
-                    userId: 'mock-media-user-123',
-                    reportDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString(),
-                    summary: "Completed the Winter Skincare campaign graphics and scheduled posts for the week.",
-                    metrics: "Engagement up 5% week-over-week. Reach increased by 2K followers.",
-                    plans: "Begin planning for the Valentine's Day promotion. Coordinate with sales team for offer details."
-                }
-            ]);
-            setIsLoading(false);
-        }, 500);
-    }, []);
+    // Filter reports by user
+    const reportsQuery = useMemoFirebase(() => {
+        if (!firestore || !user?.id) return null;
+        return query(collection(firestore, 'socialReports'), where('userId', '==', user.id), orderBy('reportDate', 'desc'));
+    }, [firestore, user]);
+
+    const { data: reports, isLoading } = useCollection<SocialReport>(reportsQuery);
 
 
     const handleReportSubmit = async () => {
-        if (!user) {
+        if (!firestore || !user) {
             toast({ variant: "destructive", title: "Error", description: "Authentication error." });
             return;
         }
@@ -67,24 +58,47 @@ export default function SocialReportingPage() {
         }
 
         setIsSubmitting(true);
-        const newReport: SocialReport = {
-            id: uuidv4(),
+        const reportData = {
             userId: user.id,
-            reportDate: new Date().toISOString(),
-            summary,
-            metrics,
-            plans,
+            reportDate: editingReport ? editingReport.reportDate : new Date().toISOString(),
+            summary: summary.trim(),
+            metrics: metrics.trim(),
+            plans: plans.trim(),
         };
 
-        // Mock submission
-        setTimeout(() => {
-            setReports(prev => [newReport, ...prev]);
-            toast({ title: "Report Submitted", description: "Your social media report has been saved." });
+        try {
+            if (editingReport) {
+                await updateDoc(doc(firestore, 'socialReports', editingReport.id), reportData);
+                toast({ title: "Report Updated", description: "Changes saved successfully." });
+            } else {
+                await addDocumentNonBlocking(collection(firestore, 'socialReports'), reportData);
+                toast({ title: "Report Submitted", description: "Your social media report has been saved." });
+            }
+            
             setSummary('');
             setMetrics('');
             setPlans('');
+            setEditingReport(null);
+        } catch (e) {
+            toast({ variant: "destructive", title: "Error", description: "Failed to save report." });
+        } finally {
             setIsSubmitting(false);
-        }, 500);
+        }
+    }
+
+    const startEditing = (report: SocialReport) => {
+        setEditingReport(report);
+        setSummary(report.summary);
+        setMetrics(report.metrics);
+        setPlans(report.plans);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    const cancelEditing = () => {
+        setEditingReport(null);
+        setSummary('');
+        setMetrics('');
+        setPlans('');
     }
 
     return (
@@ -93,9 +107,11 @@ export default function SocialReportingPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <FileText className="h-6 w-6"/>
-                        Submit Social Media Report
+                        {editingReport ? 'Edit Social Media Report' : 'Submit Social Media Report'}
                     </CardTitle>
-                    <CardDescription>Submit your periodic report for management review.</CardDescription>
+                    <CardDescription>
+                        {editingReport ? `Editing report from ${format(new Date(editingReport.reportDate), 'MMM dd, yyyy')}` : 'Submit your periodic report for management review.'}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid md:grid-cols-1 gap-4">
@@ -112,10 +128,15 @@ export default function SocialReportingPage() {
                             <Textarea id="plans" placeholder="Outline your main objectives and plans for the next reporting period..." value={plans} onChange={(e) => setPlans(e.target.value)} rows={4}/>
                         </div>
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                        {editingReport && (
+                            <Button variant="ghost" onClick={cancelEditing}>
+                                Cancel Edit
+                            </Button>
+                        )}
                         <Button onClick={handleReportSubmit} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                            Submit Report
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : (editingReport ? <Save className="mr-2 h-4 w-4" /> : <Send className="mr-2 h-4 w-4" />)}
+                            {editingReport ? 'Update Report' : 'Submit Report'}
                         </Button>
                     </div>
                 </CardContent>
@@ -139,15 +160,21 @@ export default function SocialReportingPage() {
                                 <TableHead>Summary</TableHead>
                                 <TableHead>Metrics/Highlights</TableHead>
                                 <TableHead>Next Plans</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {reports?.map(report => (
                                 <TableRow key={report.id}>
                                     <TableCell className="font-medium whitespace-nowrap">{format(new Date(report.reportDate), 'MMM dd, yyyy')}</TableCell>
-                                    <TableCell><p className="line-clamp-3">{report.summary}</p></TableCell>
-                                    <TableCell><p className="line-clamp-3">{report.metrics}</p></TableCell>
-                                    <TableCell><p className="line-clamp-3">{report.plans}</p></TableCell>
+                                    <TableCell><p className="line-clamp-3 text-sm">{report.summary}</p></TableCell>
+                                    <TableCell><p className="line-clamp-3 text-sm">{report.metrics}</p></TableCell>
+                                    <TableCell><p className="line-clamp-3 text-sm">{report.plans}</p></TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="sm" onClick={() => startEditing(report)} className="h-8 text-indigo-600 hover:text-indigo-700">
+                                            Edit
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                             {reports?.length === 0 && (

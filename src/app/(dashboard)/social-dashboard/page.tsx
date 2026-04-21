@@ -76,7 +76,8 @@ import {
     Plus,
     Palette,
     ExternalLink,
-    Users
+    Users,
+    FileText
 } from 'lucide-react';
 import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
@@ -189,6 +190,7 @@ export default function SocialDashboardPage() {
     };
 
     const [isRequestModalOpen, setIsRequestModalOpen] = React.useState(false);
+    const [selectedBrief, setSelectedBrief] = React.useState<DesignRequest | null>(null);
     const [requestTitle, setRequestTitle] = React.useState('');
     const [requestDesc, setRequestDesc] = React.useState('');
     const [requestType, setRequestType] = React.useState('Post Graphic');
@@ -517,8 +519,20 @@ export default function SocialDashboardPage() {
                                 {designRequests?.map(req => (
                                     <TableRow key={req.id} className="hover:bg-slate-50/50">
                                         <TableCell>
-                                            <p className="font-bold text-slate-800 text-sm">{req.title}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{req.assetType}</p>
+                                            <p className="font-bold text-slate-800 text-sm truncate max-w-[200px]">{req.title}</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Badge variant="outline" className="text-[9px] font-black border-indigo-100 text-indigo-600 uppercase h-4 px-1.5">
+                                                    {req.assetType}
+                                                </Badge>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    className="h-6 text-[10px] font-black text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 p-0"
+                                                    onClick={() => setSelectedBrief(req)}
+                                                >
+                                                    VIEW BRIEF
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
@@ -664,6 +678,43 @@ export default function SocialDashboardPage() {
                         </div>
                     </Card>
 
+                    <Card className="shadow-sm border-slate-200 overflow-hidden rounded-2xl">
+                        <CardHeader className="bg-slate-50/50 border-b py-4">
+                            <CardTitle className="text-xs font-black flex items-center gap-2 text-slate-800 uppercase tracking-widest">
+                                <FileText className="h-4 w-4 text-indigo-500" />
+                                Recent Reports
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="divide-y divide-slate-100">
+                                {todayReports?.slice(0, 3).map(report => (
+                                    <div key={report.id} className="p-4 hover:bg-indigo-50/20 transition-colors">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                                            {safeFormat(report.reportDate, 'MMM dd, yyyy')}
+                                        </p>
+                                        <p className="text-xs font-bold text-slate-800 line-clamp-2">{report.summary}</p>
+                                    </div>
+                                ))}
+                                {todayReports?.length === 0 && (
+                                    <div className="p-12 text-center bg-slate-50/30">
+                                        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-3 text-slate-300">
+                                            <FileText className="h-6 w-6" />
+                                        </div>
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No reports yet</p>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                        <div className="p-4 bg-slate-50/50 border-t">
+                            <Button variant="ghost" className="w-full text-[10px] font-black uppercase text-indigo-600 tracking-widest hover:bg-indigo-50" asChild>
+                                <Link href="/social-reporting" className="flex items-center justify-center gap-2">
+                                    Manage Reports
+                                    <ArrowUpRight className="h-3 w-3" />
+                                </Link>
+                            </Button>
+                        </div>
+                    </Card>
+
                     <Card className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white shadow-xl border-none rounded-2xl relative overflow-hidden group">
                         <div className="absolute -bottom-6 -right-6 h-32 w-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all duration-500"></div>
                         <CardContent className="pt-8 pb-8 flex flex-col items-center text-center">
@@ -682,6 +733,49 @@ export default function SocialDashboardPage() {
                     </Card>
                 </div>
             </div>
+
+            {/* View Brief Dialog */}
+            <Dialog open={!!selectedBrief} onOpenChange={open => !open && setSelectedBrief(null)}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-indigo-600" />
+                            Creative Brief: {selectedBrief?.title}
+                        </DialogTitle>
+                        <DialogDescription className="font-bold text-indigo-500 uppercase tracking-widest text-[10px]">
+                            {selectedBrief?.assetType}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-6 space-y-6">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Requirements & Description</Label>
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-medium">
+                                    {selectedBrief?.description || 'No description provided.'}
+                                </p>
+                            </div>
+                        </div>
+                        {selectedBrief?.deadline && (
+                            <div className="flex items-center justify-between p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                                <div className="flex items-center gap-3">
+                                    <Clock className="h-5 w-5 text-purple-600" />
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase text-purple-400 leading-none">Submission Deadline</p>
+                                        <p className="text-sm font-black text-purple-700 mt-1">
+                                            {format(new Date(selectedBrief.deadline), 'EEEE, MMMM dd, yyyy')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold h-11 rounded-xl" onClick={() => setSelectedBrief(null)}>
+                            Close Brief
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

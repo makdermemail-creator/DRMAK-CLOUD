@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileText, Send, PieChart, Activity, UserPlus, Video, PlusCircle } from 'lucide-react';
+import { Loader2, FileText, Send, Save, PieChart, Activity, UserPlus, Video, PlusCircle } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, useUser } from '@/firebase';
 import type { DailyReport, DailyPosting, Lead } from '@/lib/types';
 import { collection, query, where, orderBy } from 'firebase/firestore';
@@ -36,6 +36,7 @@ export default function DailyReportingPage() {
     const [completingTasks, setCompletingTasks] = React.useState('');
     const [showTasks, setShowTasks] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [editingReport, setEditingReport] = React.useState<DailyReport | null>(null);
 
     // Fetch past reports
     const reportsQuery = useMemoFirebase(() => {
@@ -108,19 +109,42 @@ export default function DailyReportingPage() {
         };
 
         try {
-            await addDocumentNonBlocking(collection(firestore, 'dailyReports'), report);
-            toast({ title: "Report Submitted", description: "Your daily report has been saved." });
+            if (editingReport) {
+                const { id, ...rest } = report as any;
+                await updateDoc(doc(firestore, 'dailyReports', editingReport.id), report);
+                toast({ title: "Report Updated", description: "Changes have been saved." });
+            } else {
+                await addDocumentNonBlocking(collection(firestore, 'dailyReports'), report);
+                toast({ title: "Report Submitted", description: "Your daily report has been saved." });
+            }
             setSummary('');
             setPlans('');
             setCompletingTasks('');
             setShowTasks(false);
-            forceRerender();
+            setEditingReport(null);
         } catch (error) {
             console.error("Failed to submit report:", error);
             toast({ variant: "destructive", title: "Submission Failed", description: "Could not save your report." });
         } finally {
             setIsSubmitting(false);
         }
+    }
+
+    const startEditing = (report: DailyReport) => {
+        setEditingReport(report);
+        setSummary(report.summary);
+        setPlans(report.plans);
+        setCompletingTasks(report.completingTasks || '');
+        setShowTasks(!!report.completingTasks);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    const cancelEditing = () => {
+        setEditingReport(null);
+        setSummary('');
+        setPlans('');
+        setCompletingTasks('');
+        setShowTasks(false);
     }
 
     return (
@@ -169,9 +193,11 @@ export default function DailyReportingPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <FileText className="h-6 w-6" />
-                        Day End Report
+                        {editingReport ? 'Edit Daily Report' : 'Day End Report'}
                     </CardTitle>
-                    <CardDescription>Consolidate your daily activities and set objectives for tomorrow.</CardDescription>
+                    <CardDescription>
+                        {editingReport ? `Editing report from ${format(new Date(editingReport.reportDate), 'MMM dd, yyyy')}` : 'Consolidate your daily activities and set objectives for tomorrow.'}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
@@ -215,10 +241,15 @@ export default function DailyReportingPage() {
                         </div>
                     )}
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                        {editingReport && (
+                            <Button variant="ghost" onClick={cancelEditing}>
+                                Cancel Edit
+                            </Button>
+                        )}
                         <Button onClick={handleReportSubmit} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                            Submit End Day Report
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (editingReport ? <Save className="mr-2 h-4 w-4" /> : <Send className="mr-2 h-4 w-4" />)}
+                            {editingReport ? 'Update Report' : 'Submit End Day Report'}
                         </Button>
                     </div>
                 </CardContent>
@@ -241,6 +272,7 @@ export default function DailyReportingPage() {
                                     <TableHead>Date</TableHead>
                                     <TableHead>Summary</TableHead>
                                     <TableHead>Plans</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -249,6 +281,11 @@ export default function DailyReportingPage() {
                                         <TableCell className="font-medium whitespace-nowrap">{format(new Date(report.reportDate), 'MMM dd, yyyy')}</TableCell>
                                         <TableCell><p className="line-clamp-2 text-sm">{report.summary}</p></TableCell>
                                         <TableCell><p className="line-clamp-2 text-sm">{report.plans}</p></TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="sm" onClick={() => startEditing(report)} className="h-8 text-indigo-600 hover:text-indigo-700">
+                                                Edit
+                                            </Button>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                                 {reports?.length === 0 && (

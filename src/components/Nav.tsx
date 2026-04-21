@@ -293,8 +293,8 @@ const NavContent = () => {
             baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
         } else if (userProfile?.role === 'Designer') {
             // Remove global 'dashboard' to prevent duplicate links. 'designerWork' is now their Dashboard.
-            // Uses designerPlanner (isolated) instead of contentPlanner (belongs to Social Media Manager)
-            baseAccessIds = ['designerWork', 'creativeBriefs', 'designerPlanner', 'socialInbox', 'dailyReporting', 'aiTools'];
+            // Both Social Media Manager and Designer now use the same shared 'contentPlanner'
+            baseAccessIds = ['designerWork', 'creativeBriefs', 'contentPlanner', 'socialInbox', 'dailyReporting', 'aiTools'];
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['dashboard', 'salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
@@ -315,7 +315,7 @@ const NavContent = () => {
         return allMenuItems.filter(item => {
             // Block SMM-specific items for Designer role to prevent mixing
             if (userProfile?.role === 'Designer') {
-                const smmOnlyItems = ['socialReporting', 'contentPlanner', 'analytics', 'reachTracker'];
+                const smmOnlyItems = ['socialReporting', 'analytics', 'reachTracker'];
                 if (smmOnlyItems.includes(item.id)) return false;
             }
 
