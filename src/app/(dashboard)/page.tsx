@@ -929,6 +929,7 @@ const AdminDailyIntelligence = ({
             consultation: r.consultationCharges || 0,
             procedure: r.procedureCharges || 0,
             medicine: r.medicineCharges || 0,
+            items: r.items || [],
             time: r.timestamp || r.billingDate ? format(new Date(r.timestamp || r.billingDate || ''), 'h:mm a') : '',
         }));
     }, [billingRecords, dateFilter]);
@@ -1110,15 +1111,31 @@ const AdminDailyIntelligence = ({
                                 </TableHeader>
                                 <TableBody>
                                     {todayPurchases.map((p, i) => (
-                                        <TableRow key={p.id}>
-                                            <TableCell className="font-bold text-slate-400">{i + 1}</TableCell>
-                                            <TableCell className="font-semibold">{p.patientName}</TableCell>
-                                            <TableCell className="text-right text-xs">Rs {p.consultation.toLocaleString()}</TableCell>
-                                            <TableCell className="text-right text-xs">Rs {p.procedure.toLocaleString()}</TableCell>
-                                            <TableCell className="text-right text-xs">Rs {p.medicine.toLocaleString()}</TableCell>
-                                            <TableCell className="text-right font-bold text-emerald-600">Rs {p.total.toLocaleString()}</TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">{p.time}</TableCell>
-                                        </TableRow>
+                                        <React.Fragment key={p.id}>
+                                            <TableRow className="hover:bg-slate-50 transition-colors">
+                                                <TableCell className="font-bold text-slate-400">{i + 1}</TableCell>
+                                                <TableCell className="font-semibold">{p.patientName}</TableCell>
+                                                <TableCell className="text-right text-xs text-slate-500">Rs {p.consultation.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right text-xs text-slate-500">Rs {p.procedure.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right text-xs text-slate-500">Rs {p.medicine.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right font-black text-emerald-600">Rs {p.total.toLocaleString()}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{p.time}</TableCell>
+                                            </TableRow>
+                                            {p.items && p.items.length > 0 && (
+                                                <TableRow className="bg-slate-50/50 border-t-0">
+                                                    <TableCell colSpan={2} />
+                                                    <TableCell colSpan={5} className="py-2">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {p.items.map((item: any, idx: number) => (
+                                                                <Badge key={idx} variant="outline" className="bg-white text-[9px] font-bold border-slate-200">
+                                                                    {item.name} {item.qty > 1 ? `(x${item.qty})` : ''}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
                                     ))}
                                 </TableBody>
                                 <tfoot>
@@ -1895,6 +1912,8 @@ const ReportsDashboard = () => {
     const dailyReportsRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyReports') : null, [firestore]);
     const dailyTasksRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyTasks') : null, [firestore]);
     const designerWorkRef = useMemoFirebase(() => firestore ? collection(firestore, 'designerWork') : null, [firestore]);
+    const socialReportsRef = useMemoFirebase(() => firestore ? collection(firestore, 'socialReports') : null, [firestore]);
+    const leadsRef = useMemoFirebase(() => firestore ? collection(firestore, 'leads') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
@@ -1905,6 +1924,8 @@ const ReportsDashboard = () => {
     const { data: allDailyReports } = useCollection<any>(dailyReportsRef);
     const { data: allDailyTasks } = useCollection<any>(dailyTasksRef);
     const { data: allDesignerWork } = useCollection<any>(designerWorkRef);
+    const { data: allSocialReports } = useCollection<any>(socialReportsRef);
+    const { data: allLeads } = useCollection<any>(leadsRef);
 
     const [viewingEmployeeId, setViewingEmployeeId] = React.useState<string | null>(null);
 
@@ -2014,29 +2035,52 @@ const ReportsDashboard = () => {
             const completedAppts = userAppointments.filter(a => a.status === 'Completed').length;
             const apptScore = userAppointments.length > 0 ? Math.round((completedAppts / userAppointments.length) * 100) : null;
 
-            // Daily end-of-day reports (all time, for the selected range)
+            // Daily end-of-day reports
             const userReports = (allDailyReports || []).filter((r: any) => r.userId === u.id);
+            const socialReports = (allSocialReports || []).filter((r: any) => r.userId === u.id);
+            
             const targetReport = userReports.find((r: any) => {
                 const d = r.reportDate?.split('T')[0];
                 return d === targetDay;
+            }) || socialReports.find((r: any) => {
+                const d = r.reportDate?.split('T')[0];
+                return d === targetDay;
             });
-            const hasReportOnTarget = !!targetReport;
 
             // Tasks: completion %
             const userTasks = (allDailyTasks || []).filter((t: any) => t.userId === u.id);
             const completedTasks = userTasks.filter((t: any) => t.status === 'Completed').length;
             const taskScore = userTasks.length > 0 ? Math.round((completedTasks / userTasks.length) * 100) : null;
 
-            // Designer output (target day)
+            // Designer: consider work as a "report" too for the status badge
             const designerOutputTarget = (allDesignerWork || []).filter((w: any) => w.userId === u.id && w.date === targetDay).length;
+            const hasReportOnTarget = !!targetReport || (u.role === 'Designer' && designerOutputTarget > 0);
             const designerOutputTotal = (allDesignerWork || []).filter((w: any) => w.userId === u.id).length;
+
+            // Usage Analytics (for Ops/Sales/Admin who don't have medical appts)
+            // 1. Billing Records handled by the user
+            const userBillingToday = (filteredBilling || []).filter((b: any) => b.addedBy === u.email || b.addedBy === u.id).length;
+            // 2. Expenses logged by the user
+            const userExpensesToday = (filteredExpenses || []).filter((e: any) => e.addedBy === u.email || e.addedBy === u.id).length;
+            // 3. Leads assigned to or handled by the user
+            const userLeadsActive = (allLeads || []).filter((l: any) => {
+                const isAssigned = l.assignedTo === u.id;
+                const isCreatedToday = l.createdAt?.startsWith(targetDay);
+                return isAssigned || isCreatedToday;
+            }).length;
+
+            // Frequency Score: 0-100 based on dashboard activity (max 10 actions for full bar if no appts)
+            const totalActionsToday = userBillingToday + userExpensesToday + userLeadsActive;
+            const usageScore = totalActionsToday > 0 ? Math.min(totalActionsToday * 10, 100) : null;
 
             // Overall productivity score (average of available metrics)
             const scores: number[] = [];
             if (apptScore !== null) scores.push(apptScore);
             if (taskScore !== null) scores.push(taskScore);
+            if (usageScore !== null) scores.push(usageScore);
             if (hasReportOnTarget) scores.push(100);
             if (designerOutputTarget > 0) scores.push(Math.min(designerOutputTarget * 33, 100));
+
             const productivity = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
 
             return {
@@ -2056,6 +2100,9 @@ const ReportsDashboard = () => {
                 totalTasks: userTasks.length,
                 completedTasks,
                 taskScore,
+                // Usage
+                totalActionsToday,
+                usageScore,
                 // Designer
                 designerOutputToday: designerOutputTarget,
                 designerOutputTotal,
@@ -2063,7 +2110,7 @@ const ReportsDashboard = () => {
                 productivity,
             };
         }).sort((a, b) => b.productivity - a.productivity);
-    }, [users, filteredAppointments, allDailyReports, allDailyTasks, allDesignerWork, targetDay]);
+    }, [users, filteredAppointments, allDailyReports, allDailyTasks, allDesignerWork, allSocialReports, allLeads, filteredBilling, filteredExpenses, targetDay]);
 
     const handleExportXLSX = () => {
         const rows: any[][] = [];
@@ -2386,6 +2433,7 @@ const ReportsDashboard = () => {
                             if (!emp) return null;
                             
                             const userReports = (allDailyReports || []).filter((r: any) => r.userId === emp.id).sort((a:any, b:any) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
+                            const userSocialReports = (allSocialReports || []).filter((r: any) => r.userId === emp.id).sort((a:any, b:any) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
                             const userTasks = (allDailyTasks || []).filter((t: any) => t.userId === emp.id).sort((a:any, b:any) => (b.createdAt || 0) - (a.createdAt || 0));
                             const userWork = (allDesignerWork || []).filter((w: any) => w.userId === emp.id).sort((a:any, b:any) => b.updatedAt - a.updatedAt);
 
@@ -2410,6 +2458,7 @@ const ReportsDashboard = () => {
                                             <TabsList className="bg-slate-100 p-1.5 rounded-2xl mb-8 w-fit">
                                                 <TabsTrigger value="tasks" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Submitted Tasks</TabsTrigger>
                                                 <TabsTrigger value="reports" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Daily Reports</TabsTrigger>
+                                                {userSocialReports.length > 0 && <TabsTrigger value="social" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Social Reports</TabsTrigger>}
                                             </TabsList>
 
                                             <TabsContent value="tasks" className="space-y-4">
@@ -2471,6 +2520,44 @@ const ReportsDashboard = () => {
                                                         ))}
                                                     </div>
                                                 )}
+                                            </TabsContent>
+
+                                            <TabsContent value="social" className="space-y-6">
+                                                <div className="space-y-6">
+                                                    {userSocialReports.map((report: any) => (
+                                                        <div key={report.id} className="border-l-4 border-sky-500 pl-6 space-y-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="font-black text-sky-600 uppercase tracking-widest text-[10px]">
+                                                                    {(() => {
+                                                                        try {
+                                                                            return report.reportDate ? format(new Date(report.reportDate), 'EEEE, MMMM dd, yyyy') : 'No Date';
+                                                                        } catch (e) {
+                                                                            return 'Invalid Date';
+                                                                        }
+                                                                    })()}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-sky-50/30 rounded-2xl p-6 border border-sky-100">
+                                                                <div className="space-y-4">
+                                                                    <div>
+                                                                        <h4 className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Activity Summary</h4>
+                                                                        <p className="text-slate-700 leading-relaxed font-bold text-sm">{report.summary}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <h4 className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Metrics & Highlights</h4>
+                                                                        <p className="text-slate-600 text-xs font-medium italic">{report.metrics}</p>
+                                                                    </div>
+                                                                    {report.plans && (
+                                                                        <div>
+                                                                            <h4 className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Next Steps</h4>
+                                                                            <p className="text-slate-500 text-xs font-medium">{report.plans}</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </TabsContent>
                                         </Tabs>
                                     </div>

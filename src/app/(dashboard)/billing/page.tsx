@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from '@/firebase';
 import { collection, doc, runTransaction } from 'firebase/firestore';
 import type { Patient, Supplier, SupplierProduct } from '@/lib/types';
 import { Search, Plus, Trash2, Printer, CheckCircle2, CircleDollarSign, Bell, AlertTriangle } from 'lucide-react';
@@ -628,6 +628,7 @@ export default function BillingPage() {
             paymentMethod,
             timestamp: editingBillId ? (billingRecords?.find(b => b.id === editingBillId)?.timestamp || new Date().toISOString()) : new Date().toISOString(),
             status: 'Paid',
+            addedBy: user?.email || 'Unknown',
             ...(editingBillId ? {
                 editReason,
                 dailyInvoiceNumber: billingRecords?.find(b => b.id === editingBillId)?.dailyInvoiceNumber || getDailyInvoiceNumber(editingBillId)
