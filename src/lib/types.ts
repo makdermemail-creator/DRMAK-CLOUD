@@ -19,6 +19,9 @@ export type User = {
   featureAccess?: { [key: string]: boolean };
   icon?: string;
   doctorId?: string; // Linked doctor profile ID
+  status?: string;
+  isDeleted?: boolean;
+  active?: boolean;
 };
 
 export type Doctor = {

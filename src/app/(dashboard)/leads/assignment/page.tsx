@@ -28,12 +28,23 @@ export default function LeadAssignmentPage() {
     const { toast } = useToast();
 
     // Data Fetching
-    const { data: salesUsers } = useCollection<User>(
+    const { data: rawSalesUsers } = useCollection<User>(
         useMemoFirebase(() => {
             if (!firestore) return null;
             return query(collection(firestore, 'users'), where('role', '==', 'Sales'));
         }, [firestore])
     );
+
+    const salesUsers = React.useMemo(() => {
+        return rawSalesUsers?.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) && 
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        }) || [];
+    }, [rawSalesUsers]);
 
     const { data: socialSettings } = useDoc<SocialSettings>(
         useMemoFirebase(() => {

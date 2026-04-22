@@ -171,7 +171,17 @@ export default function ManageTasksPage() {
     }, [firestore]);
 
     const { data: tasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksQuery);
-    const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
+    const { data: rawUsers, isLoading: usersLoading } = useCollection<User>(usersQuery);
+    const users = React.useMemo(() => {
+        return rawUsers?.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) && 
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        }) || [];
+    }, [rawUsers]);
 
     const isLoading = tasksLoading || usersLoading;
 

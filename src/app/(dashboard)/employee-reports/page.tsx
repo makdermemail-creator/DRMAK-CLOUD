@@ -26,7 +26,19 @@ export default function EmployeeReportsPage() {
         [firestore]
     );
 
-    const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
+    const { data: rawUsers, isLoading: usersLoading } = useCollection<User>(usersQuery);
+    
+    const users = React.useMemo(() => {
+        if (!rawUsers) return [];
+        return rawUsers.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) &&
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        });
+    }, [rawUsers]);
     const { data: reports, isLoading: reportsLoading } = useCollection<DailyReport>(reportsQuery);
     const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
 

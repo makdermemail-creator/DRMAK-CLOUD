@@ -37,9 +37,13 @@ import Link from 'next/link';
 
 export interface PharmacyItem {
     id: string;
-    name: string;
+    productName: string;
+    name?: string; // Fallback for older records
+    purchasePrice: number;
     sellingPrice: number;
     quantity: number;
+    supplier?: string;
+    supplierId?: string;
     rack?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
 }
 
@@ -80,7 +84,7 @@ export default function InventoryPage() {
             stockEntries.forEach(entry => entry.items?.forEach(item => allProductNames.add(item.itemName.trim().toLowerCase())));
 
             allProductNames.forEach(nameKey => {
-                const pi = pharmacyItems.find(i => i.productName.trim().toLowerCase() === nameKey);
+                const pi = pharmacyItems.find(i => (i.productName || i.name || '').trim().toLowerCase() === nameKey);
                 
                 let foundSp: SupplierProduct | null = null;
                 let foundSup: Supplier | null = null;
@@ -133,13 +137,33 @@ export default function InventoryPage() {
                         supplier: foundSup.name, supplierId: foundSup.id, active: true, category: foundSup.category || 'General'
                     });
                     syncCount++;
+                } else if (!pi && !foundSp && historicalQty > 0) {
+                    // Item ONLY exists in Logs - Recover it!
+                    const recoveringSup = suppliers[0]; // Fallback to first supplier
+                    if (recoveringSup) {
+                        const newId = `recovered-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+                        if (!supplierUpdates[recoveringSup.id]) supplierUpdates[recoveringSup.id] = [...(recoveringSup.products || [])];
+                        
+                        const recoveredProduct = { 
+                            id: newId, name: nameKey.charAt(0).toUpperCase() + nameKey.slice(1), 
+                            price: finalPrice, sellingPrice: finalSelling || (finalPrice * 1.2), 
+                            quantity: finalQty, rack: '', minThreshold: 0 
+                        };
+                        
+                        supplierUpdates[recoveringSup.id].push(recoveredProduct);
+                        pharmacyCreates.push({
+                            ...recoveredProduct, productName: recoveredProduct.name, purchasePrice: recoveredProduct.price,
+                            supplier: recoveringSup.name, supplierId: recoveringSup.id, active: true, category: 'General'
+                        });
+                        syncCount++;
+                    }
                 }
             });
 
             const promises: any[] = [];
             Object.entries(supplierUpdates).forEach(([supId, products]) => promises.push(updateDocumentNonBlocking(doc(firestore, 'suppliers', supId), { products })));
             pharmacyUpdates.forEach(u => promises.push(updateDocumentNonBlocking(doc(firestore, 'pharmacyItems', u.id), u.data)));
-            pharmacyCreates.forEach(c => promises.push(setDocumentNonBlocking(doc(firestore, 'pharmacyItems', c.id), c)));
+            pharmacyCreates.forEach(c => promises.push(setDocumentNonBlocking(doc(firestore, 'pharmacyItems', c.id), c, { merge: true })));
 
             await Promise.all(promises);
             toast({ title: 'System Restored', description: `Successfully harvested and reconciled ${syncCount} details from historical logs.` });
@@ -182,11 +206,11 @@ export default function InventoryPage() {
 
         // 2. Catch orphan items in Pharmacy POS that don't exist in Master Ledger
         pharmacyItems.forEach(pi => {
-            const nameKey = (pi.productName || '').trim().toLowerCase();
+            const nameKey = (pi.productName || pi.name || '').trim().toLowerCase();
             if (!processedNames.has(nameKey)) {
                 items.push({
                     id: pi.id,
-                    name: pi.productName,
+                    name: pi.productName || pi.name || 'Unnamed Product',
                     quantity: pi.quantity,
                     price: pi.purchasePrice || 0,
                     sellingPrice: pi.sellingPrice || 0,

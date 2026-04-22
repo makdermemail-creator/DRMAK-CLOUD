@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { BillingRecord, Supplier, DailyTask } from '@/lib/types';
+import type { BillingRecord, Supplier, DailyTask, PharmacyItem } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 export default function ReportsBirdsEyePage() {
@@ -39,19 +39,35 @@ export default function ReportsBirdsEyePage() {
     const { data: billing } = useCollection<BillingRecord>(billingRef);
     const { data: suppliers } = useCollection<Supplier>(suppliersRef);
     const { data: tasks } = useCollection<DailyTask>(tasksRef);
+    const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
+    const { data: pharmacyItems } = useCollection<PharmacyItem>(pharmacyRef);
 
     const metrics = React.useMemo(() => {
         // Finance Summary
         const totalRevenue = billing?.reduce((acc, b) => acc + (b.grandTotal || b.totalAmount || 0), 0) || 0;
         
-        // Inventory Summary
+        // Inventory Summary - Combined view of Master Ledger and Pharmacy POS
         let stockValue = 0;
         let lowStockCount = 0;
+        const processedNames = new Set<string>();
+
+        // 1. Process Master Ledger (Suppliers)
         suppliers?.forEach(s => {
             s.products?.forEach(p => {
-                stockValue += (Number(p.price) * Number(p.quantity));
-                if (Number(p.quantity) <= (p.minThreshold || 0)) lowStockCount++;
+                stockValue += (Number(p.price || 0) * Number(p.quantity || 0));
+                if (Number(p.quantity || 0) <= (p.minThreshold || 0)) lowStockCount++;
+                processedNames.add(p.name.trim().toLowerCase());
             });
+        });
+
+        // 2. Add Orphan Pharmacy Items
+        pharmacyItems?.forEach(pi => {
+            const nameKey = (pi.productName || pi.name || '').trim().toLowerCase();
+            if (nameKey && !processedNames.has(nameKey)) {
+                stockValue += (Number(pi.purchasePrice || 0) * Number(pi.quantity || 0));
+                if (Number(pi.quantity || 0) <= (pi.minThreshold || 0)) lowStockCount++;
+                processedNames.add(nameKey);
+            }
         });
 
         // Performance Summary
@@ -67,7 +83,7 @@ export default function ReportsBirdsEyePage() {
             totalTasks,
             completedTasks
         };
-    }, [billing, suppliers, tasks]);
+    }, [billing, suppliers, tasks, pharmacyItems]);
 
     const navigationCards = [
         { title: 'Finance', href: '/reports/financial', icon: CircleDollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50', desc: 'Revenue, P&L, Ledger' },

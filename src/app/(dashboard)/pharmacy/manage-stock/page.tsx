@@ -79,39 +79,61 @@ const StockEntryDialog = ({ open, onOpenChange, suppliers }: { open: boolean, on
                 });
 
                 // 3. Update Inventory Records (Atomic-like)
+                const currentProducts = [...(selectedDistributor?.products || [])];
+                
                 for (const item of items) {
                     if (!item.itemName || item.totalQty <= 0) continue;
 
-                    // Update Supplier List
-                    if (selectedDistributor?.products) {
-                        const updatedProducts = selectedDistributor.products.map(p => {
-                            if (p.name.toLowerCase() === item.itemName.toLowerCase()) {
-                                return { 
-                                    ...p, 
-                                    quantity: (Number(p.quantity) || 0) + Number(item.totalQty),
-                                    price: Number(item.unitCost) || p.price
-                                };
-                            }
-                            return p;
-                        });
-                        await updateDocumentNonBlocking(doc(firestore, 'suppliers', selectedDistributorId), {
-                            products: updatedProducts
-                        });
+                    const normalizedName = item.itemName.trim().toLowerCase();
+                    const existingProductIndex = currentProducts.findIndex(p => p.name.trim().toLowerCase() === normalizedName);
+                    
+                    let targetProduct;
+                    const inventoryQty = Number(item.totalQty);
+                    const inventoryPrice = Number(item.unitCost);
 
-                        // Find/Update PharmacyItem doc
-                        const product = selectedDistributor.products.find(p => p.name.toLowerCase() === item.itemName.toLowerCase());
-                        if (product) {
-                            const pDocRef = doc(firestore, 'pharmacyItems', product.id);
-                            await setDocumentNonBlocking(pDocRef, {
-                                quantity: (Number(product.quantity) || 0) + Number(item.totalQty), // This is slightly racey but better than zero
-                                purchasePrice: Number(item.unitCost) || product.price,
-                                productName: product.name,
-                                supplierId: selectedDistributor.id,
-                                active: true
-                            }, { merge: true });
-                        }
+                    if (existingProductIndex >= 0) {
+                        // Update Existing
+                        currentProducts[existingProductIndex] = {
+                            ...currentProducts[existingProductIndex],
+                            quantity: (Number(currentProducts[existingProductIndex].quantity) || 0) + inventoryQty,
+                            price: inventoryPrice || currentProducts[existingProductIndex].price
+                        };
+                        targetProduct = currentProducts[existingProductIndex];
+                    } else {
+                        // Create New in Supplier Catalog
+                        targetProduct = {
+                            id: `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                            name: item.itemName.trim(),
+                            quantity: inventoryQty,
+                            price: inventoryPrice,
+                            category: 'Medicine',
+                            minThreshold: 5,
+                            sellingPrice: inventoryPrice * 1.2, // Default markup
+                            rack: ''
+                        };
+                        currentProducts.push(targetProduct);
                     }
+
+                    // Register/Update in Pharmacy POS (pharmacyItems)
+                    const pDocRef = doc(firestore, 'pharmacyItems', targetProduct.id);
+                    await setDocumentNonBlocking(pDocRef, {
+                        id: targetProduct.id,
+                        productName: targetProduct.name,
+                        quantity: targetProduct.quantity, // This is the new total for that product in supplier doc
+                        purchasePrice: targetProduct.price,
+                        sellingPrice: targetProduct.sellingPrice || (targetProduct.price * 1.2),
+                        supplier: selectedDistributor.name,
+                        supplierId: selectedDistributor.id,
+                        active: true,
+                        category: targetProduct.category,
+                        rack: targetProduct.rack || ''
+                    }, { merge: true });
                 }
+
+                // Finalize Supplier Product List Update
+                await updateDocumentNonBlocking(doc(firestore, 'suppliers', selectedDistributorId), {
+                    products: currentProducts
+                });
 
                 toast({ title: 'Stock Received', description: `Inventory updated. Successfully added stock and updated ${selectedDistributor?.name}'s liability.` });
                 onOpenChange(false);

@@ -370,7 +370,17 @@ export default function LeadsPage() {
   const usersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
 
   const { data: leads, isLoading: leadsLoading, forceRerender } = useCollection<Lead>(leadsQuery);
-  const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
+  const { data: rawUsers, isLoading: usersLoading } = useCollection<User>(usersQuery);
+  const users = React.useMemo(() => {
+    return rawUsers?.filter(u => {
+        const status = (u.status || '').trim().toLowerCase();
+        return u.email !== 'admin1@skinsmith.com' && 
+            (u.name || u.email) && 
+            status !== 'deleted' &&
+            u.isDeleted !== true &&
+            u.active !== false;
+    }) || [];
+  }, [rawUsers]);
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [isImportOpen, setIsImportOpen] = React.useState(false);

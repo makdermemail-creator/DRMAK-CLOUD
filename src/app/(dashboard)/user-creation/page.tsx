@@ -27,9 +27,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useAuth, useUser, getSecondaryAuth } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection } from 'firebase/firestore';
 import type { User, Doctor } from '@/lib/types';
-import { collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -340,9 +339,19 @@ export default function UserManagementPage() {
 
   const filteredUsers = React.useMemo(() => {
     if (!users) return [];
+    
+    // First remove deleted/inactive ghosts (hardened)
+    const activeOnes = users.filter(u => {
+      const status = (u.status || '').trim().toLowerCase();
+      return status !== 'deleted' && 
+             u.isDeleted !== true && 
+             u.active !== false;
+    });
+
     const term = searchTerm.toLowerCase();
-    if (!term) return users;
-    return users.filter(u =>
+    if (!term) return activeOnes;
+    
+    return activeOnes.filter(u =>
       ((u.name || '').toLowerCase().includes(term)) ||
       ((u.email || '').toLowerCase().includes(term)) ||
       (u.role && u.role.toLowerCase().includes(term))
@@ -359,18 +368,27 @@ export default function UserManagementPage() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!firestore || !userToDelete) return;
-    // Note: This only deletes the Firestore document.
-    // In a real app, you would also need to delete the user from Firebase Auth, which is a privileged operation.
-    const docRef = doc(firestore, 'users', userToDelete.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
-      variant: 'destructive',
-      title: 'User Deleted',
-      description: "The user's record has been removed."
-    });
-    setUserToDelete(null);
+    
+    try {
+      const docRef = doc(firestore, 'users', userToDelete.id);
+      await deleteDoc(docRef);
+      
+      toast({
+        title: 'User Permanent Deletion Successful',
+        description: `Reference ${userToDelete.id} and associated identity metadata have been purged from the master registry.`
+      });
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Deletion Failed',
+        description: 'Insufficient permissions or database error. Please verify administrative status.'
+      });
+    } finally {
+      setUserToDelete(null);
+    }
   }
 
   const handlePasswordReset = async (email: string) => {

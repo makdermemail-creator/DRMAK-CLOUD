@@ -74,7 +74,18 @@ export default function SalesDashboardPage() {
     const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
     const { data: trainings, isLoading: trainingsLoading } = useCollection<SalesTraining>(trainingsQuery);
     const { data: completions, isLoading: completionsLoading } = useCollection<SalesTrainingCompletion>(completionsQuery);
-    const { data: usersList } = useCollection<User>(usersQuery);
+    const { data: allUsers } = useCollection<User>(usersQuery);
+
+    const usersList = React.useMemo(() => {
+        return allUsers?.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) && 
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        }) || [];
+    }, [allUsers]);
 
     const stats = React.useMemo(() => {
         const totalLeads = leads?.length || 0;

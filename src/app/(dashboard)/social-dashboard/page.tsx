@@ -129,7 +129,18 @@ export default function SocialDashboardPage() {
     const { data: todayPosts, isLoading: postsLoading } = useCollection<DailyPosting>(postQuery);
     const { data: todayReports, isLoading: reportsLoading } = useCollection<SocialReport>(reportQuery);
     const { data: adminTasks, isLoading: tasksLoading } = useCollection<AdminTaskTemplate>(tasksQuery);
-    const { data: designersList } = useCollection<User>(designersQuery);
+    const { data: allDesigners } = useCollection<User>(designersQuery);
+    
+    const designersList = React.useMemo(() => {
+        return allDesigners?.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) && 
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        }) || [];
+    }, [allDesigners]);
 
     // Design Requests Query
     const requestsQuery = useMemoFirebase(() => {

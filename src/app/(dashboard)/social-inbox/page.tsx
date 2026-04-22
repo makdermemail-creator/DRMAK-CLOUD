@@ -73,7 +73,18 @@ export default function SocialInboxPage() {
     }, [firestore]);
 
     const { data: chats, isLoading: chatsLoading } = useCollection<Chat>(chatsQuery);
-    const { data: usersList } = useCollection<UserType>(usersQuery);
+    const { data: rawUsersList, isLoading: usersLoading } = useCollection<UserType>(usersQuery);
+    
+    const usersList = React.useMemo(() => {
+        return rawUsersList?.filter(u => {
+            const status = (u.status || '').trim().toLowerCase();
+            return u.email !== 'admin1@skinsmith.com' && 
+                (u.name || u.email) && 
+                status !== 'deleted' &&
+                u.isDeleted !== true &&
+                u.active !== false;
+        }) || [];
+    }, [rawUsersList]);
 
     // Fetch Messages for active chat
     const messagesQuery = useMemoFirebase(() => {
