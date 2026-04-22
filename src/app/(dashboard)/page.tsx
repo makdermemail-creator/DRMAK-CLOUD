@@ -1900,44 +1900,68 @@ const ReportsDashboard = () => {
     const [viewingEmployeeId, setViewingEmployeeId] = React.useState<string | null>(null);
 
     const filteredBilling = React.useMemo(() => {
-        if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
+        const fromDate = selectedRange?.from;
+        const toDate = selectedRange?.to || selectedRange?.from;
+
+        if (!billingRecords || !fromDate) return billingRecords || [];
         return billingRecords.filter(b => {
             const dateStr = b.timestamp || b.billingDate;
             if (!dateStr) return false;
             const date = new Date(dateStr);
             if (isNaN(date.getTime())) return false;
-            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+            return isWithinInterval(date, { 
+                start: startOfDay(fromDate), 
+                end: endOfDay(toDate!) 
+            });
         });
     }, [billingRecords, selectedRange]);
 
     const filteredExpenses = React.useMemo(() => {
-        if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
+        const fromDate = selectedRange?.from;
+        const toDate = selectedRange?.to || selectedRange?.from;
+
+        if (!allExpenses || !fromDate) return allExpenses || [];
         return allExpenses.filter((e: any) => {
             const dateStr = e.timestamp || e.date || e.createdAt;
             if (!dateStr) return false;
             const date = new Date(dateStr);
             if (isNaN(date.getTime())) return false;
-            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+            return isWithinInterval(date, { 
+                start: startOfDay(fromDate), 
+                end: endOfDay(toDate!) 
+            });
         });
     }, [allExpenses, selectedRange]);
 
     const filteredAppointments = React.useMemo(() => {
-        if (!appointments || !selectedRange?.from || !selectedRange?.to) return appointments || [];
+        const fromDate = selectedRange?.from;
+        const toDate = selectedRange?.to || selectedRange?.from;
+
+        if (!appointments || !fromDate) return appointments || [];
         return appointments.filter(a => {
             if (!a.appointmentDateTime) return false;
             const date = new Date(a.appointmentDateTime);
             if (isNaN(date.getTime())) return false;
-            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+            return isWithinInterval(date, { 
+                start: startOfDay(fromDate), 
+                end: endOfDay(toDate!) 
+            });
         });
     }, [appointments, selectedRange]);
 
     const filteredClosings = React.useMemo(() => {
-        if (!allClosings || !selectedRange?.from || !selectedRange?.to) return allClosings || [];
+        const fromDate = selectedRange?.from;
+        const toDate = selectedRange?.to || selectedRange?.from;
+
+        if (!allClosings || !fromDate) return allClosings || [];
         return allClosings.filter((c: any) => {
             if (!c.date) return false;
             const date = new Date(c.date);
             if (isNaN(date.getTime())) return false;
-            return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+            return isWithinInterval(date, { 
+                start: startOfDay(fromDate), 
+                end: endOfDay(toDate!) 
+            });
         });
     }, [allClosings, selectedRange]);
 
@@ -1958,7 +1982,10 @@ const ReportsDashboard = () => {
         };
     }, [filteredBilling, filteredExpenses, filteredClosings]);
 
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const targetDay = React.useMemo(() => {
+        if (selectedRange?.from) return format(selectedRange.from, 'yyyy-MM-dd');
+        return format(new Date(), 'yyyy-MM-dd');
+    }, [selectedRange]);
 
     const employeePerformance = React.useMemo(() => {
         if (!users) return [];
@@ -1970,27 +1997,27 @@ const ReportsDashboard = () => {
 
             // Daily end-of-day reports (all time, for the selected range)
             const userReports = (allDailyReports || []).filter((r: any) => r.userId === u.id);
-            const todayReport = userReports.find((r: any) => {
+            const targetReport = userReports.find((r: any) => {
                 const d = r.reportDate?.split('T')[0];
-                return d === today;
+                return d === targetDay;
             });
-            const hasReportToday = !!todayReport;
+            const hasReportOnTarget = !!targetReport;
 
             // Tasks: completion %
             const userTasks = (allDailyTasks || []).filter((t: any) => t.userId === u.id);
             const completedTasks = userTasks.filter((t: any) => t.status === 'Completed').length;
             const taskScore = userTasks.length > 0 ? Math.round((completedTasks / userTasks.length) * 100) : null;
 
-            // Designer output (today)
-            const designerOutputToday = (allDesignerWork || []).filter((w: any) => w.userId === u.id && w.date === today).length;
+            // Designer output (target day)
+            const designerOutputTarget = (allDesignerWork || []).filter((w: any) => w.userId === u.id && w.date === targetDay).length;
             const designerOutputTotal = (allDesignerWork || []).filter((w: any) => w.userId === u.id).length;
 
             // Overall productivity score (average of available metrics)
             const scores: number[] = [];
             if (apptScore !== null) scores.push(apptScore);
             if (taskScore !== null) scores.push(taskScore);
-            if (hasReportToday) scores.push(100);
-            if (designerOutputToday > 0) scores.push(Math.min(designerOutputToday * 33, 100));
+            if (hasReportOnTarget) scores.push(100);
+            if (designerOutputTarget > 0) scores.push(Math.min(designerOutputTarget * 33, 100));
             const productivity = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
 
             return {
@@ -2003,20 +2030,20 @@ const ReportsDashboard = () => {
                 apptScore,
                 // Reports
                 totalReports: userReports.length,
-                hasReportToday,
-                reportSummary: todayReport?.summary || '',
+                hasReportToday: hasReportOnTarget,
+                reportSummary: targetReport?.summary || '',
                 // Tasks
                 totalTasks: userTasks.length,
                 completedTasks,
                 taskScore,
                 // Designer
-                designerOutputToday,
+                designerOutputToday: designerOutputTarget,
                 designerOutputTotal,
                 // Overall
                 productivity,
             };
         }).sort((a, b) => b.productivity - a.productivity);
-    }, [users, filteredAppointments, allDailyReports, allDailyTasks, allDesignerWork, today]);
+    }, [users, filteredAppointments, allDailyReports, allDailyTasks, allDesignerWork, targetDay]);
 
     const handleExportXLSX = () => {
         const rows: any[][] = [];

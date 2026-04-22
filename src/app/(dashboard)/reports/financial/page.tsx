@@ -118,24 +118,43 @@ export default function FinancialReportPage() {
 
   // Derived Financial State
   const filteredBilling = React.useMemo(() => {
-    if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
+    const fromDate = selectedRange?.from;
+    const toDate = selectedRange?.to || selectedRange?.from; // Fallback to 'from' for single date selection
+
+    if (!billingRecords || !fromDate) return billingRecords || [];
+    
     return billingRecords.filter(b => {
         const dateStr = b.timestamp || b.billingDate;
         if (!dateStr) return false;
+        
+        // Robust date parsing
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return false;
-        return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        
+        return isWithinInterval(date, { 
+            start: startOfDay(fromDate), 
+            end: endOfDay(toDate!) 
+        });
     });
   }, [billingRecords, selectedRange]);
 
   const filteredExpenses = React.useMemo(() => {
-    if (!allExpenses || !selectedRange?.from || !selectedRange?.to) return allExpenses || [];
+    const fromDate = selectedRange?.from;
+    const toDate = selectedRange?.to || selectedRange?.from;
+
+    if (!allExpenses || !fromDate) return allExpenses || [];
+    
     return allExpenses.filter((e: any) => {
         const dateStr = e.timestamp || e.date || e.createdAt;
         if (!dateStr) return false;
+        
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return false;
-        return isWithinInterval(date, { start: startOfDay(selectedRange.from!), end: endOfDay(selectedRange.to!) });
+        
+        return isWithinInterval(date, { 
+            start: startOfDay(fromDate), 
+            end: endOfDay(toDate!) 
+        });
     });
   }, [allExpenses, selectedRange]);
 
@@ -181,7 +200,7 @@ export default function FinancialReportPage() {
         paymentDate: dateStr && !isNaN(new Date(dateStr).getTime()) ? format(new Date(dateStr), 'dd/MM/yyyy - hh:mm a') : 'N/A'
       };
     });
-  }, [billingRecords, patients]);
+  }, [filteredBilling, patients]);
 
   const stats = React.useMemo(() => {
     const total = transactionData.reduce((acc, t) => acc + t.total, 0);
