@@ -1897,6 +1897,8 @@ const ReportsDashboard = () => {
     const { data: allDailyTasks } = useCollection<any>(dailyTasksRef);
     const { data: allDesignerWork } = useCollection<any>(designerWorkRef);
 
+    const [viewingEmployeeId, setViewingEmployeeId] = React.useState<string | null>(null);
+
     const filteredBilling = React.useMemo(() => {
         if (!billingRecords || !selectedRange?.from || !selectedRange?.to) return billingRecords || [];
         return billingRecords.filter(b => {
@@ -2388,6 +2390,16 @@ const ReportsDashboard = () => {
                                         <p className="text-[10px] text-slate-600 font-medium line-clamp-2 leading-relaxed">{emp.reportSummary}</p>
                                     </div>
                                 )}
+
+                                {/* View Details Button */}
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="w-full rounded-2xl border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700 text-[10px] font-black uppercase tracking-widest h-10 transition-all"
+                                    onClick={() => setViewingEmployeeId(emp.id)}
+                                >
+                                    View Member Progress
+                                </Button>
                             </div>
                         );
                     })}
@@ -2398,38 +2410,168 @@ const ReportsDashboard = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Member Progress Dialog */}
+                <Dialog open={!!viewingEmployeeId} onOpenChange={(open) => !open && setViewingEmployeeId(null)}>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] p-0 border-none shadow-2xl">
+                        <DialogHeader className="sr-only">
+                            <DialogTitle>Member Progress: {viewingEmployeeId}</DialogTitle>
+                            <DialogDescription>Detailed view of employee tasks, reports, and productivity metrics.</DialogDescription>
+                        </DialogHeader>
+                        {(() => {
+                            const emp = employeePerformance.find(e => e.id === viewingEmployeeId);
+                            if (!emp) return null;
+                            
+                            const userReports = (allDailyReports || []).filter((r: any) => r.userId === emp.id).sort((a:any, b:any) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
+                            const userTasks = (allDailyTasks || []).filter((t: any) => t.userId === emp.id).sort((a:any, b:any) => (b.createdAt || 0) - (a.createdAt || 0));
+                            const userWork = (allDesignerWork || []).filter((w: any) => w.userId === emp.id).sort((a:any, b:any) => b.updatedAt - a.updatedAt);
+
+                            return (
+                                <div className="flex flex-col">
+                                    {/* Header Section */}
+                                    <div className="bg-gradient-to-br from-indigo-600 to-violet-800 p-8 text-white">
+                                        <div className="flex items-center gap-5">
+                                            <Avatar className="h-20 w-20 border-4 border-white/20 shadow-xl">
+                                                <AvatarFallback className="bg-white/10 text-white font-black text-2xl uppercase">{emp.name?.slice(0, 2)}</AvatarFallback>
+                                            </Avatar>
+                                            <div className="space-y-1">
+                                                <Badge className="bg-white/20 text-white hover:bg-white/30 border-none px-3 font-black text-[10px] uppercase tracking-widest">{emp.role}</Badge>
+                                                <h2 className="text-3xl font-black tracking-tighter">{emp.name}</h2>
+                                                <div className="flex items-center gap-4 text-white/70 font-bold text-xs">
+                                                    <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> {emp.productivity}% Productivity</span>
+                                                    <span className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> {userReports.length} Reports</span>
+                                                    <span className="flex items-center gap-1.5"><ListTodo className="h-3.5 w-3.5" /> {userTasks.length} Tasks</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-8">
+                                        <Tabs defaultValue="tasks" className="w-full">
+                                            <TabsList className="bg-slate-100 p-1 rounded-2xl mb-8 w-fit">
+                                                <TabsTrigger value="tasks" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Active Tasks</TabsTrigger>
+                                                <TabsTrigger value="reports" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Daily Reports</TabsTrigger>
+                                                <TabsTrigger value="output" className="rounded-xl px-6 font-black text-[10px] uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">Work Output</TabsTrigger>
+                                            </TabsList>
+
+                                            <TabsContent value="tasks" className="space-y-4">
+                                                {userTasks.length === 0 ? (
+                                                    <div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                                        <ListTodo className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                                                        <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">No tasks assigned yet</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid gap-3">
+                                                        {userTasks.map((task: any) => (
+                                                            <div key={task.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className={`p-2 rounded-lg ${task.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                                        {task.status === 'Completed' ? <UserCheck className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="font-bold text-slate-900 text-sm">{task.title}</p>
+                                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Due: {task.dueDate ? format(new Date(task.dueDate), 'PPP') : 'No due date'}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <Badge variant={task.status === 'Completed' ? 'default' : 'secondary'} className="rounded-lg font-black text-[9px] uppercase tracking-widest">
+                                                                    {task.status}
+                                                                </Badge>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </TabsContent>
+
+                                            <TabsContent value="reports" className="space-y-6 text-sm">
+                                                {userReports.length === 0 ? (
+                                                    <div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                                        <FileText className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                                                        <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">No daily reports submitted</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-6">
+                                                        {userReports.map((report: any) => (
+                                                            <div key={report.id} className="border-l-4 border-indigo-600 pl-6 space-y-3">
+                                                                <div className="flex items-center justify-between">
+                                                                    <p className="font-black text-indigo-600 uppercase tracking-widest text-[10px]">{format(new Date(report.reportDate), 'EEEE, MMMM dd, yyyy')}</p>
+                                                                    {report.completingTasks && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-none font-bold text-[9px]">Finished {report.completingTasks.split(',').length} Tasks</Badge>}
+                                                                </div>
+                                                                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                                                                    <h4 className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Today's Summary</h4>
+                                                                    <p className="text-slate-700 leading-relaxed font-medium">{report.summary}</p>
+                                                                    
+                                                                    <h4 className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 mt-5 mb-2">Plans for Tomorrow</h4>
+                                                                    <p className="text-slate-700 leading-relaxed font-medium">{report.plans}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </TabsContent>
+
+                                            <TabsContent value="output" className="space-y-4">
+                                                {userWork.length === 0 ? (
+                                                    <div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                                        <Sparkles className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                                                        <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">No digital output recorded</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid gap-4 sm:grid-cols-2">
+                                                        {userWork.map((work: any) => (
+                                                            <div key={work.id} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm space-y-2">
+                                                                <div className="flex justify-between items-start">
+                                                                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest">{work.platform || 'General'}</Badge>
+                                                                    <span className="text-[10px] font-bold text-slate-400">{format(new Date(work.updatedAt), 'MMM dd')}</span>
+                                                                </div>
+                                                                <p className="font-bold text-slate-900 line-clamp-1">{work.campaignTitle || work.title || 'Creative Task'}</p>
+                                                                <p className="text-xs text-slate-500 line-clamp-2">{work.description}</p>
+                                                                <div className="flex items-center gap-2 pt-2">
+                                                                    <Badge className="bg-indigo-50 text-indigo-700 border-none text-[8px] font-black uppercase tracking-widest">{work.status}</Badge>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </TabsContent>
+                                        </Tabs>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </DialogContent>
+                </Dialog>
             </div>
 
-                <Card className="border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
-                    <CardHeader className="p-8 pb-0">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Revenue Stream</CardTitle>
-                                <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Service Breakdown</CardDescription>
-                            </div>
-                            <FileBarChart className="h-6 w-6 text-slate-300" />
+            <Card className="border-none shadow-xl shadow-slate-100/50 rounded-[2.5rem] bg-white overflow-hidden border border-slate-100/50">
+                <CardHeader className="p-8 pb-0">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Revenue Stream</CardTitle>
+                            <CardDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest opacity-60 mt-1">Service Breakdown</CardDescription>
                         </div>
-                    </CardHeader>
-                    <CardContent className="p-8 h-[400px]">
-                        <ChartContainer config={{
-                            value: { label: "Revenue", color: "hsl(var(--primary))" }
-                        }} className="h-full w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <RechartsBarChart data={[
-                                    { name: 'Consults', value: financialStats.consultation },
-                                    { name: 'Procedures', value: financialStats.procedures },
-                                    { name: 'Medicines', value: financialStats.medicines },
-                                ]}>
-                                    <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} />
-                                    <YAxis fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} tickFormatter={(v) => `Rs${v / 1000}k`} />
-                                    <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={<ChartTooltipContent />} />
-                                    <RechartsBar dataKey="value" fill="#4f46e5" radius={[12, 12, 0, 0]} barSize={40} />
-                                </RechartsBarChart>
-                            </ResponsiveContainer>
-                        </ChartContainer>
-                    </CardContent>
-                </Card>
+                        <FileBarChart className="h-6 w-6 text-slate-300" />
+                    </div>
+                </CardHeader>
+                <CardContent className="p-8 h-[400px]">
+                    <ChartContainer config={{
+                        value: { label: "Revenue", color: "hsl(var(--primary))" }
+                    }} className="h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RechartsBarChart data={[
+                                { name: 'Consults', value: financialStats.consultation },
+                                { name: 'Procedures', value: financialStats.procedures },
+                                { name: 'Medicines', value: financialStats.medicines },
+                            ]}>
+                                <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} />
+                                <YAxis fontSize={10} tickLine={false} axisLine={false} fontWeight="black" tick={{ fill: '#64748b' }} tickFormatter={(v) => `Rs${v / 1000}k`} />
+                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={<ChartTooltipContent />} />
+                                <RechartsBar dataKey="value" fill="#4f46e5" radius={[12, 12, 0, 0]} barSize={40} />
+                            </RechartsBarChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
         </div>
     );
 };
