@@ -1873,7 +1873,7 @@ const ReportsDashboard = () => {
     const firestore = useFirestore();
     const { summaryMetrics } = useAnalyticsData();
     const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
+        from: new Date(),
         to: new Date(),
     });
 

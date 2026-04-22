@@ -35,7 +35,7 @@ export function DatePickerWithRange({
     onDateChange,
 }: DatePickerWithRangeProps) {
     const [internalDate, setInternalDate] = React.useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
+        from: new Date(),
         to: new Date(),
     });
 
@@ -90,10 +90,10 @@ export function DatePickerWithRange({
                                 {date?.from ? (
                                     date.to ? (
                                         <>
-                                            {format(date.from, 'LLL dd, y')} — {format(date.to, 'LLL dd, y')}
+                                            {format(date.from, 'dd/MM/yyyy')} — {format(date.to, 'dd/MM/yyyy')}
                                         </>
                                     ) : (
-                                        format(date.from, 'LLL dd, y')
+                                        format(date.from, 'dd/MM/yyyy')
                                     )
                                 ) : (
                                     <span>Select Filter Period</span>
@@ -150,7 +150,7 @@ export function DatePickerWithRange({
                             <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
                                 <div className="text-[10px] font-bold text-slate-400 px-2">
                                     {tempDate?.from && tempDate?.to ? (
-                                        <span className="text-indigo-600">{format(tempDate.from, 'MMM dd')} - {format(tempDate.to, 'MMM dd, yyyy')}</span>
+                                        <span className="text-indigo-600 font-black">{format(tempDate.from, 'dd/MM/yyyy')} - {format(tempDate.to, 'dd/MM/yyyy')}</span>
                                     ) : (
                                         <span>Select a valid range</span>
                                     )}

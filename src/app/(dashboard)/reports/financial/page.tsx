@@ -99,7 +99,7 @@ import {
 export default function FinancialReportPage() {
   const firestore = useFirestore();
   const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
+    from: new Date(),
     to: new Date(),
   });
 

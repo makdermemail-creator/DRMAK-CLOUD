@@ -66,27 +66,87 @@ const PharmacyFormDialog = ({ open, onOpenChange, item, mode, suppliers }: { ope
         setFormData(prev => ({ ...prev, [id]: type === 'number' ? Number(value) : value }));
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!firestore) return;
         const collectionRef = collection(firestore, 'pharmacyItems');
 
-        if (isStockMode && item?.id) {
-            const supplier = suppliers?.find(s => s.id === item.supplierId);
-            if (supplier && (supplier.currentBalance || 0) > 0) {
-                toast({ variant: 'destructive', title: 'Action Blocked', description: 'Cannot update stock for a supplier with outstanding liability.' });
-                return;
+        try {
+            if (isStockMode && item?.id) {
+                const supplier = suppliers?.find(s => s.id === item.supplierId);
+                if (supplier && (supplier.currentBalance || 0) > 0) {
+                    toast({ variant: 'destructive', title: 'Action Blocked', description: 'Cannot update stock for a supplier with outstanding liability.' });
+                    return;
+                }
+                const newQuantity = (item.quantity || 0) + stockChange;
+                
+                // Update pharmacyItems
+                await updateDocumentNonBlocking(doc(collectionRef, item.id), { quantity: newQuantity });
+                
+                // SYNC: Update Suppliers collection
+                if (item.supplierId) {
+                    const supRef = doc(firestore, 'suppliers', item.supplierId);
+                    const sup = suppliers?.find(s => s.id === item.supplierId);
+                    if (sup && sup.products) {
+                        const updatedProducts = sup.products.map(p => 
+                            p.id === item.id ? { ...p, quantity: newQuantity } : p
+                        );
+                        await updateDocumentNonBlocking(supRef, { products: updatedProducts });
+                    }
+                }
+                
+                toast({ title: 'Stock Updated', description: `Stock for ${item.productName} is now ${newQuantity}.` });
+            } else if (item?.id && mode === 'edit') {
+                await updateDocumentNonBlocking(doc(collectionRef, item.id), formData);
+                
+                // SYNC: Update Suppliers collection
+                if (formData.supplierId) {
+                    const supRef = doc(firestore, 'suppliers', formData.supplierId);
+                    const sup = suppliers?.find(s => s.id === formData.supplierId);
+                    if (sup && sup.products) {
+                        const updatedProducts = sup.products.map(p => 
+                            p.id === item.id ? { 
+                                ...p, 
+                                name: formData.productName || p.name,
+                                sellingPrice: formData.sellingPrice || p.sellingPrice,
+                                purchasePrice: formData.purchasePrice || p.purchasePrice,
+                                quantity: formData.quantity !== undefined ? formData.quantity : p.quantity,
+                                minThreshold: formData.minThreshold || p.minThreshold,
+                                rack: formData.rack || p.rack
+                            } : p
+                        );
+                        await updateDocumentNonBlocking(supRef, { products: updatedProducts });
+                    }
+                }
+
+                toast({ title: 'Product Updated', description: 'The product details have been saved.' });
+            } else { // Add mode
+                const newDocRef = await addDocumentNonBlocking(collectionRef, formData);
+                
+                // SYNC: Add to Suppliers collection if one is selected
+                if (formData.supplierId) {
+                    const supRef = doc(firestore, 'suppliers', formData.supplierId);
+                    const sup = suppliers?.find(s => s.id === formData.supplierId);
+                    if (sup) {
+                        const newProduct = {
+                            id: newDocRef.id,
+                            name: formData.productName || '',
+                            price: formData.purchasePrice || 0,
+                            sellingPrice: formData.sellingPrice || 0,
+                            quantity: formData.quantity || 0,
+                            minThreshold: formData.minThreshold || 0,
+                            rack: formData.rack || ''
+                        };
+                        const updatedProducts = [...(sup.products || []), newProduct];
+                        await updateDocumentNonBlocking(supRef, { products: updatedProducts });
+                    }
+                }
+                
+                toast({ title: 'Product Added', description: 'New product added to the pharmacy.' });
             }
-            const newQuantity = (item.quantity || 0) + stockChange;
-            updateDocumentNonBlocking(doc(collectionRef, item.id), { quantity: newQuantity });
-            toast({ title: 'Stock Updated', description: `Stock for ${item.productName} is now ${newQuantity}.` });
-        } else if (item?.id && mode === 'edit') {
-            updateDocumentNonBlocking(doc(collectionRef, item.id), formData);
-            toast({ title: 'Product Updated', description: 'The product details have been saved.' });
-        } else { // Add mode
-            addDocumentNonBlocking(collectionRef, formData);
-            toast({ title: 'Product Added', description: 'New product added to the pharmacy.' });
+            onOpenChange(false);
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Sync Error', description: 'Failed to synchronize with Supplier records. ' + error.message });
         }
-        onOpenChange(false);
     };
 
     const getTitle = () => {

@@ -71,7 +71,7 @@ export default function ReportsBirdsEyePage() {
 
     const navigationCards = [
         { title: 'Finance', href: '/reports/financial', icon: CircleDollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50', desc: 'Revenue, P&L, Ledger' },
-        { title: 'Inventory', href: '/reports/inventory', icon: Boxes, color: 'text-emerald-600', bg: 'bg-emerald-50', desc: 'Stock levels & Reordering' },
+        { title: 'Inventory', href: '/reports/inventory', icon: Boxes, color: 'text-emerald-600', bg: 'bg-emerald-50', desc: 'Real-time stock level audit' },
         { title: 'Team Performance', href: '/employee-reports', icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', desc: 'Efficiency & KPI Tracking' },
         { title: 'Expenses', href: '/daily-expenses', icon: Receipt, color: 'text-rose-600', bg: 'bg-rose-50', desc: 'Daily outflows & Vouchers' },
         { title: 'Employee Salary', href: '/reports/salaries', icon: Wallet, color: 'text-amber-600', bg: 'bg-amber-50', desc: 'Payroll & Compensation' },
@@ -180,7 +180,7 @@ export default function ReportsBirdsEyePage() {
                     </div>
                     <div className="space-y-2 text-center md:text-left">
                         <h4 className="text-2xl font-black">Strategic Performance Audit</h4>
-                        <p className="text-slate-400 max-w-2xl font-medium">Your current revenue-to-expense ratio is optimized at 3.2x. Consider replenishing 14 high-movement inventory items reported in the Inventory Ledger to maintain operational continuity.</p>
+                        <p className="text-slate-400 max-w-2xl font-medium">Your current revenue-to-expense ratio is optimized at 3.2x. Monitor 14 high-movement inventory items reported in the Inventory Ledger to ensure consistent stock availability.</p>
                     </div>
                     <Button className="ml-auto bg-white text-slate-900 hover:bg-slate-100 rounded-2xl px-8 font-black">Refine Trends</Button>
                 </div>

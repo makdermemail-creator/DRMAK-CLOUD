@@ -26,7 +26,7 @@ export default function PatientJourneyPage() {
   const patientId = searchParams.get('id');
   const firestore = useFirestore();
   const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
+    from: new Date(),
     to: new Date(),
   });
 

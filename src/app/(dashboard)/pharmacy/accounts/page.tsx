@@ -44,7 +44,7 @@ export default function AccountsPage() {
     const { data: allSuppliers } = useCollection<Supplier>(suppliersRef);
 
     const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
+        from: new Date(),
         to: new Date(),
     });
 

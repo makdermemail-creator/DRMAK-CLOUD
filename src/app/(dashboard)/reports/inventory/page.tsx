@@ -40,34 +40,175 @@ import {
     SelectItem 
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
-import type { Supplier } from '@/lib/types';
+import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { collection, doc, getDocs } from 'firebase/firestore';
+import type { Supplier, PharmacyItem, SupplierProduct, StockEntry } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { DateRange } from 'react-day-picker';
 import { startOfMonth } from 'date-fns';
 
 export default function InventoryReportPage() {
+    const { toast } = useToast();
     const firestore = useFirestore();
     const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
-    const { data: suppliers, isLoading } = useCollection<Supplier>(suppliersRef);
+    const { data: suppliers, isLoading: isSuppliersLoading } = useCollection<Supplier>(suppliersRef);
+
+    const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
+    const { data: pharmacyItems, isLoading: isPharmacyLoading } = useCollection<PharmacyItem>(pharmacyRef);
+
+    const isLoading = isSuppliersLoading || isPharmacyLoading;
+
+    const [isSyncing, setIsSyncing] = React.useState(false);
+
+    const handleSync = async () => {
+        if (!firestore || !suppliers || !pharmacyItems) return;
+        setIsSyncing(true);
+        toast({ title: 'Syncing...', description: 'Performing deep-audit including historical stock entries...' });
+
+        try {
+            const stockEntriesRef = collection(firestore, 'stockEntries');
+            const entriesSnapshot = await getDocs(stockEntriesRef);
+            const stockEntries = entriesSnapshot?.docs.map(d => ({ id: d.id, ...d.data() } as StockEntry)) || [];
+
+            let syncCount = 0;
+            const supplierUpdates: Record<string, SupplierProduct[]> = {};
+            const pharmacyUpdates: Array<{ id: string; data: any }> = [];
+            const pharmacyCreates: Array<any> = [];
+
+            const allProductNames = new Set<string>();
+            pharmacyItems.forEach(pi => allProductNames.add(pi.productName.trim().toLowerCase()));
+            suppliers.forEach(s => s.products?.forEach(p => allProductNames.add(p.name.trim().toLowerCase())));
+            stockEntries.forEach(entry => entry.items?.forEach(item => allProductNames.add(item.itemName.trim().toLowerCase())));
+
+            allProductNames.forEach(nameKey => {
+                const pi = pharmacyItems.find(i => i.productName.trim().toLowerCase() === nameKey);
+                
+                let foundSp: SupplierProduct | null = null;
+                let foundSup: Supplier | null = null;
+                suppliers.forEach(s => {
+                    const p = s.products?.find(product => product.name.trim().toLowerCase() === nameKey);
+                    if (p) {
+                        foundSp = p;
+                        foundSup = s;
+                    }
+                });
+
+                const historicalQty = stockEntries.reduce((acc, entry) => {
+                    const match = entry.items?.find(item => item.itemName.trim().toLowerCase() === nameKey);
+                    return acc + (Number(match?.totalQty) || 0);
+                }, 0);
+
+                const currentMax = Math.max(Number(pi?.quantity || 0), Number(foundSp?.quantity || 0));
+                const finalQty = Math.max(currentMax, historicalQty); 
+                
+                const finalPrice = Math.max(Number(pi?.purchasePrice || 0), Number(foundSp?.price || 0));
+                const finalSelling = Math.max(Number(pi?.sellingPrice || 0), Number(foundSp?.sellingPrice || 0));
+                const finalRack = pi?.rack || foundSp?.rack || '';
+
+                if (pi && foundSp && foundSup) {
+                    const needsSupUpdate = foundSp.quantity !== finalQty || foundSp.price !== finalPrice;
+                    const needsPiUpdate = pi.quantity !== finalQty || pi.purchasePrice !== finalPrice;
+
+                    if (needsSupUpdate) {
+                        if (!supplierUpdates[foundSup.id]) supplierUpdates[foundSup.id] = [...(foundSup.products || [])];
+                        const idx = supplierUpdates[foundSup.id].findIndex(p => p.name.trim().toLowerCase() === nameKey);
+                        if (idx > -1) {
+                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, price: finalPrice, sellingPrice: finalSelling, rack: finalRack };
+                            syncCount++;
+                        }
+                    }
+                    if (needsPiUpdate) {
+                        pharmacyUpdates.push({ id: pi.id, data: { quantity: finalQty, purchasePrice: finalPrice, sellingPrice: finalSelling, rack: finalRack } });
+                        syncCount++;
+                    }
+                } else if (pi && (!foundSp || !foundSup)) {
+                    const supplier = suppliers.find(s => s.id === pi.supplierId || s.name === pi.supplier) || suppliers[0];
+                    if (supplier) {
+                        if (!supplierUpdates[supplier.id]) supplierUpdates[supplier.id] = [...(supplier.products || [])];
+                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName, price: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
+                        syncCount++;
+                    }
+                } else if (!pi && foundSp && foundSup) {
+                    pharmacyCreates.push({
+                        id: foundSp.id, productName: foundSp.name, purchasePrice: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
+                        supplier: foundSup.name, supplierId: foundSup.id, active: true, category: foundSup.category || 'General'
+                    });
+                    syncCount++;
+                }
+            });
+
+            const promises: any[] = [];
+            Object.entries(supplierUpdates).forEach(([supId, products]) => promises.push(updateDocumentNonBlocking(doc(firestore, 'suppliers', supId), { products })));
+            pharmacyUpdates.forEach(u => promises.push(updateDocumentNonBlocking(doc(firestore, 'pharmacyItems', u.id), u.data)));
+            pharmacyCreates.forEach(c => promises.push(setDocumentNonBlocking(doc(firestore, 'pharmacyItems', c.id), c)));
+
+            await Promise.all(promises);
+            toast({ title: 'System Restored', description: `Successfully harvested and reconciled ${syncCount} details from historical logs.` });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Sync Failed', description: error.message });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const [selectedRange, setSelectedRange] = React.useState<DateRange | undefined>({
-        from: startOfMonth(new Date()),
+        from: new Date(),
         to: new Date(),
     });
 
     const inventoryItems = React.useMemo(() => {
-        if (!suppliers) return [];
+        if (!suppliers || !pharmacyItems) return [];
         const items: any[] = [];
+        const processedNames = new Set<string>();
+
+        // 1. Process Master Ledger (Suppliers)
         suppliers.forEach(s => {
             s.products?.forEach(p => {
-                items.push({ ...p, supplierName: s.name, supplierId: s.id });
+                const nameKey = p.name.trim().toLowerCase();
+                // Find matching item in Pharmacy POS
+                const piMatch = pharmacyItems.find(pi => pi.productName.trim().toLowerCase() === nameKey);
+                
+                // SYSTEM PARITY: Promote the maximum quantity and non-zero pricing
+                const currentQty = Math.max(Number(p.quantity || 0), Number(piMatch?.quantity || 0));
+                const currentPrice = Math.max(Number(p.price || 0), Number(piMatch?.purchasePrice || 0));
+                const currentSelling = Math.max(Number(p.sellingPrice || 0), Number(piMatch?.sellingPrice || 0));
+
+                items.push({ 
+                    ...p, 
+                    quantity: currentQty,
+                    price: currentPrice,
+                    sellingPrice: currentSelling,
+                    supplierName: s.name, 
+                    supplierId: s.id,
+                    rack: p.rack || piMatch?.rack || ''
+                });
+                processedNames.add(nameKey);
             });
         });
+
+        // 2. Catch orphan items in Pharmacy POS that don't exist in Master Ledger
+        pharmacyItems.forEach(pi => {
+            const nameKey = pi.productName.trim().toLowerCase();
+            if (!processedNames.has(nameKey)) {
+                items.push({
+                    id: pi.id,
+                    name: pi.productName,
+                    quantity: pi.quantity,
+                    price: pi.purchasePrice || 0,
+                    sellingPrice: pi.sellingPrice || 0,
+                    supplierName: pi.supplier || 'Unlinked',
+                    supplierId: pi.supplierId || 'unlinked',
+                    rack: pi.rack || '',
+                    minThreshold: 0
+                });
+                processedNames.add(nameKey);
+            }
+        });
+
         return items;
-    }, [suppliers]);
+    }, [suppliers, pharmacyItems]);
 
     const lowStockItems = React.useMemo(() => {
         return inventoryItems.filter(item => Number(item.quantity) <= (item.minThreshold || 0));
@@ -106,7 +247,14 @@ export default function InventoryReportPage() {
                 <div className="flex gap-3">
                     <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                     <Button variant="outline" className="rounded-xl border-slate-200 font-bold">Export CSV</Button>
-                    <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold shadow-lg shadow-emerald-500/20">Sync Inventory</Button>
+                    <Button 
+                        disabled={isSyncing} 
+                        onClick={handleSync}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold shadow-lg shadow-emerald-500/20"
+                    >
+                        {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+                        {isSyncing ? 'Syncing...' : 'Sync Inventory'}
+                    </Button>
                 </div>
             </div>
 
@@ -223,7 +371,6 @@ export default function InventoryReportPage() {
                                             <TableHead className="text-center py-4">Min Thresh</TableHead>
                                             <TableHead className="text-center py-4">Location</TableHead>
                                             <TableHead className="text-center py-4">Status</TableHead>
-                                            <TableHead className="text-right pr-8 py-4">Reorder</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -259,11 +406,7 @@ export default function InventoryReportPage() {
                                                         </Badge>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right pr-8">
-                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-emerald-50 hover:text-emerald-600">
-                                                        <ArrowUpRight className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
+
                                             </TableRow>
                                         ))}
                                     </TableBody>

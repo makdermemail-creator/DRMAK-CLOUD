@@ -61,7 +61,7 @@ export function DatePicker({
           <div className="flex flex-col flex-1">
               <span className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-0.5">Selection Date</span>
               <span className="text-sm text-slate-900">
-                {externalDate ? format(externalDate, 'PPP') : <span>Pick a date</span>}
+                {externalDate ? format(externalDate, 'dd/MM/yyyy') : <span>Pick a date</span>}
               </span>
           </div>
           <ChevronDown className="h-4 w-4 text-slate-300 ml-2" />
@@ -114,7 +114,7 @@ export function DatePicker({
                 <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between gap-4 sticky bottom-0 bg-white/80">
                     <div className="text-[10px] font-bold text-slate-400 px-2 shrink-0">
                         {tempDate ? (
-                            <span className="text-indigo-600 font-black">{format(tempDate, 'MMM d, yyyy')}</span>
+                            <span className="text-indigo-600 font-black">{format(tempDate, 'dd/MM/yyyy')}</span>
                         ) : (
                             <span>No date selected</span>
                         )}

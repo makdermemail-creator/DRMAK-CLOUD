@@ -1,8 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { collection, doc, getDocs } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Boxes, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Boxes, Search, Zap, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -50,18 +50,157 @@ export default function InventoryPage() {
     const [rackFilter, setRackFilter] = React.useState<string>('all');
     
     const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
-    const { data: suppliers, isLoading } = useCollection<Supplier>(suppliersRef);
+    const { data: suppliers, isLoading: isSuppliersLoading } = useCollection<Supplier>(suppliersRef);
+
+    const pharmacyRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
+    const { data: pharmacyItems, isLoading: isPharmacyLoading } = useCollection<PharmacyItem>(pharmacyRef);
+
+    const isLoading = isSuppliersLoading || isPharmacyLoading;
+
+    const [isSyncing, setIsSyncing] = React.useState(false);
+
+    const handleSync = async () => {
+        if (!firestore || !suppliers || !pharmacyItems) return;
+        setIsSyncing(true);
+        toast({ title: 'Syncing...', description: 'Performing deep-audit including historical stock entries...' });
+
+        try {
+            const stockEntriesRef = collection(firestore, 'stockEntries');
+            const entriesSnapshot = await getDocs(stockEntriesRef);
+            const stockEntries = entriesSnapshot?.docs.map(d => ({ id: d.id, ...d.data() } as StockEntry)) || [];
+
+            let syncCount = 0;
+            const supplierUpdates: Record<string, SupplierProduct[]> = {};
+            const pharmacyUpdates: Array<{ id: string; data: any }> = [];
+            const pharmacyCreates: Array<any> = [];
+
+            const allProductNames = new Set<string>();
+            pharmacyItems.forEach(pi => allProductNames.add(pi.productName.trim().toLowerCase()));
+            suppliers.forEach(s => s.products?.forEach(p => allProductNames.add(p.name.trim().toLowerCase())));
+            stockEntries.forEach(entry => entry.items?.forEach(item => allProductNames.add(item.itemName.trim().toLowerCase())));
+
+            allProductNames.forEach(nameKey => {
+                const pi = pharmacyItems.find(i => i.productName.trim().toLowerCase() === nameKey);
+                
+                let foundSp: SupplierProduct | null = null;
+                let foundSup: Supplier | null = null;
+                suppliers.forEach(s => {
+                    const p = s.products?.find(product => product.name.trim().toLowerCase() === nameKey);
+                    if (p) {
+                        foundSp = p;
+                        foundSup = s;
+                    }
+                });
+
+                const historicalQty = stockEntries.reduce((acc, entry) => {
+                    const match = entry.items?.find(item => item.itemName.trim().toLowerCase() === nameKey);
+                    return acc + (Number(match?.totalQty) || 0);
+                }, 0);
+
+                const currentMax = Math.max(Number(pi?.quantity || 0), Number(foundSp?.quantity || 0));
+                const finalQty = Math.max(currentMax, historicalQty); 
+                
+                const finalPrice = Math.max(Number(pi?.purchasePrice || 0), Number(foundSp?.price || 0));
+                const finalSelling = Math.max(Number(pi?.sellingPrice || 0), Number(foundSp?.sellingPrice || 0));
+                const finalRack = pi?.rack || foundSp?.rack || '';
+
+                if (pi && foundSp && foundSup) {
+                    const needsSupUpdate = foundSp.quantity !== finalQty || foundSp.price !== finalPrice;
+                    const needsPiUpdate = pi.quantity !== finalQty || pi.purchasePrice !== finalPrice;
+
+                    if (needsSupUpdate) {
+                        if (!supplierUpdates[foundSup.id]) supplierUpdates[foundSup.id] = [...(foundSup.products || [])];
+                        const idx = supplierUpdates[foundSup.id].findIndex(p => p.name.trim().toLowerCase() === nameKey);
+                        if (idx > -1) {
+                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, price: finalPrice, sellingPrice: finalSelling, rack: finalRack };
+                            syncCount++;
+                        }
+                    }
+                    if (needsPiUpdate) {
+                        pharmacyUpdates.push({ id: pi.id, data: { quantity: finalQty, purchasePrice: finalPrice, sellingPrice: finalSelling, rack: finalRack } });
+                        syncCount++;
+                    }
+                } else if (pi && (!foundSp || !foundSup)) {
+                    const supplier = suppliers.find(s => s.id === pi.supplierId || s.name === pi.supplier) || suppliers[0];
+                    if (supplier) {
+                        if (!supplierUpdates[supplier.id]) supplierUpdates[supplier.id] = [...(supplier.products || [])];
+                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName, price: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
+                        syncCount++;
+                    }
+                } else if (!pi && foundSp && foundSup) {
+                    pharmacyCreates.push({
+                        id: foundSp.id, productName: foundSp.name, purchasePrice: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
+                        supplier: foundSup.name, supplierId: foundSup.id, active: true, category: foundSup.category || 'General'
+                    });
+                    syncCount++;
+                }
+            });
+
+            const promises: any[] = [];
+            Object.entries(supplierUpdates).forEach(([supId, products]) => promises.push(updateDocumentNonBlocking(doc(firestore, 'suppliers', supId), { products })));
+            pharmacyUpdates.forEach(u => promises.push(updateDocumentNonBlocking(doc(firestore, 'pharmacyItems', u.id), u.data)));
+            pharmacyCreates.forEach(c => promises.push(setDocumentNonBlocking(doc(firestore, 'pharmacyItems', c.id), c)));
+
+            await Promise.all(promises);
+            toast({ title: 'System Restored', description: `Successfully harvested and reconciled ${syncCount} details from historical logs.` });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Sync Failed', description: error.message });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const inventoryItems = React.useMemo(() => {
-        if (!suppliers) return [];
-        const items: (SupplierProduct & { supplierName: string; supplierId: string })[] = [];
+        if (!suppliers || !pharmacyItems) return [];
+        const items: any[] = [];
+        const processedNames = new Set<string>();
+
+        // 1. Process Master Ledger (Suppliers)
         suppliers.forEach(s => {
             s.products?.forEach(p => {
-                items.push({ ...p, supplierName: s.name, supplierId: s.id });
+                const nameKey = p.name.trim().toLowerCase();
+                // Find matching item in Pharmacy POS
+                const piMatch = pharmacyItems.find(pi => pi.productName.trim().toLowerCase() === nameKey);
+                
+                // SYSTEM PARITY: Promote the maximum quantity and non-zero pricing
+                const currentQty = Math.max(Number(p.quantity || 0), Number(piMatch?.quantity || 0));
+                const currentPrice = Math.max(Number(p.price || 0), Number(piMatch?.purchasePrice || 0));
+                const currentSelling = Math.max(Number(p.sellingPrice || 0), Number(piMatch?.sellingPrice || 0));
+
+                items.push({ 
+                    ...p, 
+                    quantity: currentQty,
+                    price: currentPrice,
+                    sellingPrice: currentSelling,
+                    supplierName: s.name, 
+                    supplierId: s.id,
+                    rack: p.rack || piMatch?.rack || ''
+                });
+                processedNames.add(nameKey);
             });
         });
+
+        // 2. Catch orphan items in Pharmacy POS that don't exist in Master Ledger
+        pharmacyItems.forEach(pi => {
+            const nameKey = (pi.productName || '').trim().toLowerCase();
+            if (!processedNames.has(nameKey)) {
+                items.push({
+                    id: pi.id,
+                    name: pi.productName,
+                    quantity: pi.quantity,
+                    price: pi.purchasePrice || 0,
+                    sellingPrice: pi.sellingPrice || 0,
+                    supplierName: pi.supplier || 'Unlinked',
+                    supplierId: pi.supplierId || 'unlinked',
+                    rack: pi.rack || '',
+                    minThreshold: 0
+                });
+                processedNames.add(nameKey);
+            }
+        });
+
         return items;
-    }, [suppliers]);
+    }, [suppliers, pharmacyItems]);
 
     const filteredItems = React.useMemo(() => {
         if (!inventoryItems) return [];
@@ -207,6 +346,15 @@ export default function InventoryPage() {
                             <Plus className="h-4 w-4 mr-2" /> Manage Suppliers
                         </Button>
                     </Link>
+                    <Button 
+                        disabled={isSyncing} 
+                        onClick={handleSync}
+                        variant="secondary"
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold shadow-sm"
+                    >
+                        {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+                        {isSyncing ? 'Syncing...' : 'Sync Inventory'}
+                    </Button>
                 </div>
             </div>
 
