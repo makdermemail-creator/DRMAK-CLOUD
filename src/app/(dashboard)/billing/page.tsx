@@ -106,6 +106,7 @@ interface BillingRecord {
 export default function BillingPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
+    const { user } = useUser();
 
     // Fetch Data
     const patientsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'patients') : null, [firestore]);
