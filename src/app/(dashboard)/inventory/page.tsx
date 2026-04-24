@@ -103,37 +103,35 @@ export default function InventoryPage() {
 
                 const currentMax = Math.max(Number(pi?.quantity || 0), Number(foundSp?.quantity || 0));
                 const finalQty = Math.max(currentMax, historicalQty); 
-                
-                const finalPrice = Math.max(Number(pi?.purchasePrice || 0), Number(foundSp?.price || 0));
                 const finalSelling = Math.max(Number(pi?.sellingPrice || 0), Number(foundSp?.sellingPrice || 0));
                 const finalRack = pi?.rack || foundSp?.rack || '';
 
                 if (pi && foundSp && foundSup) {
-                    const needsSupUpdate = foundSp.quantity !== finalQty || foundSp.price !== finalPrice;
-                    const needsPiUpdate = pi.quantity !== finalQty || pi.purchasePrice !== finalPrice;
+                    const needsSupUpdate = foundSp.quantity !== finalQty;
+                    const needsPiUpdate = pi.quantity !== finalQty;
 
                     if (needsSupUpdate) {
                         if (!supplierUpdates[foundSup.id]) supplierUpdates[foundSup.id] = [...(foundSup.products || [])];
                         const idx = supplierUpdates[foundSup.id].findIndex(p => p.name.trim().toLowerCase() === nameKey);
                         if (idx > -1) {
-                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, price: finalPrice, sellingPrice: finalSelling, rack: finalRack };
+                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, sellingPrice: finalSelling, rack: finalRack };
                             syncCount++;
                         }
                     }
                     if (needsPiUpdate) {
-                        pharmacyUpdates.push({ id: pi.id, data: { quantity: finalQty, purchasePrice: finalPrice, sellingPrice: finalSelling, rack: finalRack } });
+                        pharmacyUpdates.push({ id: pi.id, data: { quantity: finalQty, sellingPrice: finalSelling, rack: finalRack } });
                         syncCount++;
                     }
                 } else if (pi && (!foundSp || !foundSup)) {
                     const supplier = suppliers.find(s => s.id === pi.supplierId || s.name === pi.supplier) || suppliers[0];
                     if (supplier) {
                         if (!supplierUpdates[supplier.id]) supplierUpdates[supplier.id] = [...(supplier.products || [])];
-                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName, price: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
+                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
                         syncCount++;
                     }
                 } else if (!pi && foundSp && foundSup) {
                     pharmacyCreates.push({
-                        id: foundSp.id, productName: foundSp.name, purchasePrice: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
+                        id: foundSp.id, productName: foundSp.name, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
                         supplier: foundSup.name, supplierId: foundSup.id, active: true, category: foundSup.category || 'General'
                     });
                     syncCount++;
@@ -145,14 +143,14 @@ export default function InventoryPage() {
                         if (!supplierUpdates[recoveringSup.id]) supplierUpdates[recoveringSup.id] = [...(recoveringSup.products || [])];
                         
                         const recoveredProduct = { 
-                            id: newId, name: nameKey.charAt(0).toUpperCase() + nameKey.slice(1), 
-                            price: finalPrice, sellingPrice: finalSelling || (finalPrice * 1.2), 
+                            id: newId, name: nameKey.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), 
+                            sellingPrice: finalSelling || 0, 
                             quantity: finalQty, rack: '', minThreshold: 0 
                         };
                         
                         supplierUpdates[recoveringSup.id].push(recoveredProduct);
                         pharmacyCreates.push({
-                            ...recoveredProduct, productName: recoveredProduct.name, purchasePrice: recoveredProduct.price,
+                            ...recoveredProduct, productName: recoveredProduct.name,
                             supplier: recoveringSup.name, supplierId: recoveringSup.id, active: true, category: 'General'
                         });
                         syncCount++;
@@ -188,13 +186,11 @@ export default function InventoryPage() {
                 
                 // SYSTEM PARITY: Promote the maximum quantity and non-zero pricing
                 const currentQty = Math.max(Number(p.quantity || 0), Number(piMatch?.quantity || 0));
-                const currentPrice = Math.max(Number(p.price || 0), Number(piMatch?.purchasePrice || 0));
                 const currentSelling = Math.max(Number(p.sellingPrice || 0), Number(piMatch?.sellingPrice || 0));
 
                 items.push({ 
                     ...p, 
                     quantity: currentQty,
-                    price: currentPrice,
                     sellingPrice: currentSelling,
                     supplierName: s.name, 
                     supplierId: s.id,
@@ -212,7 +208,6 @@ export default function InventoryPage() {
                     id: pi.id,
                     name: pi.productName || pi.name || 'Unnamed Product',
                     quantity: pi.quantity,
-                    price: pi.purchasePrice || 0,
                     sellingPrice: pi.sellingPrice || 0,
                     supplierName: pi.supplier || 'Unlinked',
                     supplierId: pi.supplierId || 'unlinked',
@@ -247,7 +242,6 @@ export default function InventoryPage() {
     const [editingItem, setEditingItem] = React.useState<(SupplierProduct & { supplierId: string; supplierName: string }) | null>(null);
 
     // Form State (Simplified for quick updates)
-    const [price, setPrice] = React.useState<number | string>('');
     const [sellingPrice, setSellingPrice] = React.useState<number | string>('');
     const [quantity, setQuantity] = React.useState<number | string>('');
     const [rack, setRack] = React.useState<string>('');
@@ -256,7 +250,6 @@ export default function InventoryPage() {
 
     const handleOpenDialog = (item: SupplierProduct & { supplierId: string; supplierName: string }) => {
         setEditingItem(item);
-        setPrice(item.price);
         setSellingPrice(item.sellingPrice || 0);
         setQuantity(item.quantity);
         setRack(item.rack || '');
@@ -265,26 +258,15 @@ export default function InventoryPage() {
     };
 
     const handleSave = async () => {
-        if (price === '' || isNaN(Number(price)) || 
-            sellingPrice === '' || isNaN(Number(sellingPrice)) || 
+        if (sellingPrice === '' || isNaN(Number(sellingPrice)) || 
             quantity === '' || isNaN(Number(quantity))) {
-            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please provide valid numeric values for all price and quantity fields.' });
-            return;
-        }
-
-        if (Number(sellingPrice) <= Number(price)) {
-            toast({ 
-                variant: 'destructive', 
-                title: 'Pricing Error', 
-                description: 'Sale price must be greater than cost price to maintain profit margins.' 
-            });
+            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please provide valid numeric values for price and quantity fields.' });
             return;
         }
 
         if (!firestore || !editingItem) return;
 
         try {
-            const numPrice = Number(price);
             const numSellingPrice = Number(sellingPrice);
             const numQty = Number(quantity);
 
@@ -292,7 +274,7 @@ export default function InventoryPage() {
             if (supplier && supplier.products) {
                 const newProducts = supplier.products.map(p => {
                     if (p.id === editingItem.id) {
-                        return { ...p, price: numPrice, sellingPrice: numSellingPrice, quantity: numQty, rack, alternatives };
+                        return { ...p, sellingPrice: numSellingPrice, quantity: numQty, rack, alternatives };
                     }
                     return p;
                 });
@@ -303,7 +285,6 @@ export default function InventoryPage() {
                 setDocumentNonBlocking(pDocRef, {
                     productName: editingItem.name,
                     sellingPrice: numSellingPrice,
-                    purchasePrice: numPrice,
                     quantity: numQty,
                     rack: rack,
                     supplier: supplier.name,
@@ -395,8 +376,7 @@ export default function InventoryPage() {
                                     <TableHead>Item Name</TableHead>
                                     <TableHead>Supplier</TableHead>
                                     <TableHead>Rack</TableHead>
-                                    <TableHead className="text-right">Cost (Rs)</TableHead>
-                                    <TableHead className="text-right">Sale (Rs)</TableHead>
+                                    <TableHead className="text-right">Sale Price (Rs)</TableHead>
                                     <TableHead className="text-right">Quantity</TableHead>
                                     <TableHead className="w-[100px] text-right">Actions</TableHead>
                                 </TableRow>
@@ -443,16 +423,7 @@ export default function InventoryPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-bold uppercase text-slate-400">Cost</span>
-                                                    <span className="font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">
-                                                        {item.price?.toLocaleString() || 0} Rs
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-bold uppercase text-slate-400">Sale</span>
-                                                    <span className="font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
+                                                    <span className="text-[10px] font-black text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
                                                         {item.sellingPrice?.toLocaleString() || 0} Rs
                                                     </span>
                                                 </div>
@@ -500,15 +471,6 @@ export default function InventoryPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="price">Cost Price (Rs)</Label>
-                                <Input
-                                    id="price"
-                                    type="number"
-                                    value={price}
-                                    onChange={(e) => setPrice(e.target.value)}
-                                />
-                            </div>
-                            <div className="grid gap-2">
                                 <Label htmlFor="sellingPrice">Selling Price (Rs)</Label>
                                 <Input
                                     id="sellingPrice"
@@ -517,8 +479,6 @@ export default function InventoryPage() {
                                     onChange={(e) => setSellingPrice(e.target.value)}
                                 />
                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="quantity">Stock Quantity</Label>
                                 <Input
@@ -528,19 +488,19 @@ export default function InventoryPage() {
                                     onChange={(e) => setQuantity(e.target.value)}
                                 />
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="rack">Rack Location</Label>
-                                <Select value={rack} onValueChange={setRack}>
-                                    <SelectTrigger id="rack">
-                                        <SelectValue placeholder="Select Rack" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
-                                            <SelectItem key={r} value={r}>Rack {r}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="rack">Rack Location</Label>
+                            <Select value={rack} onValueChange={setRack}>
+                                <SelectTrigger id="rack">
+                                    <SelectValue placeholder="Select Rack" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(r => (
+                                        <SelectItem key={r} value={r}>Rack {r}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {/* Alternatives Section */}

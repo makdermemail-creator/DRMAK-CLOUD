@@ -30,7 +30,8 @@ import {
     BarChart3, 
     Zap,
     ArrowUpRight,
-    Loader2
+    Loader2,
+    TrendingUp
 } from 'lucide-react';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import { 
@@ -119,26 +120,25 @@ export default function InventoryReportPage() {
                 const currentMax = Math.max(piQty, Number(foundSp?.quantity || 0));
                 const finalQty = Math.max(currentMax, historicalQty); 
                 
-                const finalPrice = Math.max(Number(pi?.purchasePrice || 0), Number(foundSp?.price || 0));
                 const finalSelling = Math.max(Number(pi?.sellingPrice || 0), Number(foundSp?.sellingPrice || 0));
                 const finalRack = pi?.rack || foundSp?.rack || '';
 
                 if (pi && foundSp && foundSup) {
-                    const needsSupUpdate = foundSp.quantity !== finalQty || foundSp.price !== finalPrice;
-                    const needsPiUpdate = pi.quantity !== finalQty || pi.purchasePrice !== finalPrice;
+                    const needsSupUpdate = foundSp.quantity !== finalQty;
+                    const needsPiUpdate = pi.quantity !== finalQty;
 
                     if (needsSupUpdate) {
                         if (!supplierUpdates[foundSup.id]) supplierUpdates[foundSup.id] = [...(foundSup.products || [])];
                         const idx = supplierUpdates[foundSup.id].findIndex(p => p.name.trim().toLowerCase() === nameKey);
                         if (idx > -1) {
-                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, price: finalPrice, sellingPrice: finalSelling, rack: finalRack };
+                            supplierUpdates[foundSup.id][idx] = { ...supplierUpdates[foundSup.id][idx], quantity: finalQty, sellingPrice: finalSelling, rack: finalRack };
                             syncCount++;
                         }
                     }
                     if (needsPiUpdate) {
                         // Update ALL items with this name to ensure parity
                         sameNamePis.forEach(item => {
-                             pharmacyUpdates.push({ id: item.id, data: { quantity: finalQty, purchasePrice: finalPrice, sellingPrice: finalSelling, rack: finalRack } });
+                             pharmacyUpdates.push({ id: item.id, data: { quantity: finalQty, sellingPrice: finalSelling, rack: finalRack } });
                              syncCount++;
                         });
                     }
@@ -146,12 +146,12 @@ export default function InventoryReportPage() {
                     const supplier = suppliers.find(s => s.id === pi.supplierId || s.name === pi.supplier) || suppliers[0];
                     if (supplier) {
                         if (!supplierUpdates[supplier.id]) supplierUpdates[supplier.id] = [...(supplier.products || [])];
-                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName || pi.name || '', price: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
+                        supplierUpdates[supplier.id].push({ id: pi.id, name: pi.productName || pi.name || '', sellingPrice: finalSelling, quantity: finalQty, rack: finalRack, minThreshold: 0 });
                         syncCount++;
                     }
                 } else if (!pi && foundSp && foundSup) {
                     pharmacyCreates.push({
-                        id: foundSp.id, productName: foundSp.name, purchasePrice: finalPrice, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
+                        id: foundSp.id, productName: foundSp.name, sellingPrice: finalSelling, quantity: finalQty, rack: finalRack,
                         supplier: foundSup.name, supplierId: foundSup.id, active: true, category: foundSup.category || 'General'
                     });
                     syncCount++;
@@ -164,13 +164,13 @@ export default function InventoryReportPage() {
                         
                         const recoveredProduct = { 
                             id: newId, name: nameKey.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), 
-                            price: finalPrice, sellingPrice: finalSelling || (finalPrice * 1.2), 
+                            sellingPrice: finalSelling || 0, 
                             quantity: finalQty, rack: '', minThreshold: 0 
                         };
                         
                         supplierUpdates[recoveringSup.id].push(recoveredProduct);
                         pharmacyCreates.push({
-                            ...recoveredProduct, productName: recoveredProduct.name, purchasePrice: recoveredProduct.price,
+                            ...recoveredProduct, productName: recoveredProduct.name,
                             supplier: recoveringSup.name, supplierId: recoveringSup.id, active: true, category: 'General'
                         });
                         recoveryCount++;
@@ -214,15 +214,13 @@ export default function InventoryReportPage() {
                 // Find matching item in Pharmacy POS
                 const piMatch = pharmacyItems.find(pi => pi.productName.trim().toLowerCase() === nameKey);
                 
-                // SYSTEM PARITY: Promote the maximum quantity and non-zero pricing
+                // Promote the maximum quantity and selling price
                 const currentQty = Math.max(Number(p.quantity || 0), Number(piMatch?.quantity || 0));
-                const currentPrice = Math.max(Number(p.price || 0), Number(piMatch?.purchasePrice || 0));
                 const currentSelling = Math.max(Number(p.sellingPrice || 0), Number(piMatch?.sellingPrice || 0));
 
                 items.push({ 
                     ...p, 
                     quantity: currentQty,
-                    price: currentPrice,
                     sellingPrice: currentSelling,
                     supplierName: s.name, 
                     supplierId: s.id,
@@ -241,7 +239,6 @@ export default function InventoryReportPage() {
                     id: pi.id,
                     name: pi.productName || pi.name || 'Unnamed Product',
                     quantity: pi.quantity || 0,
-                    price: pi.purchasePrice || 0,
                     sellingPrice: pi.sellingPrice || 0,
                     supplierName: pi.supplier || 'Unlinked',
                     supplierId: pi.supplierId || 'unlinked',
@@ -253,8 +250,21 @@ export default function InventoryReportPage() {
             }
         });
 
-        return items;
+        // Sort alphabetically by name
+        return items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }, [suppliers, pharmacyItems]);
+
+    const [searchTerm, setSearchTerm] = React.useState('');
+
+    const filteredInventoryItems = React.useMemo(() => {
+        if (!searchTerm.trim()) return inventoryItems;
+        const term = searchTerm.toLowerCase().trim();
+        return inventoryItems.filter(item =>
+            (item.name || '').toLowerCase().includes(term) ||
+            (item.supplierName || '').toLowerCase().includes(term) ||
+            (item.rack || '').toLowerCase().includes(term)
+        );
+    }, [inventoryItems, searchTerm]);
 
     const lowStockItems = React.useMemo(() => {
         return inventoryItems.filter(item => {
@@ -265,12 +275,12 @@ export default function InventoryReportPage() {
     }, [inventoryItems]);
 
     const stockMetrics = React.useMemo(() => {
-        const totalValue = inventoryItems.reduce((acc, item) => acc + (Number(item.price) * Number(item.quantity)), 0);
+        const totalValue = inventoryItems.reduce((acc, item) => acc + (Number(item.sellingPrice) * Number(item.quantity)), 0);
         const outOfStock = inventoryItems.filter(item => Number(item.quantity) <= 0).length;
         
         // Find high value items for data audit
         const topValueItems = [...inventoryItems]
-            .map(item => ({ ...item, totalVal: Number(item.price) * Number(item.quantity) }))
+            .map(item => ({ ...item, totalVal: Number(item.sellingPrice) * Number(item.quantity) }))
             .sort((a, b) => b.totalVal - a.totalVal)
             .slice(0, 5);
 
@@ -300,9 +310,19 @@ export default function InventoryReportPage() {
                     <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-3">
                         Inventory <span className="text-emerald-600">&</span> Stocks
                     </h1>
-                    <p className="text-slate-500 font-medium mt-1">Real-time valuation and replenishment tracking.</p>
+                    <p className="text-slate-500 font-medium mt-1">Real-time stock replenishment and retail availability tracking.</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center flex-wrap">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Search products, suppliers..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 w-64"
+                        />
+                    </div>
                     <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
                     <Button variant="outline" className="rounded-xl border-slate-200 font-bold">Export CSV</Button>
                     <Button 
@@ -323,12 +343,12 @@ export default function InventoryReportPage() {
                         <Boxes className="h-24 w-24" />
                     </div>
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-indigo-100 font-black uppercase tracking-widest text-[10px]">Active SKUs</CardDescription>
-                        <CardTitle className="text-3xl font-black">{stockMetrics.totalItems} Items</CardTitle>
+                        <CardDescription className="text-indigo-100 font-black uppercase tracking-widest text-[10px]">Potential Retail Revenue</CardDescription>
+                        <CardTitle className="text-3xl font-black">Rs {stockMetrics.totalValue.toLocaleString()}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2 text-xs font-bold bg-white/10 w-fit px-3 py-1 rounded-full">
-                            <Zap className="h-3 w-3 text-amber-400" /> System Master Ledger
+                            <TrendingUp className="h-3 w-3 text-emerald-400" /> Projected Market Inflow
                         </div>
                     </CardContent>
                 </Card>
@@ -401,8 +421,13 @@ export default function InventoryReportPage() {
                     <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden">
                         <CardHeader className="p-8 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                                <CardTitle className="text-xl font-black text-slate-900">Complete Master Ledger</CardTitle>
-                                <CardDescription>Comprehensive list of all {inventoryItems.length} items in the system.</CardDescription>
+                        <CardTitle className="text-xl font-black text-slate-900">Complete Master Ledger</CardTitle>
+                                <CardDescription>
+                                    {searchTerm 
+                                        ? `${filteredInventoryItems.length} result${filteredInventoryItems.length !== 1 ? 's' : ''} for "${searchTerm}"`
+                                        : `All ${inventoryItems.length} items, sorted A–Z.`
+                                    }
+                                </CardDescription>
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
@@ -416,7 +441,16 @@ export default function InventoryReportPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {inventoryItems.map((item) => {
+                                    {filteredInventoryItems.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center py-16">
+                                                <div className="flex flex-col items-center gap-2 opacity-40">
+                                                    <Search className="h-8 w-8" />
+                                                    <p className="font-black uppercase tracking-widest text-xs">No products match "{searchTerm}"</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : filteredInventoryItems.map((item) => {
                                         const isLow = Number(item.quantity) <= (item.minThreshold || 0);
                                         const isOut = Number(item.quantity) <= 0;
 

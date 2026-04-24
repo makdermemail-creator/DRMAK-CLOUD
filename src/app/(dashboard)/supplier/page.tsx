@@ -191,14 +191,14 @@ export default function SupplierPage() {
         }
         setIsSaving(true);
 
-        // Validation: Sale Price must be greater than Cost Price
+        // Validation: Ensure valid selling price
         if (formData.products && formData.products.length > 0) {
             for (const p of formData.products) {
-                if ((p.sellingPrice || 0) <= (p.price || 0)) {
+                if ((p.sellingPrice || 0) <= 0) {
                     toast({
                         variant: 'destructive',
                         title: 'Pricing Error',
-                        description: `Sale price for "${p.name || 'this item'}" must be greater than its cost price.`
+                        description: `Please set a valid sale price for "${p.name || 'this item'}".`
                     });
                     setIsSaving(false);
                     return;
@@ -225,14 +225,12 @@ export default function SupplierPage() {
                 for (const p of formData.products) {
                     const pDocRef = doc(firestore, 'pharmacyItems', p.id);
                     const sellingPrice = p.sellingPrice !== undefined ? Number(p.sellingPrice) : 0;
-                    const purchasePrice = p.price !== undefined ? Number(p.price) : 0;
                     const quantity = p.quantity !== undefined ? Number(p.quantity) : 0;
 
                     await setDocumentNonBlocking(pDocRef, {
                         id: p.id,
                         productName: p.name,
                         sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
-                        purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
                         quantity: isNaN(quantity) ? 0 : quantity,
                         supplier: formData.name,
                         supplierId: supplierId || editingSupplier?.id,
@@ -284,7 +282,6 @@ export default function SupplierPage() {
                 { 
                     id: Math.random().toString(36).substr(2, 9), 
                     name: '', 
-                    price: 0, 
                     sellingPrice: 0, 
                     quantity: 0, 
                     minThreshold: 0,
@@ -307,7 +304,7 @@ export default function SupplierPage() {
             ...prev,
             products: prev.products?.map((p, i) => {
                 if (i !== idx) return p;
-                if (field === 'price' || field === 'sellingPrice' || field === 'quantity' || field === 'minThreshold') {
+                if (field === 'sellingPrice' || field === 'quantity' || field === 'minThreshold') {
                     if (value === '') return { ...p, [field]: undefined };
                     const numVal = parseFloat(value);
                     return { ...p, [field]: isNaN(numVal) ? 0 : numVal };
@@ -779,17 +776,7 @@ export default function SupplierPage() {
                                                     </div>
                                                 </div>
 
-                                                <div className="md:col-span-7 grid grid-cols-2 gap-4 bg-muted/5 p-5 rounded-3xl border border-muted-200 relative">
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-black uppercase text-rose-600 ml-1">Cost Price (Rs)</Label>
-                                                        <Input
-                                                            type="number"
-                                                            placeholder="0"
-                                                            className="h-12 rounded-xl font-black text-rose-600 border-rose-200 bg-white focus-visible:ring-rose-500 text-lg px-4"
-                                                            value={p.price === undefined ? '' : p.price}
-                                                            onChange={e => updateProduct(i, 'price', e.target.value)}
-                                                        />
-                                                    </div>
+                                                <div className="md:col-span-7 grid grid-cols-1 gap-4 bg-muted/5 p-5 rounded-3xl border border-muted-200 relative">
                                                     <div className="space-y-1.5">
                                                         <Label className="text-[10px] font-black uppercase text-teal-600 ml-1">Sale Price (Rs)</Label>
                                                         <Input
@@ -799,11 +786,6 @@ export default function SupplierPage() {
                                                             value={p.sellingPrice === undefined ? '' : p.sellingPrice}
                                                             onChange={e => updateProduct(i, 'sellingPrice', e.target.value)}
                                                         />
-                                                        {(p.sellingPrice || 0) <= (p.price || 0) && (p.price || 0) > 0 && (
-                                                            <p className="text-[9px] font-bold text-rose-500 animate-pulse mt-1 ml-1">
-                                                                Warning: Sale price must exceed cost price
-                                                            </p>
-                                                        )}
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Inventory Quantity</Label>

@@ -156,7 +156,6 @@ const allMenuItems: MenuItem[] = [
     // Social Media Specific
     { id: 'socialReporting', href: '/social-reporting', label: 'Reports', icon: FileText },
     { id: 'contentPlanner', href: '/content-planner', label: 'Planner', icon: CalendarCheck },
-    { id: 'analytics', href: '/analytics', label: 'Analytics', icon: LineChart },
     { id: 'socialInbox', href: '/social-inbox', label: 'Inbox', icon: Share2 },
     { id: 'reachTracker', href: '/analytics/reach', label: 'Reach Tracker', icon: TrendingUp },
 
@@ -194,7 +193,7 @@ const reportsGroups = [
     },
     {
         label: "Reports and Analytics",
-        ids: ["rep_finance", "rep_inventory", "rep_performance", "rep_expenses", "rep_salaries", "analytics"]
+        ids: ["rep_finance", "rep_inventory", "rep_performance", "rep_expenses", "rep_salaries"]
     },
     {
         label: "SkinSmith AI",
@@ -221,7 +220,7 @@ const organizationGroups = [
     },
     {
         label: "Social & Growth",
-        ids: ["dailyPosting", "dailyTasks", "dailyProgress", "trainings_hub", "socialReporting", "contentPlanner", "analytics", "socialInbox", "reachTracker"]
+        ids: ["dailyPosting", "dailyTasks", "dailyProgress", "trainings_hub", "socialReporting", "contentPlanner", "socialInbox", "reachTracker"]
     },
     {
         label: "SkinSmith AI",
@@ -307,7 +306,7 @@ const NavContent = () => {
         if (userProfile?.role === 'Admin') {
             baseAccessIds = allMenuItems.filter(item => item.id !== 'userManagement' && item.id !== 'featureControl').map(i => i.id);
         } else if (userProfile?.role === 'Social Media Manager') {
-            baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'analytics', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
+            baseAccessIds = ['dashboard', 'socialReporting', 'contentPlanner', 'socialInbox', 'reachTracker', 'leadAssignment', 'dailyPosting', 'aiTools'];
         } else if (userProfile?.role === 'Designer') {
             // Designers and SMM now share the exact same unified platform planner.
             // Removed the private 'My Planner' to prevent data discrepancy.
@@ -319,7 +318,7 @@ const NavContent = () => {
             baseAccessIds = [
                 'dashboard', 
                 'printPrescription', 'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
-                'analytics', 'leads', 'leadAssignment', 'employeeReports', 'socialReporting', 'aiTools'
+                'leads', 'leadAssignment', 'employeeReports', 'socialReporting', 'aiTools'
             ];
         } else if (userProfile?.role === 'Doctor') {
             // Doctor gets core clinical tools but NOT Health Records (admin-managed)
@@ -332,7 +331,7 @@ const NavContent = () => {
         return allMenuItems.filter(item => {
             // Block SMM-specific items for Designer role to prevent mixing
             if (userProfile?.role === 'Designer') {
-                const smmOnlyItems = ['socialReporting', 'analytics', 'reachTracker'];
+                const smmOnlyItems = ['socialReporting', 'reachTracker'];
                 if (smmOnlyItems.includes(item.id)) return false;
             }
 
@@ -470,7 +469,7 @@ const NavContent = () => {
     if (userProfile?.role === 'Social Media Manager') {
         const overviewIds = ['dashboard'];
         const toolIds = ['contentPlanner', 'dailyPosting', 'socialInbox'];
-        const insightIds = ['socialReporting', 'analytics', 'reachTracker', 'leadAssignment'];
+        const insightIds = ['socialReporting', 'reachTracker', 'leadAssignment'];
 
         const overviewItems = allMenuItems.filter(item => overviewIds.includes(item.id));
         const toolItems = allMenuItems.filter(item => toolIds.includes(item.id));

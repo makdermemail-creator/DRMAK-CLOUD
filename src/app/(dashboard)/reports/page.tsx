@@ -54,7 +54,7 @@ export default function ReportsBirdsEyePage() {
         // 1. Process Master Ledger (Suppliers)
         suppliers?.forEach(s => {
             s.products?.forEach(p => {
-                stockValue += (Number(p.price || 0) * Number(p.quantity || 0));
+                stockValue += (Number(p.sellingPrice || 0) * Number(p.quantity || 0));
                 if (Number(p.quantity || 0) <= (p.minThreshold || 0)) lowStockCount++;
                 processedNames.add(p.name.trim().toLowerCase());
             });
@@ -64,7 +64,7 @@ export default function ReportsBirdsEyePage() {
         pharmacyItems?.forEach(pi => {
             const nameKey = (pi.productName || pi.name || '').trim().toLowerCase();
             if (nameKey && !processedNames.has(nameKey)) {
-                stockValue += (Number(pi.purchasePrice || 0) * Number(pi.quantity || 0));
+                stockValue += (Number(pi.sellingPrice || 0) * Number(pi.quantity || 0));
                 if (Number(pi.quantity || 0) <= (pi.minThreshold || 0)) lowStockCount++;
                 processedNames.add(nameKey);
             }
@@ -133,7 +133,7 @@ export default function ReportsBirdsEyePage() {
                         <Boxes className="h-48 w-48" />
                     </div>
                     <CardHeader>
-                        <CardDescription className="text-emerald-100 font-black uppercase tracking-widest text-[11px]">Asset Net Value</CardDescription>
+                        <CardDescription className="text-emerald-100 font-black uppercase tracking-widest text-[11px]">Inventory Retail Value</CardDescription>
                         <CardTitle className="text-4xl font-black mt-2">Rs {metrics.stockValue.toLocaleString()}</CardTitle>
                     </CardHeader>
                     <CardContent className="mt-4">
