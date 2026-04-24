@@ -9,7 +9,7 @@ import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X, Send } from 'lu
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
 import { collection, addDoc, updateDoc, doc, query, where, deleteDoc } from 'firebase/firestore';
-import type { Patient, Doctor } from '@/lib/types';
+import type { Patient, Doctor, PharmacyItem, Supplier } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
@@ -19,7 +19,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Info, History } from 'lucide-react';
 import { PrescriptionPreview } from '@/components/PrescriptionPreview';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogTrigger } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ type Medicine = {
   frequency: string;
   duration: string;
   instructions: string;
+  pharmacyItemId?: string;
+  genericName?: string;
 };
 
 type Vital = {
@@ -62,15 +65,24 @@ export default function EPrescriptionPage() {
   const doctorsRef = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
   const { data: doctors } = useCollection<Doctor>(doctorsRef);
 
+  const pharmacyItemsRef = useMemoFirebase(() => firestore ? collection(firestore, 'pharmacyItems') : null, [firestore]);
+  const { data: pharmacyItems } = useCollection<PharmacyItem>(pharmacyItemsRef);
+
+  const suppliersRef = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
+  const { data: suppliers } = useCollection<Supplier>(suppliersRef);
+
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = React.useState('');
   const [chiefComplaint, setChiefComplaint] = React.useState('');
+  const [examination, setExamination] = React.useState('');
   const [diagnosis, setDiagnosis] = React.useState('');
   const [medicines, setMedicines] = React.useState<Medicine[]>([defaultMedicine()]);
-  const [investigations, setInvestigations] = React.useState('');
   const [advice, setAdvice] = React.useState('');
+  const [procedure, setProcedure] = React.useState('');
   const [followUpDates, setFollowUpDates] = React.useState<string[]>([]);
   const [newFollowUpDate, setNewFollowUpDate] = React.useState('');
+  const [allergies, setAllergies] = React.useState('');
+  const [coMorbids, setCoMorbids] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [savedId, setSavedId] = React.useState<string | null>(null);
@@ -82,12 +94,15 @@ export default function EPrescriptionPage() {
     setSelectedPatient(null);
     setPatientSearch('');
     setChiefComplaint('');
+    setExamination('');
     setDiagnosis('');
     setMedicines([defaultMedicine()]);
-    setInvestigations('');
     setAdvice('');
+    setProcedure('');
     setFollowUpDates([]);
     setNewFollowUpDate('');
+    setAllergies('');
+    setCoMorbids('');
     setNotes('');
     setSavedId(null);
   };
@@ -105,11 +120,14 @@ export default function EPrescriptionPage() {
 
   const handleLoadPrescription = (rx: any) => {
     setChiefComplaint(rx.chiefComplaint || '');
+    setExamination(rx.examination || '');
     setDiagnosis(rx.diagnosis || '');
     setMedicines(rx.medicines && rx.medicines.length > 0 ? rx.medicines : [defaultMedicine()]);
-    setInvestigations(rx.investigations || '');
     setAdvice(rx.advice || '');
+    setProcedure(rx.procedure || '');
     setFollowUpDates(rx.followUp || []);
+    setAllergies(rx.allergies || '');
+    setCoMorbids(rx.coMorbids || '');
     setNotes(rx.notes || '');
     toast({ title: 'Prescription Loaded', description: 'Data has been pre-filled from history.' });
   };
@@ -159,8 +177,15 @@ export default function EPrescriptionPage() {
         doctorName: linkedDoctor?.fullName || user?.name,
         doctorQualification: linkedDoctor?.qualification || '',
         doctorSpecialization: linkedDoctor?.specialization || '',
-        chiefComplaint, diagnosis, medicines, investigations, advice,
+        chiefComplaint, 
+        examination,
+        diagnosis, 
+        medicines, 
+        procedure,
+        advice,
         followUp: followUpDates,
+        allergies,
+        coMorbids,
         notes,
         createdAt: new Date().toISOString(),
       });
@@ -196,16 +221,26 @@ export default function EPrescriptionPage() {
     setIsSaving(false);
   };
 
-  const doctorName = linkedDoctor?.fullName || user?.name || 'Doctor';
-  const doctorQualification = (linkedDoctor as any)?.qualification || '';
-  const doctorSpecialization = (linkedDoctor as any)?.specialization || 'Dermatologist';
+  const doctorName = linkedDoctor?.fullName || user?.name || 'Dr Prof. Dr Mahvish Aftab Khan';
+  const doctorQualification = (linkedDoctor as any)?.qualification || 'MBBS, FCPS, AAAM (USA), PhD (Reg. Med)';
+  const doctorSpecialization = (linkedDoctor as any)?.specialization || 'Board Certified Dermatologist & Aesthetic Physician';
   const today = format(new Date(), 'dd MMMM yyyy');
 
   const previewProps = { 
     doctorName, doctorQualification, doctorSpecialization, 
-    patient: selectedPatient, chiefComplaint, diagnosis, 
-    medicines, investigations, advice, followUpDates, today,
-    hideBranding: printOnLetterhead 
+    patient: selectedPatient, 
+    chiefComplaint, 
+    examination,
+    diagnosis, 
+    medicines, 
+    procedure,
+    advice, 
+    followUpDates, 
+    allergies,
+    coMorbids,
+    today,
+    hideBranding: printOnLetterhead,
+    maritalStatus: selectedPatient?.maritalStatus 
   };
 
   return (
@@ -324,123 +359,257 @@ export default function EPrescriptionPage() {
 
             <Card>
               <CardHeader><CardTitle className="text-base">Clinical Information</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* 1. Chief Complaint */}
                 <div className="space-y-2">
-                  <Label>Chief Complaint</Label>
-                  <Textarea placeholder="Patient's main complaint..." value={chiefComplaint} onChange={e => setChiefComplaint(e.target.value)} rows={2} />
+                  <Label className="text-primary font-bold">1. Chief Complaints</Label>
+                  <Textarea placeholder="Patient's main complaints..." value={chiefComplaint} onChange={e => setChiefComplaint(e.target.value)} rows={3} />
                 </div>
+
+                {/* 2. Examination */}
                 <div className="space-y-2">
-                  <Label>Diagnosis</Label>
-                  <Textarea placeholder="Clinical diagnosis..." value={diagnosis} onChange={e => setDiagnosis(e.target.value)} rows={2} />
+                  <Label className="text-primary font-bold">2. Examination</Label>
+                  <Textarea placeholder="Clinical examination findings..." value={examination} onChange={e => setExamination(e.target.value)} rows={3} />
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Rx — Medicines</CardTitle>
-                  <Button size="sm" variant="outline" onClick={() => setMedicines(prev => [...prev, defaultMedicine()])}><PlusCircle className="mr-2 h-4 w-4" />Add Medicine</Button>
+                {/* 3. Diagnosis */}
+                <div className="space-y-2">
+                  <Label className="text-primary font-bold">3. Diagnosis</Label>
+                  <Textarea placeholder="Clinical diagnosis..." value={diagnosis} onChange={e => setDiagnosis(e.target.value)} rows={3} />
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {medicines.map((med, index) => (
-                  <div key={med.id} className="border rounded-lg p-3 space-y-3 bg-muted/20">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="text-xs">{index + 1}</Badge>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setMedicines(prev => prev.filter(m => m.id !== med.id))}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1 sm:col-span-2">
-                        <Label className="text-xs">Medicine Name</Label>
-                        <Input placeholder="e.g., Betnovate Cream, Cetirizine" value={med.name} onChange={e => handleMedicineChange(med.id, 'name', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Dosage</Label>
-                        <Input placeholder="e.g., 1 tablet, 5ml" value={med.dosage} onChange={e => handleMedicineChange(med.id, 'dosage', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Frequency</Label>
-                        <Select value={med.frequency} onValueChange={val => handleMedicineChange(med.id, 'frequency', val)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="OD">OD — Once a day</SelectItem>
-                            <SelectItem value="BD">BD — Twice a day</SelectItem>
-                            <SelectItem value="TDS">TDS — Three times a day</SelectItem>
-                            <SelectItem value="QID">QID — Four times a day</SelectItem>
-                            <SelectItem value="SOS">SOS — As needed</SelectItem>
-                            <SelectItem value="HS">HS — At bedtime</SelectItem>
-                            <SelectItem value="Stat">Stat — Immediately</SelectItem>
-                            <SelectItem value="Weekly">Weekly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Duration</Label>
-                        <Input placeholder="e.g., 7 days, 1 month" value={med.duration} onChange={e => handleMedicineChange(med.id, 'duration', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Special Instructions</Label>
-                        <Input placeholder="e.g., After meals, Apply twice daily" value={med.instructions} onChange={e => handleMedicineChange(med.id, 'instructions', e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader><CardTitle className="text-base">Additional Information</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2"><Label>Investigations / Tests</Label><Textarea placeholder="e.g., CBC, LFTs, Skin biopsy" value={investigations} onChange={e => setInvestigations(e.target.value)} rows={2} /></div>
-                <div className="space-y-2"><Label>Advice / Instructions</Label><Textarea placeholder="e.g., Avoid sun exposure, Use SPF 50+..." value={advice} onChange={e => setAdvice(e.target.value)} rows={2} /></div>
-                 <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Follow-up Appointments</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        type="date" 
-                        className="max-w-[200px]"
-                        value={newFollowUpDate}
-                        onChange={(e) => setNewFollowUpDate(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newFollowUpDate && !followUpDates.includes(newFollowUpDate)) {
-                            setFollowUpDates(prev => [...prev, newFollowUpDate].sort());
-                            setNewFollowUpDate('');
-                          }
-                        }}
-                      />
-                      <Button 
-                        size="sm" 
-                        variant="secondary"
-                        onClick={() => {
-                          if (newFollowUpDate && !followUpDates.includes(newFollowUpDate)) {
-                            setFollowUpDates(prev => [...prev, newFollowUpDate].sort());
-                            setNewFollowUpDate('');
-                          }
-                        }}
-                      >
-                        Add Date
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {followUpDates.map(date => (
-                        <Badge key={date} variant="outline" className="flex items-center gap-1 pl-2.5 pr-1 py-1">
-                          {safeFormat(date, 'dd MMM yyyy')}
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-4 w-4 rounded-full p-0" 
-                            onClick={() => setFollowUpDates(prev => prev.filter(d => d !== date))}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                      {followUpDates.length === 0 && <span className="text-xs text-muted-foreground italic">No follow-up dates added.</span>}
-                    </div>
+                {/* 4. Treatment (Medicines) */}
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-primary font-bold">4. Treatment (Medicines)</Label>
+                    <Button size="sm" variant="outline" onClick={() => setMedicines(prev => [...prev, defaultMedicine()])}><PlusCircle className="mr-2 h-4 w-4" />Add Medicine</Button>
                   </div>
-                  <div className="space-y-2"><Label>Private Notes (Not Printed)</Label><Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(prev => e.target.value)} /></div>
+                  <div className="space-y-4 mt-2">
+                    {medicines.map((med, index) => (
+                      <div key={med.id} className="border rounded-lg p-3 space-y-3 bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="text-xs">{index + 1}</Badge>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setMedicines(prev => prev.filter(m => m.id !== med.id))}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label className="text-xs">Medicine Name</Label>
+                            <div className="relative group/search">
+                              <Input 
+                                placeholder="Search or enter medicine name..." 
+                                value={med.name} 
+                                onChange={e => {
+                                  handleMedicineChange(med.id, 'name', e.target.value);
+                                  handleMedicineChange(med.id, 'pharmacyItemId', ''); 
+                                }} 
+                              />
+                              {!med.pharmacyItemId && (
+                                <div className="absolute top-full left-0 right-0 bg-background border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto mt-1 hidden group-focus-within/search:block hover:block">
+                                  <div className="px-3 py-1.5 bg-muted/30 border-b">
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                      {med.name ? `Search Results for "${med.name}"` : 'Browse Complete Inventory'}
+                                    </p>
+                                  </div>
+                                  {(() => {
+                                    const term = med.name.toLowerCase();
+                                    const combinedMap = new Map<string, any>();
+                                    (pharmacyItems || []).forEach(p => {
+                                      const nameKey = (p.productName || p.name || '').toLowerCase().trim();
+                                      if (nameKey) combinedMap.set(nameKey, { ...p, source: 'Inventory' as const });
+                                    });
+                                    (suppliers || []).forEach(s => {
+                                      (s.products || []).forEach(p => {
+                                        const nameKey = (p.name || '').toLowerCase().trim();
+                                        if (nameKey && !combinedMap.has(nameKey)) {
+                                          combinedMap.set(nameKey, {
+                                            id: p.id,
+                                            name: p.name,
+                                            genericName: (p as any).genericName || '',
+                                            quantity: p.quantity,
+                                            unit: (p as any).unit || '',
+                                            supplierName: s.name,
+                                            source: 'Supplier' as const
+                                          });
+                                        }
+                                      });
+                                    });
+
+                                    const combined = Array.from(combinedMap.values()).filter(p => 
+                                      !term ||
+                                      (p.productName || p.name || '').toLowerCase().includes(term) || 
+                                      (p.genericName || '').toLowerCase().includes(term)
+                                    );
+
+                                    if (combined.length === 0) return null;
+
+                                    return combined.slice(0, 20).map((p: any) => (
+                                      <div 
+                                        key={`${p.source}_${p.id}`} 
+                                        className="px-3 py-2 hover:bg-muted cursor-pointer flex flex-col border-b last:border-0"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          handleMedicineChange(med.id, 'name', p.productName || p.name);
+                                          handleMedicineChange(med.id, 'pharmacyItemId', p.id);
+                                          handleMedicineChange(med.id, 'genericName', p.genericName || '');
+                                          if (p.unit) handleMedicineChange(med.id, 'dosage', `1 ${p.unit}`);
+                                        }}
+                                      >
+                                        <div className="flex justify-between items-start">
+                                          <span className="text-sm font-bold">{p.productName || p.name}</span>
+                                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-primary/5 text-primary">
+                                            {p.source === 'Inventory' ? 'Main Stock' : p.supplierName}
+                                          </Badge>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-0.5">
+                                          <span className="text-[10px] text-muted-foreground italic">{p.genericName || 'No Generic Name'}</span>
+                                          <Badge variant={p.quantity > 0 ? "outline" : "destructive"} className="text-[8px] h-3.5 px-1">
+                                            {p.quantity > 0 ? `In Stock: ${p.quantity}` : 'Out of Stock'}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    ));
+                                  })()}
+                                  {med.name && (() => {
+                                    const term = med.name.toLowerCase();
+                                    const combinedMap = new Map<string, any>();
+                                    (pharmacyItems || []).forEach(p => {
+                                      const nameKey = (p.productName || p.name || '').toLowerCase().trim();
+                                      if (nameKey) combinedMap.set(nameKey, true);
+                                    });
+                                    (suppliers || []).forEach(s => {
+                                      (s.products || []).forEach(p => {
+                                        const nameKey = (p.name || '').toLowerCase().trim();
+                                        if (nameKey) combinedMap.set(nameKey, true);
+                                      });
+                                    });
+                                    const combinedCount = Array.from(combinedMap.keys()).filter(k => k.includes(term)).length;
+                                    return combinedCount === 0 ? (
+                                      <div 
+                                        className="px-4 py-6 text-center border-t border-dashed hover:bg-amber-50/50 cursor-pointer transition-colors"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          handleMedicineChange(med.id, 'pharmacyItemId', 'manual');
+                                        }}
+                                      >
+                                        <div className="flex justify-center mb-2">
+                                          <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center"><PlusCircle className="h-4 w-4 text-amber-500" /></div>
+                                        </div>
+                                        <p className="text-xs font-bold text-foreground">Add "{med.name}" as Manual Entry</p>
+                                        <p className="text-[10px] text-muted-foreground mt-1">Item not found in any inventory. Click to confirm manual entry.</p>
+                                      </div>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                            {med.name && (med.pharmacyItemId === 'manual' || !med.pharmacyItemId) && (
+                              <div className="mt-2 flex items-center gap-2">
+                                  <Badge variant="outline" className={cn(
+                                    "text-[10px] py-0 border-dashed transition-all",
+                                    med.pharmacyItemId === 'manual' ? "bg-amber-50 text-amber-700 border-amber-200" : "text-muted-foreground bg-muted/30"
+                                  )}>
+                                    {med.pharmacyItemId === 'manual' ? 'Confirmed Manual Entry' : 'Manual Entry'}
+                                  </Badge>
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Dosage</Label>
+                            <Input placeholder="e.g., 1 tablet" value={med.dosage} onChange={e => handleMedicineChange(med.id, 'dosage', e.target.value)} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Frequency</Label>
+                            <Select value={med.frequency} onValueChange={val => handleMedicineChange(med.id, 'frequency', val)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="OD">OD — Once a day</SelectItem>
+                                <SelectItem value="BD">BD — Twice a day</SelectItem>
+                                <SelectItem value="TDS">TDS — Three times a day</SelectItem>
+                                <SelectItem value="QID">QID — Four times a day</SelectItem>
+                                <SelectItem value="SOS">SOS — As needed</SelectItem>
+                                <SelectItem value="HS">HS — At bedtime</SelectItem>
+                                <SelectItem value="Stat">Stat — Immediately</SelectItem>
+                                <SelectItem value="Weekly">Weekly</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Duration</Label>
+                            <Input placeholder="e.g., 7 days" value={med.duration} onChange={e => handleMedicineChange(med.id, 'duration', e.target.value)} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Special Instructions</Label>
+                            <Input placeholder="e.g., After meals" value={med.instructions} onChange={e => handleMedicineChange(med.id, 'instructions', e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Advice */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">5. Advice</Label>
+                  <Textarea placeholder="Special advice for the patient..." value={advice} onChange={e => setAdvice(e.target.value)} rows={3} />
+                </div>
+
+                {/* 6. Procedure */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">6. Procedure</Label>
+                  <Textarea placeholder="Procedures performed or recommended..." value={procedure} onChange={e => setProcedure(e.target.value)} rows={3} />
+                </div>
+
+                {/* 7. Follow up */}
+                <div className="space-y-3 pt-4 border-t">
+                  <Label className="text-primary font-bold flex items-center gap-2">7. Follow-up Appointments</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="date" 
+                      className="max-w-[200px]"
+                      value={newFollowUpDate}
+                      onChange={(e) => setNewFollowUpDate(e.target.value)}
+                    />
+                    <Button 
+                      size="sm" 
+                      variant="secondary"
+                      onClick={() => {
+                        if (newFollowUpDate && !followUpDates.includes(newFollowUpDate)) {
+                          setFollowUpDates(prev => [...prev, newFollowUpDate].sort());
+                          setNewFollowUpDate('');
+                        }
+                      }}
+                    >
+                      Add Date
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {followUpDates.map(date => (
+                      <Badge key={date} variant="outline" className="flex items-center gap-1 pl-2.5 pr-1 py-1">
+                        {safeFormat(date, 'dd MMM yyyy')}
+                        <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full p-0" onClick={() => setFollowUpDates(prev => prev.filter(d => d !== date))}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 8. Allergies */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">8. Allergies</Label>
+                  <Textarea placeholder="Known drug or food allergies..." value={allergies} onChange={e => setAllergies(e.target.value)} rows={2} />
+                </div>
+
+                {/* 9. Co-Morbids */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">9. Co-Morbids</Label>
+                  <Textarea placeholder="Diabetes, Hypertension, etc..." value={coMorbids} onChange={e => setCoMorbids(e.target.value)} rows={2} />
+                </div>
+
+                {/* Internal Notes */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-muted-foreground text-xs">Private Notes (Not Printed)</Label>
+                  <Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(e.target.value)} />
                 </div>
               </CardContent>
             </Card>

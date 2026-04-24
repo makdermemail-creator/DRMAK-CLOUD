@@ -11,7 +11,21 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
-export const LeadFormDialog = ({ open, onOpenChange, lead, users, onSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, lead?: Lead, users: User[], onSuccess?: () => void }) => {
+export const LeadFormDialog = ({ 
+    open, 
+    onOpenChange, 
+    lead, 
+    users, 
+    onSuccess,
+    defaultAssignedTo
+}: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    lead?: Lead, 
+    users: User[], 
+    onSuccess?: () => void,
+    defaultAssignedTo?: string
+}) => {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [formData, setFormData] = React.useState<Partial<Lead>>({});
@@ -21,7 +35,11 @@ export const LeadFormDialog = ({ open, onOpenChange, lead, users, onSuccess }: {
             if (lead) {
                 setFormData(lead);
             } else {
-                setFormData({ status: 'New Lead', source: 'Manual Entry' });
+                setFormData({ 
+                    status: 'New Lead', 
+                    source: 'Manual Entry',
+                    assignedTo: defaultAssignedTo || ''
+                });
             }
         }
     }, [lead, open]);

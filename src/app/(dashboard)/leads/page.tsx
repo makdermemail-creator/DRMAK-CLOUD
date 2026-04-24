@@ -672,7 +672,14 @@ export default function LeadsPage() {
           )}
         </CardContent>
       </Card>
-      <LeadFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} lead={selectedLead} users={users || []} />
+      <LeadFormDialog 
+        open={isFormOpen} 
+        onOpenChange={setIsFormOpen} 
+        lead={selectedLead} 
+        users={users || []} 
+        onSuccess={forceRerender}
+        defaultAssignedTo={user?.role === 'Sales' ? user.id : undefined}
+      />
       <ImportLeadsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onLeadsImported={forceRerender} sheetUrl={sheetUrl} />
       <ConfigureSheetDialog
         open={isConfigOpen}

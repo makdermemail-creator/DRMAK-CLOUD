@@ -68,7 +68,7 @@ export default function SalesDashboardPage() {
         return query(collection(firestore, 'users'));
     }, [firestore]);
 
-    const { data: leads, isLoading: leadsLoading } = useCollection<Lead>(leadsQuery);
+    const { data: leads, isLoading: leadsLoading, forceRerender: forceRerenderLeads } = useCollection<Lead>(leadsQuery);
     const { data: postings, isLoading: postingsLoading } = useCollection<DailyPosting>(postingsQuery);
     const { data: reports, isLoading: reportsLoading } = useCollection<DailyReport>(reportsQuery);
     const { data: tasks, isLoading: tasksLoading } = useCollection<DailyTask>(tasksQuery);
@@ -520,6 +520,8 @@ export default function SalesDashboardPage() {
                 open={isAddLeadOpen}
                 onOpenChange={setIsAddLeadOpen}
                 users={usersList || []}
+                onSuccess={forceRerenderLeads}
+                defaultAssignedTo={user?.id}
             />
 
             <TrainingDetailDialog
