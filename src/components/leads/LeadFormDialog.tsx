@@ -1,6 +1,6 @@
 'use client';
 import * as React from 'react';
-import { useFirestore } from '@/firebase/provider';
+import { useFirestore, useUser } from '@/firebase';
 import { addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import type { Lead, User } from '@/lib/types';
 import { collection, doc } from 'firebase/firestore';
@@ -27,6 +27,7 @@ export const LeadFormDialog = ({
     defaultAssignedTo?: string
 }) => {
     const firestore = useFirestore();
+    const { user: currentUser } = useUser();
     const { toast } = useToast();
     const [formData, setFormData] = React.useState<Partial<Lead>>({});
 
@@ -70,6 +71,7 @@ export const LeadFormDialog = ({
         } else {
             addDocumentNonBlocking(collectionRef, {
                 ...formData,
+                addedBy: currentUser?.id || currentUser?.email,
                 createdAt: new Date().toISOString(),
             });
             toast({ title: "Lead Added", description: "The new lead has been added." });

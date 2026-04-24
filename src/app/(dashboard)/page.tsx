@@ -1914,6 +1914,8 @@ const ReportsDashboard = () => {
     const designerWorkRef = useMemoFirebase(() => firestore ? collection(firestore, 'designerWork') : null, [firestore]);
     const socialReportsRef = useMemoFirebase(() => firestore ? collection(firestore, 'socialReports') : null, [firestore]);
     const leadsRef = useMemoFirebase(() => firestore ? collection(firestore, 'leads') : null, [firestore]);
+    const taskCompletionsRef = useMemoFirebase(() => firestore ? collection(firestore, 'dailyTaskCompletions') : null, [firestore]);
+    const taskTemplatesRef = useMemoFirebase(() => firestore ? collection(firestore, 'adminTaskTemplates') : null, [firestore]);
 
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: users } = useCollection<User>(usersRef);
@@ -1926,6 +1928,8 @@ const ReportsDashboard = () => {
     const { data: allDesignerWork } = useCollection<any>(designerWorkRef);
     const { data: allSocialReports } = useCollection<any>(socialReportsRef);
     const { data: allLeads } = useCollection<any>(leadsRef);
+    const { data: allTaskCompletions } = useCollection<any>(taskCompletionsRef);
+    const { data: allTaskTemplates } = useCollection<any>(taskTemplatesRef);
 
     const [viewingEmployeeId, setViewingEmployeeId] = React.useState<string | null>(null);
 
@@ -2058,10 +2062,20 @@ const ReportsDashboard = () => {
             const designerOutputTotal = (allDesignerWork || []).filter((w: any) => w.userId === u.id).length;
 
             // Usage Analytics (for Ops/Sales/Admin who don't have medical appts)
+            const userEmail = (u.email || '').trim().toLowerCase();
+            const userId = (u.id || '').trim().toLowerCase();
+
             // 1. Billing Records handled by the user
-            const userBillingToday = (filteredBilling || []).filter((b: any) => b.addedBy === u.email || b.addedBy === u.id).length;
+            const userBillingToday = (filteredBilling || []).filter((b: any) => {
+                const addedBy = (b.addedBy || '').trim().toLowerCase();
+                return addedBy === userEmail || addedBy === userId;
+            }).length;
+
             // 2. Expenses logged by the user
-            const userExpensesToday = (filteredExpenses || []).filter((e: any) => e.addedBy === u.email || e.addedBy === u.id).length;
+            const userExpensesToday = (filteredExpenses || []).filter((e: any) => {
+                const addedBy = (e.addedBy || '').trim().toLowerCase();
+                return addedBy === userEmail || addedBy === userId;
+            }).length;
             // 3. Leads assigned to or handled by the user
             const userLeadsActive = (allLeads || []).filter((l: any) => {
                 const isAssigned = l.assignedTo === u.id;
@@ -2462,31 +2476,85 @@ const ReportsDashboard = () => {
                                             </TabsList>
 
                                             <TabsContent value="tasks" className="space-y-4">
-                                                {userTasks.length === 0 ? (
-                                                    <div className="text-center py-16 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
-                                                        <ListTodo className="h-10 w-10 mx-auto mb-3 text-slate-300" />
-                                                        <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">No tasks found for this user</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="grid gap-3">
-                                                        {userTasks.map((task: any) => (
-                                                            <div key={task.id} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-indigo-100 transition-all">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className={`p-2.5 rounded-xl ${task.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                                                                        {task.status === 'Completed' ? <UserCheck className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="font-black text-slate-900 text-sm">{task.title}</p>
-                                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Due: {task.dueDate ? format(new Date(task.dueDate), 'PPP') : 'No due date'}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <Badge variant={task.status === 'Completed' ? 'default' : 'secondary'} className="rounded-lg font-black text-[9px] uppercase tracking-widest px-3 py-1">
-                                                                    {task.status}
-                                                                </Badge>
+                                                {(() => {
+                                                    // Get manual tasks
+                                                    const manualTasks = (allDailyTasks || [])
+                                                        .filter((t: any) => t.userId === emp.id)
+                                                        .map((t: any) => ({ ...t, type: 'Manual' }));
+                                                    
+                                                    // Get recurring task completions
+                                                    const recurringCompletions: any[] = [];
+                                                    (allTaskCompletions || [])
+                                                        .filter((c: any) => c.userId === emp.id)
+                                                        .forEach((comp: any) => {
+                                                            (comp.completedTemplateIds || []).forEach((tid: string) => {
+                                                                const template = (allTaskTemplates || []).find((tpl: any) => tpl.id === tid);
+                                                                if (template) {
+                                                                    recurringCompletions.push({
+                                                                        id: `${comp.id}_${tid}`,
+                                                                        title: template.content,
+                                                                        status: 'Completed',
+                                                                        dueDate: comp.date,
+                                                                        remarks: comp.remarksMap?.[tid],
+                                                                        type: 'Recurring',
+                                                                        createdAt: comp.updatedAt || new Date(comp.date).getTime()
+                                                                    });
+                                                                }
+                                                            });
+                                                        });
+
+                                                    const combinedTasks = [...manualTasks, ...recurringCompletions]
+                                                        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+                                                    if (combinedTasks.length === 0) {
+                                                        return (
+                                                            <div className="text-center py-16 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                                                                <ListTodo className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                                                                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">No tasks found for this user</p>
                                                             </div>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <div className="grid gap-4">
+                                                            {combinedTasks.map((task: any) => (
+                                                                <div key={task.id} className="p-6 bg-white border border-slate-100 rounded-3xl shadow-sm hover:border-indigo-100 transition-all space-y-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-4">
+                                                                            <div className={`p-3 rounded-2xl ${task.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                                                {task.status === 'Completed' ? <UserCheck className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex items-center gap-2 mb-0.5">
+                                                                                    <p className="font-black text-slate-900 text-base">{task.title}</p>
+                                                                                    <Badge variant="outline" className="text-[8px] font-black uppercase tracking-tighter px-1.5 py-0 h-4 border-slate-200 text-slate-400">{task.type}</Badge>
+                                                                                </div>
+                                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                                                                    {task.type === 'Recurring' ? `Completed on: ${task.dueDate}` : `Due: ${task.dueDate ? format(new Date(task.dueDate), 'PPP') : 'No due date'}`}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <Badge variant={task.status === 'Completed' ? 'default' : 'secondary'} className={cn(
+                                                                            "rounded-xl font-black text-[9px] uppercase tracking-widest px-4 py-1.5",
+                                                                            task.status === 'Completed' ? "bg-emerald-50 text-emerald-600 border-none" : ""
+                                                                        )}>
+                                                                            {task.status}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    
+                                                                    {task.remarks && (
+                                                                        <div className="ml-14 p-4 rounded-2xl bg-slate-50 border border-slate-100 relative">
+                                                                            <div className="absolute -top-2 left-4 px-2 bg-slate-50 text-[8px] font-black uppercase tracking-widest text-slate-400">Staff Remarks</div>
+                                                                            <p className="text-sm text-slate-600 font-bold leading-relaxed italic">
+                                                                                "{task.remarks}"
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </TabsContent>
 
                                             <TabsContent value="reports" className="space-y-6">

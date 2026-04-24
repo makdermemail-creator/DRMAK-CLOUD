@@ -1,7 +1,8 @@
 'use client';
 import * as React from 'react';
 import { useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { format } from 'date-fns';
 
 export type PerformanceMetric = {
     name: string;
@@ -15,13 +16,23 @@ export type FollowerMetric = {
 };
 
 export type SummaryMetrics = {
+    totalRevenue: number;
+    newPatients: number;
+    avgTicketSize: number;
     totalReach: number;
     newFollowers: number;
     engagementRate: number;
     activeCampaigns: number;
+    revenueChange: number;
+    patientChange: number;
     reachChange: number;
     followerChange: number;
-    engagementChange: number;
+};
+
+export type RevenueTrend = {
+    name: string;
+    revenue: number;
+    patients: number;
 };
 
 export function useAnalyticsData() {
@@ -30,14 +41,19 @@ export function useAnalyticsData() {
     const [error, setError] = React.useState<string | null>(null);
     const [performanceData, setPerformanceData] = React.useState<PerformanceMetric[]>([]);
     const [followerGrowthData, setFollowerGrowthData] = React.useState<FollowerMetric[]>([]);
+    const [revenueTrend, setRevenueTrend] = React.useState<RevenueTrend[]>([]);
     const [summaryMetrics, setSummaryMetrics] = React.useState<SummaryMetrics>({
+        totalRevenue: 0,
+        newPatients: 0,
+        avgTicketSize: 0,
         totalReach: 0,
         newFollowers: 0,
         engagementRate: 0,
         activeCampaigns: 0,
+        revenueChange: 0,
+        patientChange: 0,
         reachChange: 0,
         followerChange: 0,
-        engagementChange: 0,
     });
 
     const fetchData = React.useCallback(async () => {
@@ -132,6 +148,86 @@ export function useAnalyticsData() {
                 engagementChange: 0,
             });
 
+            // 5. Fetch Firestore Data (Revenue & Patients)
+            const billingRef = collection(firestore, 'billingRecords');
+            const patientsRef = collection(firestore, 'patients');
+
+            const [billingSnap, patientsSnap] = await Promise.all([
+                getDocs(billingRef),
+                getDocs(patientsRef)
+            ]);
+
+            const bills = billingSnap.docs.map(d => ({ ...d.data(), id: d.id } as any));
+            const patients = patientsSnap.docs.map(d => ({ ...d.data(), id: d.id } as any));
+
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            // Calculate Revenue Trend (last 6 months)
+            const trend: RevenueTrend[] = [];
+            for (let i = 5; i >= 0; i--) {
+                const targetMonth = new Date(currentYear, currentMonth - i, 1);
+                const monthLabel = format(targetMonth, 'MMM');
+                
+                const monthBills = bills.filter(b => {
+                    const d = new Date(b.timestamp || b.billingDate);
+                    return d.getMonth() === targetMonth.getMonth() && d.getFullYear() === targetMonth.getFullYear();
+                });
+
+                const monthPatients = patients.filter(p => {
+                    const d = new Date(p.registrationDate);
+                    return d.getMonth() === targetMonth.getMonth() && d.getFullYear() === targetMonth.getFullYear();
+                });
+
+                trend.push({
+                    name: monthLabel,
+                    revenue: monthBills.reduce((s, b) => s + (b.grandTotal || 0), 0),
+                    patients: monthPatients.length
+                });
+            }
+            setRevenueTrend(trend);
+
+            // Summary Metrics expansion
+            const currentMonthBills = bills.filter(b => {
+                const d = new Date(b.timestamp || b.billingDate);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+            const prevMonthBills = bills.filter(b => {
+                const d = new Date(b.timestamp || b.billingDate);
+                const prev = new Date(currentYear, currentMonth - 1, 1);
+                return d.getMonth() === prev.getMonth() && d.getFullYear() === prev.getFullYear();
+            });
+
+            const currentRev = currentMonthBills.reduce((s, b) => s + (b.grandTotal || 0), 0);
+            const prevRev = prevMonthBills.reduce((s, b) => s + (b.grandTotal || 0), 0);
+            const revChange = prevRev > 0 ? Math.round(((currentRev - prevRev) / prevRev) * 100) : 0;
+
+            const currentMonthPatients = patients.filter(p => {
+                const d = new Date(p.registrationDate);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            }).length;
+            const prevMonthPatients = patients.filter(p => {
+                const d = new Date(p.registrationDate);
+                const prev = new Date(currentYear, currentMonth - 1, 1);
+                return d.getMonth() === prev.getMonth() && d.getFullYear() === prev.getFullYear();
+            }).length;
+            const patChange = prevMonthPatients > 0 ? Math.round(((currentMonthPatients - prevMonthPatients) / prevMonthPatients) * 100) : 0;
+
+            setSummaryMetrics({
+                totalRevenue: bills.reduce((s, b) => s + (b.grandTotal || 0), 0),
+                newPatients: currentMonthPatients,
+                avgTicketSize: currentMonthBills.length > 0 ? Math.round(currentRev / currentMonthBills.length) : 0,
+                totalReach: totalReachVal,
+                newFollowers: newFollowersVal,
+                engagementRate: Number(avgEngagementRate.toFixed(1)),
+                activeCampaigns: 0,
+                revenueChange: revChange,
+                patientChange: patChange,
+                reachChange: 0,
+                followerChange: 0,
+            });
+
         } catch (err: any) {
             console.error('Error fetching analytics:', err);
             setError(err.message);
@@ -149,6 +245,7 @@ export function useAnalyticsData() {
         error,
         performanceData,
         followerGrowthData,
+        revenueTrend,
         summaryMetrics,
         refresh: fetchData
     };

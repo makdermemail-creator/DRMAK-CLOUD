@@ -39,6 +39,7 @@ export default function DailyTasksPage() {
 
     const [newTask, setNewTask] = React.useState('');
     const [editingTask, setEditingTask] = React.useState<DailyTask | null>(null);
+    const [remarksState, setRemarksState] = React.useState<Record<string, string>>({});
 
     const tasksQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
@@ -143,14 +144,27 @@ export default function DailyTasksPage() {
     const toggleTemplateTask = async (templateId: string, checked: boolean) => {
         if (!firestore || !user) return;
         const ref = doc(firestore, 'dailyTaskCompletions', `${user.id}_${todayStr}`);
-        const current = new Set(completionData?.completedTemplateIds || []);
-        if (checked) current.add(templateId);
-        else current.delete(templateId);
+        
+        const currentIds = new Set(completionData?.completedTemplateIds || []);
+        const currentRemarks = completionData?.remarksMap || {};
+        
+        if (checked) {
+            currentIds.add(templateId);
+            if (remarksState[templateId]) {
+                currentRemarks[templateId] = remarksState[templateId];
+            }
+        } else {
+            currentIds.delete(templateId);
+            delete currentRemarks[templateId];
+        }
 
         await setDoc(ref, {
             userId: user.id,
+            userName: user.name,
             date: todayStr,
-            completedTemplateIds: Array.from(current)
+            completedTemplateIds: Array.from(currentIds),
+            remarksMap: currentRemarks,
+            updatedAt: new Date().getTime()
         }, { merge: true });
     };
 
@@ -202,17 +216,37 @@ export default function DailyTasksPage() {
                                                         </div>
                                                     </AccordionTrigger>
                                                     <AccordionContent className="px-4 pb-4 pt-2">
-                                                        <div className="space-y-3 pl-8">
-                                                            <p className="text-sm text-muted-foreground">
+                                                        <div className="space-y-4 pl-8">
+                                                            {!isCompleted && (
+                                                                <div className="space-y-2">
+                                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Remarks / Progress</label>
+                                                                    <textarea
+                                                                        className="w-full min-h-[80px] p-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                                                        placeholder="What have you done for this task? Add your remarks here..."
+                                                                        value={remarksState[t.id] || ''}
+                                                                        onChange={(e) => setRemarksState(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {isCompleted && completionData?.remarksMap?.[t.id] && (
+                                                                <div className="p-3 rounded-xl bg-emerald-100/30 border border-emerald-100">
+                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Your Submission</p>
+                                                                    <p className="text-sm text-emerald-800 italic">"{completionData.remarksMap[t.id]}"</p>
+                                                                </div>
+                                                            )}
+
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {isCompleted
                                                                     ? '✓ Task completed for today'
-                                                                    : 'Click the button below to mark this task as complete'}
+                                                                    : 'Explain your work above and click mark as complete.'}
                                                             </p>
+                                                            
                                                             <Button
                                                                 size="sm"
                                                                 variant={isCompleted ? "outline" : "default"}
                                                                 onClick={() => toggleTemplateTask(t.id, !isCompleted)}
-                                                                className={isCompleted ? "gap-2" : "gap-2 bg-emerald-600 hover:bg-emerald-700"}
+                                                                className={isCompleted ? "gap-2" : "gap-2 bg-emerald-600 hover:bg-emerald-700 h-10 px-6 rounded-xl font-bold"}
                                                             >
                                                                 {isCompleted ? (
                                                                     <>
@@ -222,7 +256,7 @@ export default function DailyTasksPage() {
                                                                 ) : (
                                                                     <>
                                                                         <CheckCircle2 className="h-4 w-4" />
-                                                                        Mark as Complete
+                                                                        Submit & Mark Complete
                                                                     </>
                                                                 )}
                                                             </Button>

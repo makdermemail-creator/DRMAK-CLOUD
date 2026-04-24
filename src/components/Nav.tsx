@@ -288,10 +288,8 @@ const NavContent = () => {
     // For sidebar rendering, we determine if we should show the "grouped" view Modes.
     // We show this if the user is a true admin OR if they explicitly have a management flag.
     const isMainAdmin = React.useMemo(() => {
-        const isTrueAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.role === 'Admin';
+        const isTrueAdmin = userProfile?.email === 'admin1@skinsmith.com' || userProfile?.role === 'Admin' || userProfile?.role === 'Operations Manager';
         const hasAnyManagementFlag = userProfile?.featureAccess?.['mgmt_clinic'] || userProfile?.featureAccess?.['mgmt_organization'] || userProfile?.featureAccess?.['mgmt_reports'];
-        // Operations Manager should NOT be treated as a grouped Main Admin to keep their sidebar focused
-        if (userProfile?.role === 'Operations Manager') return false;
         return isTrueAdmin || !!hasAnyManagementFlag;
     }, [userProfile]);
 
@@ -317,11 +315,11 @@ const NavContent = () => {
         } else if (userProfile?.role === 'Sales') {
             baseAccessIds = ['salesDashboard', 'leads', 'leadAssignment', 'dailyReporting', 'dailyPosting', 'dailyTasks', 'dailyProgress', 'trainings_hub', 'aiTools'];
         } else if (userProfile?.role === 'Operations Manager') {
-            // Core Operations + AI Tools (Removed Pharmacy and Reports)
+            // Full Operational Visibility
             baseAccessIds = [
                 'dashboard', 
                 'printPrescription', 'appointments', 'followUpCalendar', 'patients', 'doctors', 'procedures', 'inventory', 'supplier', 'billing', 'todaySummary', 'dailyExpenses',
-                'aiTools'
+                'analytics', 'leads', 'leadAssignment', 'employeeReports', 'socialReporting', 'aiTools'
             ];
         } else if (userProfile?.role === 'Doctor') {
             // Doctor gets core clinical tools but NOT Health Records (admin-managed)

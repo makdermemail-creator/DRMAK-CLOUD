@@ -225,16 +225,27 @@ function LetterheadLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
 
       {/* Footer Disclaimer */}
       <div style={{ 
-        textAlign: 'center', 
-        fontSize: '9pt', 
-        color: '#666', 
-        borderTop: '0.5px solid #eee', 
-        paddingTop: '2mm',
-        marginTop: '5mm',
-        fontStyle: 'italic',
-        fontWeight: 600
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        borderTop: '0.6px solid #ccc',
+        paddingTop: '4mm',
+        marginTop: 'auto'
       }}>
-        Not valid for court
+        <div style={{ fontSize: '10pt', fontWeight: 800, color: '#aaa', fontStyle: 'italic' }}>
+          Not valid for court
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '7pt', color: GOLD, fontWeight: 800, textTransform: 'uppercase' }}>WhatsApp</div>
+            <div style={{ fontSize: '6pt', color: '#999' }}>03330477704</div>
+          </div>
+          <img 
+            src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=https://wa.me/923330477704" 
+            alt="WhatsApp" 
+            style={{ width: '12mm', height: '12mm' }} 
+          />
+        </div>
       </div>
     </div>
   );
@@ -246,7 +257,7 @@ function LetterheadLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
 // Corner motifs are kept BEHIND all content via z-index layering.
 // ─────────────────────────────────────────────────────────────────────────────
 function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
-  const nameToDisplay = p.doctorName.includes('Mahvish') ? 'Dr. Prof. Dr. Mahvish Aftab Khan' : p.doctorName;
+  const nameToDisplay = p.doctorName.includes('Mahvish') ? 'Dr Prof. Dr Mahvish Aftab Khan' : p.doctorName;
 
   return (
     <div style={{ padding: '5mm', backgroundColor: '#f5f5f5', minHeight: '100%' }}>
@@ -272,7 +283,7 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
           {/* Header: Centered Luxury ── */}
           <div style={{ textAlign: 'center', marginBottom: '10mm', borderBottom: `3px double ${GOLD}`, paddingBottom: '6mm' }}>
             <div style={{ fontSize: '24pt', fontWeight: 900, color: INK, marginBottom: '2mm', letterSpacing: '0.5px', fontFamily: 'serif' }}>
-              {nameToDisplay}
+              Dr Prof. Dr Mahvish Aftab Khan
             </div>
             <div style={{ fontSize: '11pt', color: '#444', fontWeight: 600, letterSpacing: '0.5px', marginBottom: '1.5mm' }}>
               {p.doctorQualification}
@@ -415,31 +426,42 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
           </div>
 
           {/* Legal & Contact Footer ── */}
-          <div style={{ marginTop: '12mm', textAlign: 'center', position: 'relative' }}>
-            <div style={{ 
-              fontSize: '14pt', 
-              fontWeight: 900, 
-              color: '#eee', 
-              letterSpacing: '5px', 
-              textTransform: 'uppercase', 
-              marginBottom: '6mm',
-              fontStyle: 'italic'
-            }}>
-              Not valid for court
+          <div style={{ marginTop: '12mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `2px solid ${GOLD}20`, paddingTop: '6mm' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontSize: '12pt', 
+                fontWeight: 900, 
+                color: '#eee', 
+                letterSpacing: '5px', 
+                textTransform: 'uppercase', 
+                marginBottom: '2mm',
+                fontStyle: 'italic'
+              }}>
+                Not valid for court
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                gap: '8mm', 
+                fontSize: '9pt', 
+                color: '#777',
+                fontWeight: 600
+              }}>
+                <span>Islamabad, Pakistan</span>
+                <span>+92 333 0477704</span>
+                <span>skinsmith.pk</span>
+              </div>
             </div>
-            <div style={{ 
-              borderTop: `2px solid ${GOLD}20`, 
-              paddingTop: '6mm', 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: '12mm', 
-              fontSize: '10pt', 
-              color: '#777',
-              fontWeight: 600
-            }}>
-              <span>Islamabad, Pakistan</span>
-              <span>+92 333 0477704</span>
-              <span>skinsmith.pk</span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4mm', padding: '2mm', backgroundColor: '#fff', borderRadius: '2mm', border: `1px solid ${GOLD}30` }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '8pt', color: GOLD, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px' }}>WhatsApp Us</div>
+                <div style={{ fontSize: '7pt', color: '#999', fontWeight: 600 }}>Scan for Instant Contact</div>
+              </div>
+              <img 
+                src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://wa.me/923330477704" 
+                alt="WhatsApp QR" 
+                style={{ width: '16mm', height: '16mm' }} 
+              />
             </div>
           </div>
 
