@@ -46,8 +46,6 @@ import { cn } from '@/lib/utils';
 
 import { UserFormDialog } from '@/components/UserFormDialog';
 
-}
-
 export default function UserManagementPage() {
   const { user: userProfile, isUserLoading: isProfileLoading } = useUser();
   const auth = useAuth();
