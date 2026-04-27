@@ -27,7 +27,8 @@ import {
   startOfDay, 
   endOfDay, 
   eachDayOfInterval,
-  differenceInDays
+  differenceInDays,
+  add
 } from 'date-fns';
 import {
   File,
