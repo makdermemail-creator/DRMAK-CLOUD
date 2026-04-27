@@ -170,10 +170,12 @@ export default function BillingPage() {
     const filteredPharmacyItems = React.useMemo(() => {
         if (!pharmacyItems || !pharmacySearch) return [];
         const term = pharmacySearch.toLowerCase();
-        return pharmacyItems.filter(p => 
-            (p.name || '').toLowerCase().includes(term) ||
-            (p.supplierName || '').toLowerCase().includes(term)
-        );
+        return pharmacyItems
+            .filter(p => 
+                (p.name || '').toLowerCase().includes(term) ||
+                (p.supplierName || '').toLowerCase().includes(term)
+            )
+            .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' }));
     }, [pharmacyItems, pharmacySearch]);
 
     const addProcedure = (procId: string) => {
@@ -919,18 +921,22 @@ export default function BillingPage() {
                                     <SelectContent>
                                         {/* Render dynamic procedures first */}
                                         {dynamicProcedures && dynamicProcedures.length > 0 ? (
-                                            dynamicProcedures.map(p => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.name} - {p.price} Rs
-                                                </SelectItem>
-                                            ))
+                                            [...dynamicProcedures]
+                                                .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' }))
+                                                .map(p => (
+                                                    <SelectItem key={p.id} value={p.id}>
+                                                        {p.name} - {p.price} Rs
+                                                    </SelectItem>
+                                                ))
                                         ) : (
                                             /* Fallback to common if empty */
-                                            COMMON_PROCEDURES.map(p => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.name} - {p.price} Rs
-                                                </SelectItem>
-                                            ))
+                                            [...COMMON_PROCEDURES]
+                                                .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' }))
+                                                .map(p => (
+                                                    <SelectItem key={p.id} value={p.id}>
+                                                        {p.name} - {p.price} Rs
+                                                    </SelectItem>
+                                                ))
                                         )}
                                     </SelectContent>
                                 </Select>
@@ -1088,9 +1094,11 @@ export default function BillingPage() {
                                                     <SelectValue placeholder="Select product..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {pharmacyItems?.map(p => (
-                                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                                    ))}
+                                                    {(pharmacyItems || [])
+                                                        .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' }))
+                                                        .map(p => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                        ))}
                                                 </SelectContent>
                                             </Select>
                                         </div>

@@ -345,21 +345,23 @@ export default function PharmacyItemsPage() {
     const filteredItems = React.useMemo(() => {
         if (!pharmacyItems) return [];
         const term = searchTerm.toLowerCase();
-        return pharmacyItems.filter(item => {
-            const matchesSearch = !term ||
-                (item.productName || '').toLowerCase().includes(term) ||
-                (item.genericName && (item.genericName || '').toLowerCase().includes(term)) ||
-                (item.barcode && (item.barcode || '').toLowerCase().includes(term)) ||
-                (item.category || '').toLowerCase().includes(term) ||
-                (item.supplier || '').toLowerCase().includes(term);
+        return pharmacyItems
+            .filter(item => {
+                const matchesSearch = !term ||
+                    (item.productName || '').toLowerCase().includes(term) ||
+                    (item.genericName && (item.genericName || '').toLowerCase().includes(term)) ||
+                    (item.barcode && (item.barcode || '').toLowerCase().includes(term)) ||
+                    (item.category || '').toLowerCase().includes(term) ||
+                    (item.supplier || '').toLowerCase().includes(term);
 
-            const matchesSupplier = selectedSupplier === 'all' || item.supplier === selectedSupplier;
-            const matchesManufacturer = selectedManufacturer === 'all' || item.manufacturer === selectedManufacturer;
-            const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-            const matchesRack = selectedRack === 'all' || item.rack === selectedRack;
+                const matchesSupplier = selectedSupplier === 'all' || item.supplier === selectedSupplier;
+                const matchesManufacturer = selectedManufacturer === 'all' || item.manufacturer === selectedManufacturer;
+                const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+                const matchesRack = selectedRack === 'all' || item.rack === selectedRack;
 
-            return matchesSearch && matchesSupplier && matchesManufacturer && matchesCategory && matchesRack;
-        });
+                return matchesSearch && matchesSupplier && matchesManufacturer && matchesCategory && matchesRack;
+            })
+            .sort((a, b) => (a.productName || '').trim().localeCompare((b.productName || '').trim(), undefined, { sensitivity: 'base' }));
     }, [pharmacyItems, searchTerm, selectedSupplier, selectedManufacturer, selectedCategory, selectedRack]);
 
     const handleOpenForm = (mode: 'add' | 'edit' | 'stock', item?: PharmacyItem) => {

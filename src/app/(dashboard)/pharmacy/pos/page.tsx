@@ -60,7 +60,8 @@ export default function POSPage() {
 
     const filteredItems = React.useMemo(() => {
         if (!itemSearch) return [];
-        return pharmacyItems?.filter(i => (i.productName || (i as any).name || '').toLowerCase().includes(itemSearch.toLowerCase())) || [];
+        return (pharmacyItems?.filter(i => (i.productName || (i as any).name || '').toLowerCase().includes(itemSearch.toLowerCase())) || [])
+            .sort((a, b) => (a.productName || '').trim().localeCompare((b.productName || '').trim(), undefined, { sensitivity: 'base' }));
     }, [pharmacyItems, itemSearch]);
     
     const handleSelectPatient = (patient: Patient) => {

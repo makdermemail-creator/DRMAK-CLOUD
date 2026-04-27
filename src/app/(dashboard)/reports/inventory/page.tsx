@@ -250,8 +250,10 @@ export default function InventoryReportPage() {
             }
         });
 
-        // Sort alphabetically by name
-        return items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        // Sort alphabetically by name (Case-Insensitive)
+        return items.sort((a, b) => 
+            (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' })
+        );
     }, [suppliers, pharmacyItems]);
 
     const [searchTerm, setSearchTerm] = React.useState('');

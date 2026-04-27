@@ -29,7 +29,12 @@ import {
     collection,
     query,
     where,
-    limit
+    limit,
+    doc,
+    getDoc,
+    setDoc,
+    orderBy,
+    or
 } from 'firebase/firestore';
 import {
     format,
@@ -79,19 +84,15 @@ import {
     Users,
     FileText
 } from 'lucide-react';
-import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User } from '@/lib/types';
+import type { DailyPosting, SocialReport, AdminTaskTemplate, DesignRequest, DesignerWork, User, SocialCost } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { Trash2, Settings, Save } from 'lucide-react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { safeFormat } from '@/lib/safe-date';
-import {
-    orderBy,
-    or
-} from 'firebase/firestore';
+import { Coins, PiggyBank, Target, Megaphone } from 'lucide-react';
 
 export default function SocialDashboardPage() {
     const firestore = useFirestore();
@@ -259,6 +260,76 @@ export default function SocialDashboardPage() {
                 title: 'Error',
                 description: 'Failed to delete the request.',
             });
+        }
+    };
+
+    // Social Costing State
+    const [costMonth, setCostMonth] = React.useState(format(new Date(), 'MMMM'));
+    const [costYear, setCostYear] = React.useState(new Date().getFullYear());
+    const [adSpend, setAdSpend] = React.useState(0);
+    const [boostingSpend, setBoostingSpend] = React.useState(0);
+    const [prSpend, setPrSpend] = React.useState(0);
+    const [otherSpend, setOtherSpend] = React.useState(0);
+    const [costNotes, setCostNotes] = React.useState('');
+    const [isSavingCost, setIsSavingCost] = React.useState(false);
+
+    // Fetch Social Cost for selected Month/Year
+    const costQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(
+            collection(firestore, 'socialCosts'), 
+            where('month', '==', costMonth), 
+            where('year', '==', Number(costYear)),
+            limit(1)
+        );
+    }, [firestore, costMonth, costYear]);
+
+    const { data: costData } = useCollection<SocialCost>(costQuery);
+
+    React.useEffect(() => {
+        if (costData && costData.length > 0) {
+            const c = costData[0];
+            setAdSpend(c.adSpend || 0);
+            setBoostingSpend(c.boostingSpend || 0);
+            setPrSpend(c.prSpend || 0);
+            setOtherSpend(c.otherSpend || 0);
+            setCostNotes(c.notes || '');
+        } else {
+            setAdSpend(0);
+            setBoostingSpend(0);
+            setPrSpend(0);
+            setOtherSpend(0);
+            setCostNotes('');
+        }
+    }, [costData]);
+
+    const handleSaveSocialCost = async () => {
+        if (!firestore || !user) return;
+        setIsSavingCost(true);
+        try {
+            const costId = `${costMonth}_${costYear}`;
+            const total = Number(adSpend) + Number(boostingSpend) + Number(prSpend) + Number(otherSpend);
+            
+            const newCost: SocialCost = {
+                id: costId,
+                month: costMonth,
+                year: Number(costYear),
+                adSpend: Number(adSpend),
+                boostingSpend: Number(boostingSpend),
+                prSpend: Number(prSpend),
+                otherSpend: Number(otherSpend),
+                totalSpent: total,
+                notes: costNotes,
+                updatedAt: new Date().toISOString(),
+                updatedBy: user.id
+            };
+
+            await setDoc(doc(firestore, 'socialCosts', costId), newCost, { merge: true });
+            toast({ title: 'Budget Updated', description: `Financials for ${costMonth} ${costYear} saved successfully.` });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
+        } finally {
+            setIsSavingCost(false);
         }
     };
 
@@ -502,6 +573,131 @@ export default function SocialDashboardPage() {
                                 <span className="text-sm font-bold text-slate-700">Day End Report</span>
                             </div>
                             <span className="text-lg font-black text-indigo-700">{reportsDone} / {dailyGoals.report}</span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Social Costing Section */}
+            <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden border border-slate-100">
+                <CardHeader className="bg-slate-50/50 border-b py-5 px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <CardTitle className="text-xl font-black text-slate-900 flex items-center gap-3">
+                            <Coins className="h-6 w-6 text-amber-600" />
+                            Social Costing & Ads Budget
+                        </CardTitle>
+                        <CardDescription className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mt-1">Monthly breakdown of marketing expenditures</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Select value={costMonth} onValueChange={setCostMonth}>
+                            <SelectTrigger className="w-32 h-10 rounded-xl font-bold border-slate-200">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                    <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select value={String(costYear)} onValueChange={val => setCostYear(Number(val))}>
+                            <SelectTrigger className="w-24 h-10 rounded-xl font-bold border-slate-200">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {[2024, 2025, 2026, 2027].map(y => (
+                                    <SelectItem key={y} value={String(y)} className="font-bold">{y}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button 
+                            onClick={handleSaveSocialCost} 
+                            disabled={isSavingCost}
+                            className="h-10 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold px-6 shadow-lg shadow-amber-100"
+                        >
+                            {isSavingCost ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                            Update Financials
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                                <Megaphone className="h-3 w-3 text-indigo-500" /> Meta/Google Ads
+                            </Label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs">Rs</span>
+                                <Input 
+                                    type="number" 
+                                    value={adSpend} 
+                                    onChange={e => setAdSpend(Number(e.target.value))}
+                                    className="pl-10 h-12 rounded-2xl border-slate-200 font-black text-lg focus:ring-amber-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                                <Target className="h-3 w-3 text-emerald-500" /> Boosting Costs
+                            </Label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs">Rs</span>
+                                <Input 
+                                    type="number" 
+                                    value={boostingSpend} 
+                                    onChange={e => setBoostingSpend(Number(e.target.value))}
+                                    className="pl-10 h-12 rounded-2xl border-slate-200 font-black text-lg focus:ring-amber-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                                <Sparkles className="h-3 w-3 text-purple-500" /> PR & Influencers
+                            </Label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs">Rs</span>
+                                <Input 
+                                    type="number" 
+                                    value={prSpend} 
+                                    onChange={e => setPrSpend(Number(e.target.value))}
+                                    className="pl-10 h-12 rounded-2xl border-slate-200 font-black text-lg focus:ring-amber-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                                <PiggyBank className="h-3 w-3 text-blue-500" /> Misc / Software
+                            </Label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs">Rs</span>
+                                <Input 
+                                    type="number" 
+                                    value={otherSpend} 
+                                    onChange={e => setOtherSpend(Number(e.target.value))}
+                                    className="pl-10 h-12 rounded-2xl border-slate-200 font-black text-lg focus:ring-amber-500"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-slate-100">
+                        <div className="md:col-span-2 space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Expense Justification / Notes</Label>
+                            <Textarea 
+                                placeholder="Details about specific campaigns, PR gifts, or software subscriptions..."
+                                value={costNotes}
+                                onChange={e => setCostNotes(e.target.value)}
+                                className="rounded-2xl border-slate-200 min-h-[100px] font-medium resize-none"
+                            />
+                        </div>
+                        <div className="bg-amber-50 rounded-[2rem] p-6 border border-amber-100 flex flex-col justify-center items-center text-center">
+                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-2">Total Monthly Burn</p>
+                            <p className="text-4xl font-black text-amber-900 tracking-tighter">
+                                Rs {(Number(adSpend) + Number(boostingSpend) + Number(prSpend) + Number(otherSpend)).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] font-bold text-amber-700/60 mt-2 italic">Automatically syncing with Admin P&L</p>
                         </div>
                     </div>
                 </CardContent>

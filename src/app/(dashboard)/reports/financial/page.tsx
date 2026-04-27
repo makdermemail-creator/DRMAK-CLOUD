@@ -71,7 +71,7 @@ import {
   doc,
   setDoc
 } from 'firebase/firestore';
-import type { BillingRecord, Patient, Doctor, Supplier } from '@/lib/types';
+import type { BillingRecord, Patient, Doctor, Supplier, SocialCost } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import {
@@ -109,12 +109,16 @@ export default function FinancialReportPage() {
   const expensesQuery = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
   const suppliersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'suppliers') : null, [firestore]);
   const doctorsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
+  const salariesQuery = useMemoFirebase(() => firestore ? collection(firestore, 'salaries') : null, [firestore]);
+  const socialCostsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'socialCosts') : null, [firestore]);
 
   const { data: billingRecords } = useCollection<BillingRecord>(billingQuery);
   const { data: patients } = useCollection<Patient>(patientsQuery);
   const { data: allExpenses } = useCollection<any>(expensesQuery);
   const { data: allSuppliers } = useCollection<Supplier>(suppliersQuery);
   const { data: allDoctors } = useCollection<Doctor>(doctorsQuery);
+  const { data: allSalaries } = useCollection<any>(salariesQuery);
+  const { data: allSocialCosts } = useCollection<SocialCost>(socialCostsQuery);
 
   // Derived Financial State
   const filteredBilling = React.useMemo(() => {
@@ -268,19 +272,120 @@ export default function FinancialReportPage() {
   }, [transactionData]);
 
   const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
-  const shiftTransactionData = transactionData;
-  const staffTransactionData = transactionData;
-  const paymentModeData = transactionData;
-  const proceduresData = transactionData;
-  const doctorsShareData = transactionData;
-  const pendingPaymentsData: any[] = [];
-  const discountsData: any[] = [];
-  const vouchersData: any[] = [];
-  const incomeStatementData = [
-    { item: 'Total Revenue', value: stats.totalRevenue },
-    { item: 'Total Expenses', value: 0 },
-    { item: 'Net Income', value: stats.totalRevenue }
-  ];
+  const strategicMetrics = React.useMemo(() => {
+    if (!billingRecords || !selectedRange?.from) return null;
+    const fromDate = startOfDay(selectedRange.from);
+    const toDate = endOfDay(selectedRange?.to || selectedRange?.from);
+
+    const patientsInPeriod = new Set(filteredBilling.map(b => b.patientMobileNumber).filter(Boolean));
+    
+    // Pre-calculate earliest billing date for every patient
+    const firstVisitMap = new Map<string, number>();
+    billingRecords.forEach(b => {
+        if (!b.patientMobileNumber) return;
+        const d = new Date(b.timestamp || b.billingDate).getTime();
+        if (isNaN(d)) return;
+        if (!firstVisitMap.has(b.patientMobileNumber) || d < firstVisitMap.get(b.patientMobileNumber)!) {
+            firstVisitMap.set(b.patientMobileNumber, d);
+        }
+    });
+
+    let newCount = 0;
+    let repeatCount = 0;
+
+    patientsInPeriod.forEach(mobile => {
+        const firstVisit = firstVisitMap.get(mobile);
+        if (firstVisit && firstVisit >= fromDate.getTime() && firstVisit <= toDate.getTime()) {
+            newCount++;
+        } else {
+            repeatCount++;
+        }
+    });
+
+    // Churn Analysis (Lapsed Customers)
+    // Patients who visited in the 180 days BEFORE the period start, but NOT during the period
+    const churnLookbackDays = 180;
+    const lookbackStart = add(fromDate, { days: -churnLookbackDays });
+    
+    const patientsInLookback = new Set<string>();
+    billingRecords.forEach(b => {
+        if (!b.patientMobileNumber) return;
+        const d = new Date(b.timestamp || b.billingDate);
+        if (isWithinInterval(d, { start: lookbackStart, end: fromDate })) {
+            patientsInLookback.add(b.patientMobileNumber);
+        }
+    });
+
+    const churnedCount = Array.from(patientsInLookback).filter(mobile => !patientsInPeriod.has(mobile)).length;
+    const churnRate = patientsInLookback.size > 0 ? Math.round((churnedCount / patientsInLookback.size) * 100) : 0;
+
+    // Social Media Costing Integration
+    const overlappingMonths = new Set<string>();
+    const start = fromDate;
+    const end = toDate;
+    
+    // Simple month-key generation for overlap
+    let current = startOfMonth(start);
+    while (current <= end) {
+        overlappingMonths.add(`${format(current, 'MMMM')}_${current.getFullYear()}`);
+        current = add(current, { months: 1 });
+    }
+
+    const socialSpend = allSocialCosts?.filter(c => overlappingMonths.has(`${c.month}_${c.year}`)) || [];
+    const totalSocialSpend = socialSpend.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
+    const socialSpendDetail = socialSpend.reduce((acc, c) => {
+        acc.adSpend += (c.adSpend || 0);
+        acc.boostingSpend += (c.boostingSpend || 0);
+        acc.prSpend += (c.prSpend || 0);
+        acc.otherSpend += (c.otherSpend || 0);
+        return acc;
+    }, { adSpend: 0, boostingSpend: 0, prSpend: 0, otherSpend: 0 });
+
+    // Deep EBITDA Calculation
+    const expenseBreakdown = filteredExpenses.reduce((acc: any, e: any) => {
+        const cat = e.category || 'Miscellaneous';
+        acc[cat] = (acc[cat] || 0) + (e.amount || 0);
+        return acc;
+    }, {});
+
+    // Add Salaries to EBITDA if not already in expenses (assuming they are separate)
+    const salaryTotal = allSalaries?.reduce((sum: number, s: any) => {
+        const d = new Date(s.timestamp || s.date || s.createdAt);
+        if (isWithinInterval(d, { start: fromDate, end: toDate })) {
+            return sum + (s.netSalary || s.amount || 0);
+        }
+        return sum;
+    }, 0) || 0;
+
+    // Estimate doctor shares (assuming 40% as seen in Doctor Dividends tab)
+    const estimatedDoctorPayout = filteredBilling.reduce((sum, b) => {
+        const total = b.grandTotal ?? b.totalAmount ?? 0;
+        return sum + (total * 0.4);
+    }, 0);
+
+    const totalOpEx = financialKPIs.operationalBurn + salaryTotal + totalSocialSpend;
+    const ebitda = financialKPIs.grossRevenue - totalOpEx;
+    const ebitdaMargin = financialKPIs.grossRevenue > 0 ? (ebitda / financialKPIs.grossRevenue) * 100 : 0;
+
+    return {
+        newCustomers: newCount,
+        repeatCustomers: repeatCount,
+        churnedCustomers: churnedCount,
+        churnRate,
+        totalActive: patientsInPeriod.size,
+        retentionRate: patientsInPeriod.size > 0 ? Math.round((repeatCount / patientsInPeriod.size) * 100) : 0,
+        doctorPayout: estimatedDoctorPayout,
+        netProfit: financialKPIs.netPosition - estimatedDoctorPayout - totalSocialSpend,
+        ebitda,
+        ebitdaMargin,
+        expenseBreakdown,
+        salaryTotal,
+        totalOpEx,
+        totalSocialSpend,
+        socialSpendDetail
+    };
+  }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries]);
+
   const tabs = [
     { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
     { value: 'expenses', label: 'Operational BURN', icon: Receipt },
@@ -404,7 +509,7 @@ export default function FinancialReportPage() {
                                 </Select>
                             </div>
 
-                            <div className="rounded-3xl border border-slate-100 overflow-hidden bg-white/50 shadow-sm">
+                            <div className="rounded-3xl border border-slate-100 overflow-hidden bg-white/50 shadow-sm max-h-[600px] overflow-y-auto">
                                 <Table>
                                     <TableHeader className="bg-slate-50/50">
                                         <TableRow className="border-slate-100 font-bold">
@@ -556,67 +661,164 @@ export default function FinancialReportPage() {
                         </TabsContent>
 
                         <TabsContent value="analytics" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
-                             <Card className="border-none shadow-none bg-slate-50/50 rounded-3xl p-8">
-                                <div className="flex items-center justify-between mb-10">
-                                    <div>
-                                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Financial Momentum</h3>
-                                        <p className="text-sm font-bold text-slate-500">Cross-period revenue vs expense performance.</p>
-                                    </div>
-                                    <div className="flex items-center gap-6">
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-3 w-3 rounded-full bg-indigo-600" />
-                                            <span className="text-xs font-black uppercase text-slate-600">Revenue</span>
+                             <div className="space-y-8">
+                                {/* Strategic Customer Metrics */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <Card className="border-none bg-indigo-50/50 shadow-sm rounded-3xl p-8 flex items-center gap-6">
+                                        <div className="h-16 w-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
+                                            <Users2 className="h-8 w-8" />
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-3 w-3 rounded-full bg-rose-500" />
-                                            <span className="text-xs font-black uppercase text-slate-600">Burn</span>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 mb-1">New Customer Intake</p>
+                                            <h4 className="text-3xl font-black text-slate-900">{strategicMetrics?.newCustomers || 0}</h4>
+                                            <p className="text-xs font-bold text-slate-400">First-time visitors acquired</p>
+                                        </div>
+                                    </Card>
+
+                                    <Card className="border-none bg-emerald-50/50 shadow-sm rounded-3xl p-8 flex items-center gap-6">
+                                        <div className="h-16 w-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-100">
+                                            <RotateCcw className="h-8 w-8" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 mb-1">Repeat Visit Volume</p>
+                                            <h4 className="text-3xl font-black text-slate-900">{strategicMetrics?.repeatCustomers || 0}</h4>
+                                            <p className="text-xs font-bold text-slate-400">Returning loyal patient base</p>
+                                        </div>
+                                    </Card>
+
+                                    <Card className="border-none bg-rose-50/50 shadow-sm rounded-3xl p-8 flex items-center gap-6 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                                            <TrendingUp className="h-20 w-20 text-rose-900 rotate-180" />
+                                        </div>
+                                        <div className="h-16 w-16 bg-rose-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-100">
+                                            <Hourglass className="h-8 w-8" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 mb-1">Churned / Lapsed</p>
+                                            <h4 className="text-3xl font-black text-slate-900">{strategicMetrics?.churnedCustomers || 0}</h4>
+                                            <p className="text-xs font-bold text-slate-400">{strategicMetrics?.churnRate}% leakage rate (6mo)</p>
+                                        </div>
+                                    </Card>
+                                </div>
+                                {/* Financial Performance Audit */}
+                                <Card className="border-none shadow-xl shadow-slate-100/50 rounded-[3rem] bg-slate-900 text-white overflow-hidden p-10 relative">
+                                    <div className="absolute top-0 right-0 p-10 opacity-10">
+                                        <FileBarChart className="h-48 w-48" />
+                                    </div>
+                                    <div className="relative z-10 space-y-10">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="text-3xl font-black tracking-tight">EBITDA Executive Audit</h3>
+                                                <p className="text-slate-400 font-bold uppercase text-xs tracking-widest mt-1">Detailed Operating Performance</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">EBITDA Margin</p>
+                                                <h4 className="text-4xl font-black text-indigo-400">{strategicMetrics?.ebitdaMargin.toFixed(1)}%</h4>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Gross Revenue</p>
+                                                <p className="text-3xl font-black text-white">Rs {financialKPIs.grossRevenue.toLocaleString()}</p>
+                                            </div>
+                                            <div className="space-y-2 border-l border-slate-800 pl-10">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Operating Expenses</p>
+                                                <p className="text-3xl font-black text-rose-500">Rs {strategicMetrics?.totalOpEx.toLocaleString()}</p>
+                                            </div>
+                                            <div className="space-y-2 border-l border-slate-800 pl-10">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">EBITDA</p>
+                                                <p className="text-3xl font-black text-emerald-400">Rs {strategicMetrics?.ebitda.toLocaleString()}</p>
+                                            </div>
+                                            <div className="space-y-2 border-l border-slate-800 pl-10">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Net Profit</p>
+                                                <p className="text-3xl font-black text-indigo-400">Rs {strategicMetrics?.netProfit.toLocaleString()}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="h-px bg-slate-800" />
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">Revenue Mix</h4>
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
+                                                        <span className="font-bold text-slate-300">Consultations</span>
+                                                        <span className="font-black">Rs {filteredBilling.reduce((sum, b) => sum + (b.consultationCharges || 0), 0).toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
+                                                        <span className="font-bold text-slate-300">Procedures</span>
+                                                        <span className="font-black">Rs {filteredBilling.reduce((sum, b) => sum + (b.procedureCharges || 0), 0).toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
+                                                        <span className="font-bold text-slate-300">Pharmacy</span>
+                                                        <span className="font-black">Rs {filteredBilling.reduce((sum, b) => sum + (b.medicineCharges || 0), 0).toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">Operating Cost Center</h4>
+                                                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                                    <div className="bg-indigo-900/20 p-4 rounded-2xl border border-indigo-500/30 space-y-3">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="font-bold text-indigo-300">Social Marketing (Ads/PR)</span>
+                                                            <span className="font-black text-indigo-400">Rs {strategicMetrics?.totalSocialSpend.toLocaleString()}</span>
+                                                        </div>
+                                                        {strategicMetrics?.totalSocialSpend > 0 && (
+                                                            <div className="grid grid-cols-2 gap-2 pl-2 border-l border-indigo-500/30">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black uppercase text-indigo-400/60">Ads</span>
+                                                                    <span className="text-[11px] font-bold text-indigo-200">Rs {strategicMetrics.socialSpendDetail.adSpend.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black uppercase text-indigo-400/60">Boost</span>
+                                                                    <span className="text-[11px] font-bold text-indigo-200">Rs {strategicMetrics.socialSpendDetail.boostingSpend.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black uppercase text-indigo-400/60">PR</span>
+                                                                    <span className="text-[11px] font-bold text-indigo-200">Rs {strategicMetrics.socialSpendDetail.prSpend.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black uppercase text-indigo-400/60">Misc</span>
+                                                                    <span className="text-[11px] font-bold text-indigo-200">Rs {strategicMetrics.socialSpendDetail.otherSpend.toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {Object.entries(strategicMetrics?.expenseBreakdown || {}).map(([cat, amount]: [string, any]) => (
+                                                        <div key={cat} className="flex justify-between items-center bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50">
+                                                            <span className="font-bold text-slate-300">{cat}</span>
+                                                            <span className="font-black text-rose-400">Rs {amount.toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">EBITDA Momentum</h4>
+                                                <Card className="border-none bg-slate-800/20 p-6 h-full min-h-[200px] flex flex-col justify-center">
+                                                    <div className="space-y-6">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs font-bold text-slate-400">Revenue Conversion</span>
+                                                            <span className="text-xs font-black text-emerald-400">{(( (strategicMetrics?.ebitda || 0) / (financialKPIs.grossRevenue || 1)) * 100).toFixed(1)}%</span>
+                                                        </div>
+                                                        <div className="h-3 w-full bg-slate-700 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className="h-full bg-emerald-500 rounded-full" 
+                                                                style={{ width: `${Math.max(0, Math.min(100, strategicMetrics?.ebitdaMargin || 0))}%` }} 
+                                                            />
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-500 font-medium italic">
+                                                            *EBITDA represents earnings before interest, taxes, depreciation, and amortization. This is a proxy for operating cash flow.
+                                                        </p>
+                                                    </div>
+                                                </Card>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="h-[400px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={chartData}>
-                                            <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#e2e8f0" />
-                                            <XAxis 
-                                                dataKey="name" 
-                                                stroke="#94a3b8" 
-                                                fontSize={10} 
-                                                tickLine={false} 
-                                                axisLine={false} 
-                                                fontWeight="bold"
-                                            />
-                                            <YAxis 
-                                                stroke="#94a3b8" 
-                                                fontSize={10} 
-                                                tickLine={false} 
-                                                axisLine={false} 
-                                                fontWeight="bold"
-                                                tickFormatter={(v) => `Rs ${v/1000}k`}
-                                            />
-                                            <Tooltip 
-                                                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
-                                            />
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="revenue" 
-                                                stroke="#4f46e5" 
-                                                strokeWidth={4} 
-                                                dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} 
-                                                activeDot={{ r: 8, strokeWidth: 0 }}
-                                            />
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="burn" 
-                                                stroke="#f43f5e" 
-                                                strokeWidth={4} 
-                                                strokeDasharray="8 8"
-                                                dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} 
-                                                activeDot={{ r: 8, strokeWidth: 0 }}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                             </Card>
+                                </Card>
+                             </div>
                         </TabsContent>
                     </Tabs>
                 </CardContent>

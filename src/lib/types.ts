@@ -461,3 +461,17 @@ export type Supplier = {
   currentBalance?: number;
   creditLimit?: number;
 };
+
+export type SocialCost = {
+  id: string;
+  month: string; // "January", "February", etc.
+  year: number;
+  adSpend: number;
+  boostingSpend: number;
+  prSpend: number;
+  otherSpend: number;
+  totalSpent: number;
+  notes?: string;
+  updatedAt: string; // ISO string
+  updatedBy: string; // User ID
+};

@@ -218,7 +218,10 @@ export default function InventoryPage() {
             }
         });
 
-        return items;
+        // Sort alphabetically by name (Case-Insensitive)
+        return items.sort((a, b) => 
+            (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' })
+        );
     }, [suppliers, pharmacyItems]);
 
     const filteredItems = React.useMemo(() => {

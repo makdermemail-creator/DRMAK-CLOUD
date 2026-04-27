@@ -37,6 +37,12 @@ import {
     Users2,
     FileBarChart,
     Zap,
+    Trash2,
+    Edit3,
+    UserPlus,
+    MoreVertical,
+    Settings2,
+    Coins
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -99,7 +105,7 @@ import {
     doc,
     setDoc
 } from 'firebase/firestore';
-import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem } from '@/lib/types';
+import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem, SocialCost } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay, endOfDay, isSameMonth, isSameYear, startOfMonth, startOfYear, isWithinInterval } from 'date-fns';
@@ -109,6 +115,8 @@ import { DailyTasksWidget } from '@/components/DailyTasksWidget';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { useViewMode } from '@/context/ViewModeContext';
 import { cn } from '@/lib/utils';
+import { UserFormDialog } from '@/components/UserFormDialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 type AppointmentStatus = 'Waiting' | 'In Consultation' | 'Completed' | 'Cancelled';
 
@@ -561,6 +569,7 @@ const OrganizationDashboard = () => {
     const billingRef = useMemoFirebase(() => firestore ? collection(firestore, 'billingRecords') : null, [firestore]);
     const expensesRef = useMemoFirebase(() => firestore ? collection(firestore, 'expenses') : null, [firestore]);
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+    const socialCostsRef = useMemoFirebase(() => firestore ? collection(firestore, 'socialCosts') : null, [firestore]);
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersRef);
     const { data: leads, isLoading: leadsLoading } = useCollection<Lead>(leadsRef);
@@ -568,6 +577,7 @@ const OrganizationDashboard = () => {
     const { data: billingRecords } = useCollection<BillingRecord>(billingRef);
     const { data: allExpenses } = useCollection<any>(expensesRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
+    const { data: allSocialCosts } = useCollection<SocialCost>(socialCostsRef);
 
     const isLoading = analyticsLoading || usersLoading || leadsLoading || tasksLoading;
 
@@ -600,6 +610,13 @@ const OrganizationDashboard = () => {
 
         return { revenue, expenses, profit: revenue - expenses, totalAppointments: dailyAppointments.length, completed };
     }, [billingRecords, allExpenses, appointments]);
+
+    const marketingSpend = React.useMemo(() => {
+        const month = format(new Date(), 'MMMM');
+        const year = new Date().getFullYear();
+        const current = allSocialCosts?.find(c => c.month === month && c.year === year);
+        return current || null;
+    }, [allSocialCosts]);
 
     const leadStats = React.useMemo(() => {
         if (!leads) return { total: 0, new: 0, converted: 0, inProgress: 0 };
@@ -686,6 +703,42 @@ const OrganizationDashboard = () => {
                             <p className="text-xs font-bold text-indigo-600/80 uppercase tracking-tighter">Bottom Line Position</p>
                         </div>
                     </CardContent>
+                </Card>
+            </div>
+
+            {/* Social Marketing Costing Row (Integrated) */}
+            <div className="grid gap-6 md:grid-cols-4">
+                <Card className="border-none bg-slate-900 shadow-2xl shadow-slate-200 rounded-[2.5rem] overflow-hidden p-1 col-span-1 md:col-span-4">
+                    <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div className="flex items-center gap-6">
+                            <div className="h-16 w-16 bg-amber-600 rounded-2xl flex items-center justify-center shadow-xl shadow-amber-900/20">
+                                <Coins className="h-8 w-8 text-white" />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-white tracking-tight">Marketing Budget <span className="text-amber-500">Audit</span></h3>
+                                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Active Social Spend for {marketingSpend?.month || format(new Date(), 'MMMM')} {marketingSpend?.year || new Date().getFullYear()}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-12">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ads Spend</p>
+                                <p className="text-xl font-black text-white">Rs {(marketingSpend?.adSpend || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="space-y-1 border-l border-slate-800 pl-8">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Boostings</p>
+                                <p className="text-xl font-black text-white">Rs {(marketingSpend?.boostingSpend || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="space-y-1 border-l border-slate-800 pl-8">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PR / Influencer</p>
+                                <p className="text-xl font-black text-white">Rs {(marketingSpend?.prSpend || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-amber-600/10 border border-amber-600/20 rounded-2xl px-8 py-3">
+                                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Total Burn</p>
+                                <p className="text-2xl font-black text-amber-500">Rs {(marketingSpend?.totalSpent || 0).toLocaleString()}</p>
+                            </div>
+                        </div>
+                    </div>
                 </Card>
             </div>
 
@@ -1126,11 +1179,13 @@ const AdminDailyIntelligence = ({
                                                     <TableCell colSpan={2} />
                                                     <TableCell colSpan={5} className="py-2">
                                                         <div className="flex flex-wrap gap-2">
-                                                            {p.items.map((item: any, idx: number) => (
-                                                                <Badge key={idx} variant="outline" className="bg-white text-[9px] font-bold border-slate-200">
-                                                                    {item.name} {item.qty > 1 ? `(x${item.qty})` : ''}
-                                                                </Badge>
-                                                            ))}
+                                                            {[...(p.items || [])]
+                                                                .sort((a: any, b: any) => (a.name || '').trim().localeCompare((b.name || '').trim(), undefined, { sensitivity: 'base' }))
+                                                                .map((item: any, idx: number) => (
+                                                                    <Badge key={idx} variant="outline" className="bg-white text-[9px] font-bold border-slate-200">
+                                                                        {item.name} {item.qty > 1 ? `(x${item.qty})` : ''}
+                                                                    </Badge>
+                                                                ))}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
@@ -1432,70 +1487,70 @@ const AdminDashboard = () => {
                 </div>
             </div>
 
-            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-                <Card className="border-none bg-emerald-50/50 shadow-xl shadow-emerald-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-emerald-100/30">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="p-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200"><TrendingUp className="h-5 w-5" /></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Gross Revenue</span>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="border-none bg-emerald-50/50 shadow-sm rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all border border-emerald-100/30">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="p-2 bg-emerald-600 text-white rounded-lg"><TrendingUp className="h-4 w-4" /></div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600/60 leading-none">Gross Revenue</span>
                         </div>
-                        <div className="space-y-1">
-                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                        <div className="space-y-0.5">
+                            <div className="text-2xl font-black tracking-tighter text-slate-900 leading-none">
                                 Rs {financialMetrics.revenue.toLocaleString()}
                             </div>
-                            <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-tighter">
-                                Inflow for {periodMode}
+                            <p className="text-[9px] font-bold text-emerald-600/80 uppercase tracking-tighter">
+                                Inflow • {periodMode}
                             </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="border-none bg-rose-50/50 shadow-xl shadow-rose-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-rose-100/30">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="p-3 bg-rose-600 text-white rounded-xl shadow-lg shadow-rose-200"><Receipt className="h-5 w-5" /></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Total Burn</span>
+                <Card className="border-none bg-rose-50/50 shadow-sm rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all border border-rose-100/30">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="p-2 bg-rose-600 text-white rounded-lg"><Receipt className="h-4 w-4" /></div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-rose-600/60 leading-none">Total Burn</span>
                         </div>
-                        <div className="space-y-1">
-                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                        <div className="space-y-0.5">
+                            <div className="text-2xl font-black tracking-tighter text-slate-900 leading-none">
                                 Rs {financialMetrics.expenses.toLocaleString()}
                             </div>
-                            <p className="text-[10px] font-bold text-rose-600/80 uppercase tracking-tighter">
-                                Expenses for {periodMode}
+                            <p className="text-[9px] font-bold text-rose-600/80 uppercase tracking-tighter">
+                                Expenses • {periodMode}
                             </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="border-none bg-indigo-50/50 shadow-xl shadow-indigo-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border-2 border-indigo-100/50">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200"><CircleDollarSign className="h-5 w-5" /></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 leading-none">Net Position</span>
+                <Card className="border-none bg-indigo-50/50 shadow-sm rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all border border-indigo-100/50">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="p-2 bg-indigo-600 text-white rounded-lg"><CircleDollarSign className="h-4 w-4" /></div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-indigo-600/60 leading-none">Net Position</span>
                         </div>
-                        <div className="space-y-1">
-                            <div className={`text-3xl font-black tracking-tighter leading-none ${financialMetrics.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                        <div className="space-y-0.5">
+                            <div className={`text-2xl font-black tracking-tighter leading-none ${financialMetrics.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                                 Rs {financialMetrics.profit.toLocaleString()}
                             </div>
-                            <p className="text-[10px] font-bold text-indigo-600/80 uppercase tracking-tighter">
+                            <p className="text-[9px] font-bold text-indigo-600/80 uppercase tracking-tighter">
                                 Final Profit/Loss
                             </p>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="border-none bg-slate-50 shadow-xl shadow-slate-100/20 rounded-[2rem] overflow-hidden group hover:scale-[1.02] transition-all border border-slate-200/50">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="p-3 bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-200"><Users2 className="h-5 w-5" /></div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Performance</span>
+                <Card className="border-none bg-slate-50 shadow-sm rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all border border-slate-200/50">
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="p-2 bg-slate-900 text-white rounded-lg"><Users2 className="h-4 w-4" /></div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-none">Performance</span>
                         </div>
-                        <div className="space-y-1">
-                            <div className="text-3xl font-black tracking-tighter text-slate-900 leading-none">
+                        <div className="space-y-0.5">
+                            <div className="text-2xl font-black tracking-tighter text-slate-900 leading-none">
                                 {appointmentStats.completed}/{appointmentStats.total}
                             </div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                                Appointments Finished
+                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                                Appts Finished
                             </p>
                         </div>
                     </CardContent>
@@ -1930,8 +1985,50 @@ const ReportsDashboard = () => {
     const { data: allLeads } = useCollection<any>(leadsRef);
     const { data: allTaskCompletions } = useCollection<any>(taskCompletionsRef);
     const { data: allTaskTemplates } = useCollection<any>(taskTemplatesRef);
+    const { toast } = useToast();
 
     const [viewingEmployeeId, setViewingEmployeeId] = React.useState<string | null>(null);
+    const [editingUser, setEditingUser] = React.useState<User | undefined>(undefined);
+    const [isFormOpen, setIsFormOpen] = React.useState(false);
+    const [userToDelete, setUserToDelete] = React.useState<User | null>(null);
+
+    const handleAddStaff = () => {
+        setEditingUser(undefined);
+        setIsFormOpen(true);
+    };
+
+    const handleEditStaff = (user: any) => {
+        // Find the actual user object from the collection
+        const actualUser = users?.find(u => u.id === user.id);
+        if (actualUser) {
+            setEditingUser(actualUser);
+            setIsFormOpen(true);
+        }
+    };
+
+    const handleDeleteStaff = async () => {
+        if (!firestore || !userToDelete) return;
+        try {
+            // Soft delete by setting isDeleted: true
+            await updateDocumentNonBlocking(doc(firestore, 'users', userToDelete.id), { 
+                isDeleted: true,
+                status: 'deleted',
+                active: false
+            });
+            toast({
+                title: 'Staff Removed',
+                description: `${userToDelete.name || 'User'} has been removed from the system.`
+            });
+        } catch (e) {
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Failed to remove staff member.'
+            });
+        } finally {
+            setUserToDelete(null);
+        }
+    };
 
     const filteredBilling = React.useMemo(() => {
         const fromDate = selectedRange?.from;
@@ -2182,7 +2279,7 @@ const ReportsDashboard = () => {
         rows.push(['STAFF PERFORMANCE']);
         rows.push(['Employee', 'Role', 'Appointments Completed', 'Total Targeted', 'Efficiency %']);
         employeePerformance.forEach(emp => {
-            rows.push([emp.name, emp.role, emp.completed, emp.appointments, emp.efficiency]);
+            rows.push([emp.name, emp.role, emp.completedAppts, emp.appointments, emp.productivity]);
         });
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -2275,8 +2372,8 @@ const ReportsDashboard = () => {
             body: employeePerformance.map(emp => [
                 emp.name,
                 emp.role,
-                `${emp.completed} / ${emp.appointments}`,
-                `${emp.efficiency}%`
+                `${emp.completedAppts} / ${emp.appointments}`,
+                `${emp.productivity}%`
             ]),
             headStyles: { fillColor: [15, 23, 42] }, // Slate 900
             styles: { fontSize: 9 }
@@ -2392,48 +2489,114 @@ const ReportsDashboard = () => {
                     </div>
                 </div>
 
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
+                    {/* Add New Staff Card */}
+                    <Card 
+                        className="border-2 border-dashed border-slate-200 shadow-none rounded-3xl overflow-hidden group hover:border-indigo-400 hover:bg-indigo-50/30 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center p-4 min-h-[220px]"
+                        onClick={handleAddStaff}
+                    >
+                        <div className="p-3 bg-slate-100 rounded-full group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors mb-2">
+                            <UserPlus className="h-6 w-6 text-slate-400 group-hover:text-indigo-600" />
+                        </div>
+                        <h4 className="font-black text-slate-900 uppercase tracking-widest text-[9px]">Add New Staff</h4>
+                    </Card>
+
                     {employeePerformance.map((emp) => (
-                        <Card key={emp.id} className="border-none shadow-xl shadow-slate-200/40 rounded-[2.5rem] overflow-hidden group hover:scale-[1.02] transition-all duration-300 bg-white">
-                            <CardContent className="p-6 space-y-6">
-                                <div className="flex items-center gap-4">
-                                    <Avatar className="h-14 w-14 border-4 border-slate-50 shadow-sm shrink-0">
-                                        <AvatarFallback className="bg-indigo-600 text-white font-black text-lg uppercase">{emp.name?.slice(0, 2)}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0">
-                                        <h4 className="font-black text-slate-900 truncate leading-tight">{emp.name}</h4>
-                                        <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tighter">{emp.email}</p>
+                        <Card key={emp.id} className="border-none shadow-sm rounded-3xl overflow-hidden group hover:shadow-md transition-all duration-300 bg-white border border-slate-100">
+                            <CardContent className="p-4 space-y-4">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <Avatar className="h-10 w-10 border-2 border-white shadow-sm shrink-0">
+                                                <AvatarFallback className="bg-indigo-600 text-white font-black text-sm uppercase">
+                                                    {emp.name?.slice(0, 2)}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className={cn(
+                                                "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-white",
+                                                emp.hasReportToday ? "bg-emerald-500" : "bg-amber-500"
+                                            )} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="font-black text-slate-900 truncate leading-tight text-sm tracking-tight">{emp.name}</h4>
+                                            <Badge className="bg-slate-100 text-slate-500 border-none font-black text-[7px] px-1 h-3.5 uppercase tracking-tighter">
+                                                {emp.role}
+                                            </Badge>
+                                        </div>
                                     </div>
+
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full">
+                                                <MoreVertical className="h-3 w-3 text-slate-400" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="rounded-xl">
+                                            <DropdownMenuItem onClick={() => handleEditStaff(emp)} className="text-xs font-bold">Edit Profile</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setViewingEmployeeId(emp.id)} className="text-xs font-bold">Performance</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
 
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Productivity Score</span>
-                                        <Badge 
-                                            variant={emp.hasReportToday ? "default" : "secondary"}
-                                            className={cn(
-                                                "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border-none",
-                                                emp.hasReportToday 
-                                                    ? "bg-emerald-50 text-emerald-600 shadow-sm shadow-emerald-100" 
-                                                    : "bg-amber-50 text-amber-600 shadow-sm shadow-amber-100"
-                                            )}
-                                        >
-                                            {emp.hasReportToday ? 'Report Submitted' : 'Report Pending'}
-                                        </Badge>
+                                        <span className="text-[9px] font-black uppercase text-slate-400">Efficiency</span>
+                                        <span className="text-sm font-black text-slate-900">{emp.productivity}%</span>
                                     </div>
-                                    <Progress value={emp.productivity} className="h-2.5 bg-slate-100 rounded-full" />
+                                    <Progress value={emp.productivity} className="h-1.5 bg-slate-50" />
+                                    
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="bg-slate-50/50 p-2 rounded-xl border border-slate-100/50">
+                                            <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Actions</p>
+                                            <p className="text-[10px] font-black text-slate-900">{emp.totalActionsToday || 0}</p>
+                                        </div>
+                                        <div className="bg-slate-50/50 p-2 rounded-xl border border-slate-100/50">
+                                            <p className="text-[7px] font-black text-slate-400 uppercase mb-0.5">Audit</p>
+                                            <p className={cn(
+                                                "text-[8px] font-black uppercase",
+                                                emp.hasReportToday ? "text-emerald-600" : "text-amber-600"
+                                            )}>{emp.hasReportToday ? 'Pass' : 'Pending'}</p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <Button 
-                                    className="w-full h-11 rounded-2xl bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
+                                    className="w-full h-8 rounded-xl bg-slate-900 text-white font-black text-[8px] uppercase tracking-widest hover:bg-black transition-all"
                                     onClick={() => setViewingEmployeeId(emp.id)}
                                 >
-                                    View Performance Report
+                                    Review Evaluation
                                 </Button>
                             </CardContent>
                         </Card>
                     ))}
                 </div>
+
+                {/* CRUD Dialogs */}
+                <UserFormDialog 
+                    open={isFormOpen} 
+                    onOpenChange={setIsFormOpen} 
+                    user={editingUser} 
+                />
+
+                <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+                    <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-2xl font-black tracking-tight">Decommission Staff Member?</AlertDialogTitle>
+                            <AlertDialogDescription className="font-bold text-slate-500">
+                                Are you sure you want to remove <span className="text-slate-900">{userToDelete?.name}</span>? This will hide them from all active dashboards and evaluation reports.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="gap-2">
+                            <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-slate-200">Cancel</AlertDialogCancel>
+                            <AlertDialogAction 
+                                onClick={handleDeleteStaff}
+                                className="rounded-xl font-black uppercase tracking-widest text-[10px] bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-100"
+                            >
+                                Confirm Removal
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Member Progress Dialog */}
                 <Dialog open={!!viewingEmployeeId} onOpenChange={(open) => !open && setViewingEmployeeId(null)}>

@@ -72,6 +72,7 @@ export default function DailyPostingPage() {
     const [activityType, setActivityType] = React.useState<string>('Post');
     const [description, setDescription] = React.useState('');
     const [link, setLink] = React.useState('');
+    const [postedAt, setPostedAt] = React.useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     const [screenshotFile, setScreenshotFile] = React.useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -82,6 +83,10 @@ export default function DailyPostingPage() {
     // Fetch History
     const postingsQuery = useMemoFirebase(() => {
         if (!firestore || !user?.id) return null;
+        const isManager = user.role === 'Admin' || user.role === 'Social Media Manager' || user.role === 'Operations Manager';
+        if (isManager) {
+            return query(collection(firestore, 'dailyPostings'));
+        }
         return query(collection(firestore, 'dailyPostings'), where('userId', '==', user.id));
     }, [firestore, user]);
 
@@ -131,7 +136,7 @@ export default function DailyPostingPage() {
                 description: description.trim(),
                 link: link.trim() || "",
                 screenshotUrl: uploadedUrl,
-                postedAt: editingLog ? editingLog.postedAt : new Date().toISOString(),
+                postedAt: new Date(postedAt).toISOString(),
             };
 
             // 3. Save to Firestore
@@ -180,6 +185,7 @@ export default function DailyPostingPage() {
         setActivityType(log.activityType);
         setDescription(log.description);
         setLink(log.link || '');
+        setPostedAt(format(new Date(log.postedAt), "yyyy-MM-dd'T'HH:mm"));
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -187,6 +193,7 @@ export default function DailyPostingPage() {
         setEditingLog(null);
         setDescription('');
         setLink('');
+        setPostedAt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
         setScreenshotFile(null);
     };
 
@@ -261,6 +268,16 @@ export default function DailyPostingPage() {
                                     placeholder="https://..."
                                     value={link}
                                     onChange={(e) => setLink(e.target.value)}
+                                    className="h-11 rounded-2xl border-slate-200 font-bold"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Posting Date & Time</Label>
+                                <Input
+                                    type="datetime-local"
+                                    value={postedAt}
+                                    onChange={(e) => setPostedAt(e.target.value)}
                                     className="h-11 rounded-2xl border-slate-200 font-bold"
                                 />
                             </div>
