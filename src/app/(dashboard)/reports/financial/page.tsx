@@ -89,12 +89,14 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
+  BarChart as RechartsBarChart,
+  Bar,
 } from 'recharts';
 
 export default function FinancialReportPage() {
@@ -373,6 +375,43 @@ export default function FinancialReportPage() {
     const ebitda = financialKPIs.grossRevenue - totalOpEx;
     const ebitdaMargin = financialKPIs.grossRevenue > 0 ? (ebitda / financialKPIs.grossRevenue) * 100 : 0;
 
+    // ─── 6-Month Monthly EBITDA Trend ──────────────────────────────────────
+    const monthlyTrend = [];
+    for (let i = 5; i >= 0; i--) {
+        const targetDate = add(new Date(), { months: -i });
+        const mStart = startOfDay(startOfMonth(targetDate));
+        const mEnd = endOfDay(endOfMonth(targetDate));
+        const monthLabel = format(targetDate, 'MMM yy');
+
+        const mRevenue = billingRecords?.filter(b => {
+            const d = new Date(b.timestamp || b.billingDate);
+            return !isNaN(d.getTime()) && isWithinInterval(d, { start: mStart, end: mEnd });
+        }).reduce((sum, b) => sum + (b.grandTotal ?? b.totalAmount ?? ((b.consultationCharges || 0) + (b.procedureCharges || 0) + (b.medicineCharges || 0))), 0) || 0;
+
+        const mBurn = allExpenses?.filter((e: any) => {
+            const d = new Date(e.timestamp || e.date || e.createdAt);
+            return !isNaN(d.getTime()) && isWithinInterval(d, { start: mStart, end: mEnd });
+        }).reduce((sum: number, e: any) => sum + (e.amount || 0), 0) || 0;
+
+        const mSalaries = allSalaries?.filter((s: any) => {
+            const d = new Date(s.timestamp || s.date || s.createdAt);
+            return !isNaN(d.getTime()) && isWithinInterval(d, { start: mStart, end: mEnd });
+        }).reduce((sum: number, s: any) => sum + (s.netSalary || s.amount || 0), 0) || 0;
+
+        const mSocialKey = `${format(targetDate, 'MMMM')}_${targetDate.getFullYear()}`;
+        const mSocialSpend = allSocialCosts?.filter(c => `${c.month}_${c.year}` === mSocialKey).reduce((sum, c) => sum + (c.totalSpent || 0), 0) || 0;
+
+        const mOpEx = mBurn + mSalaries + mSocialSpend;
+        const mEbitda = mRevenue - mOpEx;
+        
+        monthlyTrend.push({
+            name: monthLabel,
+            Revenue: mRevenue,
+            OpEx: mOpEx,
+            EBITDA: mEbitda
+        });
+    }
+
     return {
         newCustomers: newCount,
         repeatCustomers: repeatCount,
@@ -389,9 +428,10 @@ export default function FinancialReportPage() {
         totalOpEx,
         totalSocialSpend,
         socialSpendDetail,
-        totalSocialRevenue
+        totalSocialRevenue,
+        monthlyTrend
     };
-  }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries, allSocialCosts, allSocialROAS]);
+  }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries, allSocialCosts, allSocialROAS, allExpenses]);
 
   const tabs = [
     { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
@@ -813,23 +853,36 @@ export default function FinancialReportPage() {
                                             </div>
 
                                             <div className="space-y-4">
-                                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">EBITDA Momentum</h4>
-                                                <Card className="border-none bg-slate-800/20 p-6 h-full min-h-[200px] flex flex-col justify-center">
-                                                    <div className="space-y-6">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-xs font-bold text-slate-400">Revenue Conversion</span>
-                                                            <span className="text-xs font-black text-emerald-400">{(( (strategicMetrics?.ebitda || 0) / (financialKPIs.grossRevenue || 1)) * 100).toFixed(1)}%</span>
-                                                        </div>
-                                                        <div className="h-3 w-full bg-slate-700 rounded-full overflow-hidden">
-                                                            <div 
-                                                                className="h-full bg-emerald-500 rounded-full" 
-                                                                style={{ width: `${Math.max(0, Math.min(100, strategicMetrics?.ebitdaMargin || 0))}%` }} 
-                                                            />
-                                                        </div>
-                                                        <p className="text-[10px] text-slate-500 font-medium italic">
-                                                            *EBITDA represents earnings before interest, taxes, depreciation, and amortization. This is a proxy for operating cash flow.
-                                                        </p>
+                                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">EBITDA Momentum (Monthly)</h4>
+                                                <Card className="border-none bg-slate-800/20 p-6 h-full min-h-[300px] flex flex-col justify-center">
+                                                    <div className="h-[250px] w-full">
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <RechartsBarChart data={strategicMetrics?.monthlyTrend || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                                                                <XAxis 
+                                                                    dataKey="name" 
+                                                                    tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} 
+                                                                    axisLine={false} 
+                                                                    tickLine={false} 
+                                                                />
+                                                                <YAxis 
+                                                                    tick={{ fill: '#94a3b8', fontSize: 10 }} 
+                                                                    axisLine={false} 
+                                                                    tickLine={false}
+                                                                    tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
+                                                                />
+                                                                <RechartsTooltip 
+                                                                    cursor={{ fill: '#334155', opacity: 0.4 }}
+                                                                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#f8fafc', fontWeight: 'bold' }}
+                                                                    formatter={(value: number) => [`Rs ${value.toLocaleString()}`, undefined]}
+                                                                />
+                                                                <Bar dataKey="EBITDA" fill="#34d399" radius={[4, 4, 0, 0]} barSize={30} />
+                                                            </RechartsBarChart>
+                                                        </ResponsiveContainer>
                                                     </div>
+                                                    <p className="text-[10px] text-slate-500 font-medium italic mt-4 text-center">
+                                                        *Monthly EBITDA Trend over the last 6 months.
+                                                    </p>
                                                 </Card>
                                             </div>
                                         </div>
