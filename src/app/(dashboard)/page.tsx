@@ -618,6 +618,45 @@ const OrganizationDashboard = () => {
         return current || null;
     }, [allSocialCosts]);
 
+    // ─── ROAS Calculation ────────────────────────────────────────────────
+    const roasData = React.useMemo(() => {
+        const now = new Date();
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const months: { label: string; shortLabel: string; month: number; year: number; revenue: number; spend: number; roas: number }[] = [];
+
+        for (let i = 5; i >= 0; i--) {
+            const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const mIdx = target.getMonth();
+            const yr = target.getFullYear();
+            const monthName = monthNames[mIdx];
+            const shortLabel = format(target, 'MMM');
+
+            // Revenue for this month from billing records
+            const monthRevenue = (billingRecords || []).filter(r => {
+                const dateStr = r.timestamp || r.billingDate;
+                if (!dateStr) return false;
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return false;
+                return d.getMonth() === mIdx && d.getFullYear() === yr;
+            }).reduce((acc, r) => acc + (r.grandTotal ?? r.totalAmount ?? ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+
+            // Spend for this month from socialCosts
+            const costRecord = (allSocialCosts || []).find(c => c.month === monthName && c.year === yr);
+            const monthSpend = costRecord?.totalSpent || 0;
+
+            const roas = monthSpend > 0 ? monthRevenue / monthSpend : 0;
+
+            months.push({ label: monthName, shortLabel, month: mIdx, year: yr, revenue: monthRevenue, spend: monthSpend, roas });
+        }
+
+        const totalSpend = months.reduce((s, m) => s + m.spend, 0);
+        const totalRevenue = months.reduce((s, m) => s + m.revenue, 0);
+        const overallRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+        const netROI = totalRevenue - totalSpend;
+
+        return { months, totalSpend, totalRevenue, overallRoas, netROI };
+    }, [billingRecords, allSocialCosts]);
+
     const leadStats = React.useMemo(() => {
         if (!leads) return { total: 0, new: 0, converted: 0, inProgress: 0 };
         return {
@@ -741,6 +780,146 @@ const OrganizationDashboard = () => {
                     </div>
                 </Card>
             </div>
+
+            {/* ─── ROAS (Return on Ad Spend) Intelligence ─────────────────────── */}
+            <Card className="border-none bg-white shadow-2xl shadow-slate-200/50 rounded-[2.5rem] overflow-hidden">
+                <CardHeader className="p-8 pb-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <CardTitle className="text-2xl font-black tracking-tighter text-slate-900 flex items-center gap-3">
+                                <div className="p-3 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl shadow-lg shadow-violet-200">
+                                    <TrendingUp className="h-6 w-6 text-white" />
+                                </div>
+                                ROAS <span className="text-violet-500">Intelligence</span>
+                            </CardTitle>
+                            <CardDescription className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mt-2">
+                                Return on Ad Spend · Last 6 Months · Social Marketing vs Clinic Revenue
+                            </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                                <div className="h-3 w-3 rounded-sm bg-violet-500" /> Spend
+                                <div className="h-3 w-3 rounded-sm bg-emerald-500 ml-2" /> Revenue
+                            </div>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-8">
+                    {/* ROAS KPI Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        {/* Overall ROAS */}
+                        <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-[2rem] p-6 border border-violet-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-violet-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest mb-2 relative">ROAS Ratio</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                {roasData.overallRoas > 0 ? `${roasData.overallRoas.toFixed(1)}x` : '—'}
+                            </p>
+                            <p className="text-[9px] font-bold text-violet-400 uppercase tracking-wider mt-1 relative">
+                                {roasData.overallRoas >= 3 ? '🔥 Excellent' : roasData.overallRoas >= 1 ? '✅ Profitable' : roasData.overallRoas > 0 ? '⚠️ Below Target' : 'No Spend Data'}
+                            </p>
+                        </div>
+
+                        {/* Total Spend */}
+                        <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-[2rem] p-6 border border-rose-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-rose-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2 relative">Total Ad Spend</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                Rs {roasData.totalSpend > 0 ? (roasData.totalSpend / 1000).toFixed(0) + 'K' : '0'}
+                            </p>
+                            <p className="text-[9px] font-bold text-rose-400 uppercase tracking-wider mt-1 relative">6 Month Cumulative</p>
+                        </div>
+
+                        {/* Revenue Generated */}
+                        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[2rem] p-6 border border-emerald-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 relative">Total Revenue</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                Rs {roasData.totalRevenue > 0 ? (roasData.totalRevenue / 1000000).toFixed(1) + 'M' : '0'}
+                            </p>
+                            <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1 relative">Gross Collections</p>
+                        </div>
+
+                        {/* Net ROI */}
+                        <div className={cn(
+                            "rounded-[2rem] p-6 border relative overflow-hidden",
+                            roasData.netROI >= 0
+                                ? "bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-100/50"
+                                : "bg-gradient-to-br from-red-50 to-rose-50 border-red-100/50"
+                        )}>
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className={cn("text-[10px] font-black uppercase tracking-widest mb-2 relative", roasData.netROI >= 0 ? "text-amber-600" : "text-red-500")}>Net ROI</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                Rs {roasData.netROI !== 0 ? (Math.abs(roasData.netROI) / 1000000).toFixed(1) + 'M' : '0'}
+                            </p>
+                            <p className={cn("text-[9px] font-bold uppercase tracking-wider mt-1 relative", roasData.netROI >= 0 ? "text-amber-500" : "text-red-400")}>
+                                {roasData.netROI >= 0 ? '↑ Positive Return' : '↓ Negative Return'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* ROAS Bar Chart */}
+                    <div className="h-[350px] bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RechartsBarChart data={roasData.months.map(m => ({
+                                name: m.shortLabel,
+                                'Ad Spend': m.spend,
+                                'Revenue': m.revenue,
+                                roas: m.roas
+                            }))} barGap={4}>
+                                <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#e2e8f0" />
+                                <XAxis
+                                    dataKey="name"
+                                    fontSize={11}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    fontWeight="800"
+                                    tick={{ fill: '#64748b' }}
+                                />
+                                <YAxis
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    fontWeight="800"
+                                    tick={{ fill: '#94a3b8' }}
+                                    tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : `${v}`}
+                                />
+                                <RechartsTooltip
+                                    contentStyle={{
+                                        borderRadius: '20px',
+                                        border: 'none',
+                                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.12)',
+                                        fontWeight: '700',
+                                        fontSize: '12px',
+                                        padding: '16px',
+                                    }}
+                                    formatter={(value: number) => `Rs ${value.toLocaleString()}`}
+                                />
+                                <RechartsBar dataKey="Ad Spend" fill="#8b5cf6" radius={[8, 8, 0, 0]} barSize={28} />
+                                <RechartsBar dataKey="Revenue" fill="#10b981" radius={[8, 8, 0, 0]} barSize={28} />
+                            </RechartsBarChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Monthly ROAS Breakdown Table */}
+                    <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                        {roasData.months.map(m => (
+                            <div key={`roas-${m.label}-${m.year}`} className="bg-white border border-slate-100 rounded-2xl p-4 text-center hover:border-violet-200 hover:shadow-lg hover:shadow-violet-50 transition-all">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.shortLabel}</p>
+                                <p className={cn(
+                                    "text-xl font-black tracking-tighter mt-1",
+                                    m.roas >= 3 ? "text-emerald-600" : m.roas >= 1 ? "text-slate-900" : m.roas > 0 ? "text-amber-600" : "text-slate-300"
+                                )}>
+                                    {m.roas > 0 ? `${m.roas.toFixed(1)}x` : '—'}
+                                </p>
+                                <div className="mt-2 space-y-0.5">
+                                    <p className="text-[8px] font-bold text-rose-400">↓ Rs {m.spend.toLocaleString()}</p>
+                                    <p className="text-[8px] font-bold text-emerald-500">↑ Rs {m.revenue.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Existing Contextual Metrics */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
