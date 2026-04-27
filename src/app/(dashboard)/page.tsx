@@ -105,7 +105,7 @@ import {
     doc,
     setDoc
 } from 'firebase/firestore';
-import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem, SocialCost } from '@/lib/types';
+import type { Appointment, Patient, Doctor, BillingRecord, Lead, User, DailyPosting, SocialReport, AdminTaskTemplate, SocialReach, SocialSettings, DesignerWork, PharmacyItem, SocialCost, SocialROAS } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser, useDoc } from '@/firebase';
 import { useSearch } from '@/context/SearchProvider';
 import { add, format, startOfDay, endOfDay, isSameMonth, isSameYear, startOfMonth, startOfYear, isWithinInterval } from 'date-fns';
@@ -578,6 +578,8 @@ const OrganizationDashboard = () => {
     const { data: allExpenses } = useCollection<any>(expensesRef);
     const { data: appointments } = useCollection<Appointment>(appointmentsRef);
     const { data: allSocialCosts } = useCollection<SocialCost>(socialCostsRef);
+    const socialRoasRef = useMemoFirebase(() => firestore ? collection(firestore, 'socialROAS') : null, [firestore]);
+    const { data: allSocialROAS } = useCollection<SocialROAS>(socialRoasRef);
 
     const isLoading = analyticsLoading || usersLoading || leadsLoading || tasksLoading;
 
@@ -618,11 +620,16 @@ const OrganizationDashboard = () => {
         return current || null;
     }, [allSocialCosts]);
 
-    // ─── ROAS Calculation ────────────────────────────────────────────────
+    // ─── ROAS Data from Social Media Manager Reports ─────────────────────
     const roasData = React.useMemo(() => {
         const now = new Date();
         const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        const months: { label: string; shortLabel: string; month: number; year: number; revenue: number; spend: number; roas: number }[] = [];
+        const months: {
+            label: string; shortLabel: string; month: number; year: number;
+            spend: number; revenue: number; roas: number;
+            leadsGenerated: number; leadsConverted: number;
+            costPerLead: number; conversionRate: number;
+        }[] = [];
 
         for (let i = 5; i >= 0; i--) {
             const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -631,31 +638,35 @@ const OrganizationDashboard = () => {
             const monthName = monthNames[mIdx];
             const shortLabel = format(target, 'MMM');
 
-            // Revenue for this month from billing records
-            const monthRevenue = (billingRecords || []).filter(r => {
-                const dateStr = r.timestamp || r.billingDate;
-                if (!dateStr) return false;
-                const d = new Date(dateStr);
-                if (isNaN(d.getTime())) return false;
-                return d.getMonth() === mIdx && d.getFullYear() === yr;
-            }).reduce((acc, r) => acc + (r.grandTotal ?? r.totalAmount ?? ((r.consultationCharges || 0) + (r.procedureCharges || 0) + (r.medicineCharges || 0))), 0);
+            // Find ROAS report for this month (entered by Social Media Manager)
+            const roasReport = (allSocialROAS || []).find(r => r.month === monthName && r.year === yr);
 
-            // Spend for this month from socialCosts
-            const costRecord = (allSocialCosts || []).find(c => c.month === monthName && c.year === yr);
-            const monthSpend = costRecord?.totalSpent || 0;
-
-            const roas = monthSpend > 0 ? monthRevenue / monthSpend : 0;
-
-            months.push({ label: monthName, shortLabel, month: mIdx, year: yr, revenue: monthRevenue, spend: monthSpend, roas });
+            months.push({
+                label: monthName,
+                shortLabel,
+                month: mIdx,
+                year: yr,
+                spend: roasReport?.totalAdSpend || 0,
+                revenue: roasReport?.revenueFromConversions || 0,
+                roas: roasReport?.roas || 0,
+                leadsGenerated: roasReport?.leadsGenerated || 0,
+                leadsConverted: roasReport?.leadsConverted || 0,
+                costPerLead: roasReport?.costPerLead || 0,
+                conversionRate: roasReport?.conversionRate || 0,
+            });
         }
 
         const totalSpend = months.reduce((s, m) => s + m.spend, 0);
         const totalRevenue = months.reduce((s, m) => s + m.revenue, 0);
+        const totalLeads = months.reduce((s, m) => s + m.leadsGenerated, 0);
+        const totalConverted = months.reduce((s, m) => s + m.leadsConverted, 0);
         const overallRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
         const netROI = totalRevenue - totalSpend;
+        const overallConvRate = totalLeads > 0 ? (totalConverted / totalLeads) * 100 : 0;
+        const overallCPL = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
-        return { months, totalSpend, totalRevenue, overallRoas, netROI };
-    }, [billingRecords, allSocialCosts]);
+        return { months, totalSpend, totalRevenue, totalLeads, totalConverted, overallRoas, netROI, overallConvRate, overallCPL };
+    }, [allSocialROAS]);
 
     const leadStats = React.useMemo(() => {
         if (!leads) return { total: 0, new: 0, converted: 0, inProgress: 0 };
@@ -806,7 +817,7 @@ const OrganizationDashboard = () => {
                 </CardHeader>
                 <CardContent className="p-8">
                     {/* ROAS KPI Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
                         {/* Overall ROAS */}
                         <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-[2rem] p-6 border border-violet-100/50 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-20 h-20 bg-violet-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
@@ -815,7 +826,7 @@ const OrganizationDashboard = () => {
                                 {roasData.overallRoas > 0 ? `${roasData.overallRoas.toFixed(1)}x` : '—'}
                             </p>
                             <p className="text-[9px] font-bold text-violet-400 uppercase tracking-wider mt-1 relative">
-                                {roasData.overallRoas >= 3 ? '🔥 Excellent' : roasData.overallRoas >= 1 ? '✅ Profitable' : roasData.overallRoas > 0 ? '⚠️ Below Target' : 'No Spend Data'}
+                                {roasData.overallRoas >= 3 ? '🔥 Excellent' : roasData.overallRoas >= 1 ? '✅ Profitable' : roasData.overallRoas > 0 ? '⚠️ Below Target' : 'No Data'}
                             </p>
                         </div>
 
@@ -839,21 +850,36 @@ const OrganizationDashboard = () => {
                             <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1 relative">Gross Collections</p>
                         </div>
 
-                        {/* Net ROI */}
-                        <div className={cn(
-                            "rounded-[2rem] p-6 border relative overflow-hidden",
-                            roasData.netROI >= 0
-                                ? "bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-100/50"
-                                : "bg-gradient-to-br from-red-50 to-rose-50 border-red-100/50"
-                        )}>
-                            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
-                            <p className={cn("text-[10px] font-black uppercase tracking-widest mb-2 relative", roasData.netROI >= 0 ? "text-amber-600" : "text-red-500")}>Net ROI</p>
+                        {/* Total Leads */}
+                        <div className="bg-gradient-to-br from-blue-50 to-sky-50 rounded-[2rem] p-6 border border-blue-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-blue-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 relative">Total Leads</p>
                             <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
-                                Rs {roasData.netROI !== 0 ? (Math.abs(roasData.netROI) / 1000000).toFixed(1) + 'M' : '0'}
+                                {roasData.totalLeads > 0 ? roasData.totalLeads.toLocaleString() : '0'}
                             </p>
-                            <p className={cn("text-[9px] font-bold uppercase tracking-wider mt-1 relative", roasData.netROI >= 0 ? "text-amber-500" : "text-red-400")}>
-                                {roasData.netROI >= 0 ? '↑ Positive Return' : '↓ Negative Return'}
+                            <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider mt-1 relative">Generated via Social</p>
+                        </div>
+
+                        {/* Total Conversions */}
+                        <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-[2rem] p-6 border border-teal-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-teal-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2 relative">Conversions</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                {roasData.totalConverted > 0 ? roasData.totalConverted.toLocaleString() : '0'}
                             </p>
+                            <p className="text-[9px] font-bold text-teal-500 uppercase tracking-wider mt-1 relative">
+                                {roasData.overallConvRate > 0 ? `${roasData.overallConvRate.toFixed(1)}% Conv. Rate` : 'Patient conversions'}
+                            </p>
+                        </div>
+
+                        {/* Cost Per Lead */}
+                        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-[2rem] p-6 border border-amber-100/50 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 relative">Avg Cost/Lead</p>
+                            <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                Rs {roasData.overallCPL > 0 ? Math.round(roasData.overallCPL).toLocaleString() : '0'}
+                            </p>
+                            <p className="text-[9px] font-bold text-amber-500 uppercase tracking-wider mt-1 relative">Acquisition Cost</p>
                         </div>
                     </div>
 

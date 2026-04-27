@@ -475,3 +475,24 @@ export type SocialCost = {
   updatedAt: string; // ISO string
   updatedBy: string; // User ID
 };
+
+export type SocialROAS = {
+  id: string; // format: "January_2026"
+  month: string; // "January", "February", etc.
+  year: number;
+  // Spend (pulled from socialCosts or entered manually)
+  totalAdSpend: number;
+  // Funnel metrics
+  leadsGenerated: number;
+  leadsConverted: number;
+  revenueFromConversions: number;
+  // Auto-calculated fields (stored for convenience)
+  costPerLead: number;        // totalAdSpend / leadsGenerated
+  costPerConversion: number;  // totalAdSpend / leadsConverted
+  conversionRate: number;     // (leadsConverted / leadsGenerated) * 100
+  roas: number;               // revenueFromConversions / totalAdSpend
+  // Meta
+  notes?: string;
+  updatedAt: string; // ISO string
+  updatedBy: string; // User ID
+};
