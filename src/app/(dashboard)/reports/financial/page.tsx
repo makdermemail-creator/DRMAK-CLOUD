@@ -71,7 +71,7 @@ import {
   doc,
   setDoc
 } from 'firebase/firestore';
-import type { BillingRecord, Patient, Doctor, Supplier, SocialCost } from '@/lib/types';
+import type { BillingRecord, Patient, Doctor, Supplier, SocialCost, SocialROAS } from '@/lib/types';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { DatePickerWithRange } from '@/components/DatePickerWithRange';
 import {
@@ -111,6 +111,7 @@ export default function FinancialReportPage() {
   const doctorsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'doctors') : null, [firestore]);
   const salariesQuery = useMemoFirebase(() => firestore ? collection(firestore, 'salaries') : null, [firestore]);
   const socialCostsQuery = useMemoFirebase(() => firestore ? collection(firestore, 'socialCosts') : null, [firestore]);
+  const socialRoasQuery = useMemoFirebase(() => firestore ? collection(firestore, 'socialROAS') : null, [firestore]);
 
   const { data: billingRecords } = useCollection<BillingRecord>(billingQuery);
   const { data: patients } = useCollection<Patient>(patientsQuery);
@@ -119,6 +120,7 @@ export default function FinancialReportPage() {
   const { data: allDoctors } = useCollection<Doctor>(doctorsQuery);
   const { data: allSalaries } = useCollection<any>(salariesQuery);
   const { data: allSocialCosts } = useCollection<SocialCost>(socialCostsQuery);
+  const { data: allSocialROAS } = useCollection<SocialROAS>(socialRoasQuery);
 
   // Derived Financial State
   const filteredBilling = React.useMemo(() => {
@@ -341,6 +343,9 @@ export default function FinancialReportPage() {
         return acc;
     }, { adSpend: 0, boostingSpend: 0, prSpend: 0, otherSpend: 0 });
 
+    const socialRoasRecords = allSocialROAS?.filter(r => overlappingMonths.has(`${r.month}_${r.year}`)) || [];
+    const totalSocialRevenue = socialRoasRecords.reduce((sum, r) => sum + (r.revenueFromConversions || 0), 0);
+
     // Deep EBITDA Calculation
     const expenseBreakdown = filteredExpenses.reduce((acc: any, e: any) => {
         const cat = e.category || 'Miscellaneous';
@@ -382,9 +387,10 @@ export default function FinancialReportPage() {
         salaryTotal,
         totalOpEx,
         totalSocialSpend,
-        socialSpendDetail
+        socialSpendDetail,
+        totalSocialRevenue
     };
-  }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries]);
+  }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries, allSocialCosts, allSocialROAS]);
 
   const tabs = [
     { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
@@ -754,6 +760,16 @@ export default function FinancialReportPage() {
                                                         <span className="font-bold text-slate-300">Pharmacy</span>
                                                         <span className="font-black">Rs {filteredBilling.reduce((sum, b) => sum + (b.medicineCharges || 0), 0).toLocaleString()}</span>
                                                     </div>
+                                                    {strategicMetrics?.totalSocialRevenue > 0 && (
+                                                        <div className="flex justify-between items-center bg-indigo-900/40 p-4 rounded-2xl border border-indigo-500/50 mt-4 relative overflow-hidden">
+                                                            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/20 blur-2xl rounded-full -translate-y-12 translate-x-4" />
+                                                            <div className="relative z-10 flex flex-col">
+                                                                <span className="font-black text-indigo-300 text-[10px] uppercase tracking-widest">Attributed to Social Team</span>
+                                                                <span className="font-bold text-white">Social Conversions</span>
+                                                            </div>
+                                                            <span className="font-black text-indigo-400 text-lg relative z-10">Rs {strategicMetrics.totalSocialRevenue.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
