@@ -175,6 +175,38 @@ export default function Header() {
     return lowStockItems;
   }, [suppliers, scheduledPosts, designRequests, user]);
 
+  const [readAlerts, setReadAlerts] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    const saved = localStorage.getItem(`read_alerts_${user?.id}`);
+    if (saved) {
+      try {
+        setReadAlerts(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse read alerts", e);
+      }
+    }
+  }, [user?.id]);
+
+  const unreadAlerts = React.useMemo(() => {
+    return alerts.filter(alert => {
+      const id = alert.type === 'STOCK' ? `STOCK-${alert.supplierName}-${alert.productName}` : alert.id;
+      return !readAlerts.includes(id);
+    });
+  }, [alerts, readAlerts]);
+
+  const handleNotificationClick = (alert: any) => {
+    const id = alert.type === 'STOCK' ? `STOCK-${alert.supplierName}-${alert.productName}` : alert.id;
+    const newReadAlerts = [...readAlerts, id];
+    setReadAlerts(newReadAlerts);
+    localStorage.setItem(`read_alerts_${user?.id}`, JSON.stringify(newReadAlerts));
+    
+    const link = alert.type === 'STOCK' ? '/inventory' : alert.link;
+    if (link) {
+      router.push(link);
+    }
+  };
+
   const displayName = user?.name || user?.email || 'User';
   const displayInitial = displayName?.charAt(0).toUpperCase() || 'U';
 
@@ -205,11 +237,11 @@ export default function Header() {
           <Button variant="ghost" size="icon" className="relative group overflow-visible">
             <Bell className={cn(
               "h-5 w-5 transition-colors",
-              alerts.length > 0 ? "text-red-500 animate-pulse" : "text-muted-foreground group-hover:text-foreground"
+              unreadAlerts.length > 0 ? "text-red-500 animate-pulse" : "text-muted-foreground group-hover:text-foreground"
             )} />
-            {alerts.length > 0 && (
+            {unreadAlerts.length > 0 && (
               <Badge className="absolute -top-1 -right-1 h-4 min-w-[1rem] flex items-center justify-center p-0 text-[10px] bg-red-500 hover:bg-red-600 border-2 border-background font-black shadow-lg">
-                {alerts.length}
+                {unreadAlerts.length}
               </Badge>
             )}
           </Button>
@@ -218,18 +250,18 @@ export default function Header() {
           <DropdownMenuLabel className="p-4 border-b bg-muted/30">
             <div className="flex items-center justify-between">
               <span className="font-black text-sm uppercase tracking-wider">Updates</span>
-              <Badge variant="outline" className="text-[10px] font-bold">{alerts.length} New</Badge>
+              <Badge variant="outline" className="text-[10px] font-bold">{unreadAlerts.length} New</Badge>
             </div>
           </DropdownMenuLabel>
           <ScrollArea className="h-80">
-            {alerts.length === 0 ? (
+            {unreadAlerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                 <Bell className="h-8 w-8 mb-2 opacity-20" />
                 <p className="text-sm font-medium">All caught up!</p>
               </div>
             ) : (
               <div className="flex flex-col">
-                {alerts.map((alert, i) => {
+                {unreadAlerts.map((alert, i) => {
                   const isStock = alert.type === 'STOCK';
                   const isSMM = alert.type === 'CALENDAR' || alert.type === 'DESIGN';
                   const isTask = alert.type === 'TASK';
@@ -238,7 +270,7 @@ export default function Header() {
                     <div 
                       key={i} 
                       className="flex gap-3 p-4 border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => alert.link && router.push(alert.link)}
+                      onClick={() => handleNotificationClick(alert)}
                     >
                       <div className={cn(
                         "mt-1 p-2 rounded-full h-fit",
