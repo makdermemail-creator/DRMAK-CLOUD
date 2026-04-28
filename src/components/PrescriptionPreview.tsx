@@ -34,6 +34,8 @@ export interface PrescriptionPreviewProps {
   today: string;
   hideBranding?: boolean;
   maritalStatus?: string;
+  prescriptionTemplateUrl?: string;
+  prescriptionAge?: string;
 }
 
 function safeFormatDate(dateStr: string) {
@@ -113,7 +115,7 @@ function LetterheadLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
           color: INK
         }}>
           <div><span style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginRight: '8px', letterSpacing: '1px' }}>Name:</span>{p.patient.name}</div>
-          <div><span style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginRight: '8px', letterSpacing: '1px' }}>Age:</span>{p.patient.age}</div>
+          <div><span style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginRight: '8px', letterSpacing: '1px' }}>Age:</span>{p.prescriptionAge || p.patient.age}</div>
           <div><span style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginRight: '8px', letterSpacing: '1px' }}>Sex:</span>{p.patient.gender}</div>
           <div><span style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginRight: '8px', letterSpacing: '1px' }}>Status:</span>{p.maritalStatus || p.patient.maritalStatus || '—'}</div>
         </div>
@@ -283,7 +285,7 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
           {/* Header: Centered Luxury ── */}
           <div style={{ textAlign: 'center', marginBottom: '10mm', borderBottom: `3px double ${GOLD}`, paddingBottom: '6mm' }}>
             <div style={{ fontSize: '24pt', fontWeight: 900, color: INK, marginBottom: '2mm', letterSpacing: '0.5px', fontFamily: 'serif' }}>
-              Dr Prof. Dr Mahvish Aftab Khan
+              {p.doctorName}
             </div>
             <div style={{ fontSize: '11pt', color: '#444', fontWeight: 600, letterSpacing: '0.5px', marginBottom: '1.5mm' }}>
               {p.doctorQualification}
@@ -315,7 +317,7 @@ function DigitalLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
               </div>
               <div>
                 <div style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginBottom: '1mm', fontWeight: 800, letterSpacing: '1px' }}>Age / Sex</div>
-                <div style={{ fontSize: '12pt', fontWeight: 800, color: INK }}>{p.patient.age} Y / {p.patient.gender}</div>
+                <div style={{ fontSize: '12pt', fontWeight: 800, color: INK }}>{p.prescriptionAge || p.patient.age} Y / {p.patient.gender}</div>
               </div>
               <div>
                 <div style={{ fontSize: '8pt', color: GOLD, textTransform: 'uppercase', marginBottom: '1mm', fontWeight: 800, letterSpacing: '1px' }}>Status</div>
@@ -516,7 +518,128 @@ function PrintStyles() {
   );
 }
 
+function CustomTemplateLayout(p: Omit<PrescriptionPreviewProps, 'hideBranding'>) {
+  const namedMeds = p.medicines.filter(m => m.name);
+  
+  return (
+    <div style={{ padding: '0', backgroundColor: '#f5f5f5', minHeight: '100%' }}>
+      <div id="prescription-print" style={{ 
+        width: '210mm', 
+        minHeight: '297mm', 
+        backgroundColor: '#fff', 
+        margin: '0 auto', 
+        boxShadow: '0 20px 50px rgba(0,0,0,0.1)',
+        position: 'relative',
+        overflow: 'hidden',
+        boxSizing: 'border-box'
+      }}>
+        <PrintStyles />
+        
+        {/* ── Custom Template Background ── */}
+        <div style={{ 
+          position: 'absolute', 
+          inset: 0, 
+          zIndex: 0,
+          backgroundImage: `url(${p.prescriptionTemplateUrl})`,
+          backgroundSize: '100% 100%',
+          backgroundRepeat: 'no-repeat'
+        }} />
+
+        {/* ── Content Overlay ── */}
+        <div style={{ 
+          position: 'relative', 
+          zIndex: 1, 
+          paddingTop: '79mm', // Adjusted to match the "NAME" line on the right
+          paddingBottom: '40mm',
+          paddingLeft: '18mm',
+          paddingRight: '18mm',
+          display: 'flex', 
+          flexDirection: 'column', 
+          minHeight: '297mm',
+          background: 'transparent',
+          color: INK
+        }}>
+          {/* Patient info - Positioned to the right to match template lines */}
+          <div style={{ 
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: '10mm'
+          }}>
+            <div style={{ 
+              width: '45%', // Take up the right half
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '11mm', // Larger gap to match the lines on the template
+              fontSize: '11pt',
+              fontWeight: 700,
+              color: INK
+            }}>
+              <div style={{ minHeight: '6mm', display: 'flex', alignItems: 'center' }}>{p.patient?.name}</div>
+              <div style={{ minHeight: '6mm', display: 'flex', alignItems: 'center' }}>{p.prescriptionAge ? `${p.prescriptionAge} Years` : ''}</div>
+              <div style={{ minHeight: '6mm', display: 'flex', alignItems: 'center' }}>{p.patient?.gender}</div>
+              <div style={{ minHeight: '6mm', display: 'flex', alignItems: 'center' }}>{p.today}</div>
+            </div>
+          </div>
+
+          {/* Rx Content */}
+          <div style={{ flex: 1, marginTop: '12mm' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6mm' }}>
+              <RxSymbol />
+              <div style={{ fontSize: '11pt', fontWeight: 900, color: GOLD, textTransform: 'uppercase', letterSpacing: '2px' }}>Treatment Plan</div>
+            </div>
+            
+            <div style={{ paddingLeft: '4mm' }}>
+              {namedMeds.length === 0 && <div style={{ fontSize: '10pt', color: '#ccc', fontStyle: 'italic' }}>No medication prescribed.</div>}
+              {namedMeds.map((med, i) => (
+                <div key={med.id} style={{ marginBottom: '6mm' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontSize: '13pt', fontWeight: 800, color: INK }}>{i + 1}. {med.name}</div>
+                    <div style={{ fontSize: '11pt', color: GOLD, fontWeight: 700 }}>{med.dosage} — {med.frequency}</div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5mm', paddingLeft: '4mm' }}>
+                    <div style={{ fontSize: '10pt', color: '#666', fontWeight: 600 }}>Duration: {med.duration}</div>
+                    {med.instructions && (
+                      <div style={{ fontSize: '10pt', color: INK, fontStyle: 'italic', fontWeight: 500 }}>
+                        <span style={{ color: GOLD, fontWeight: 800, fontStyle: 'normal' }}>Note: </span>{med.instructions}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Diagnosis, Advice & Procedure */}
+            <div style={{ marginTop: '10mm', display: 'flex', flexDirection: 'column', gap: '6mm' }}>
+               {p.diagnosis && (
+                  <div>
+                    <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', color: GOLD, marginBottom: '1mm' }}>Diagnosis</div>
+                    <div style={{ fontSize: '11pt', fontWeight: 700 }}>{p.diagnosis}</div>
+                  </div>
+               )}
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8mm' }}>
+                  {p.advice && (
+                    <div>
+                      <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', color: GOLD, marginBottom: '1mm' }}>Advice</div>
+                      <div style={{ fontSize: '10pt', lineHeight: 1.5 }}>{p.advice}</div>
+                    </div>
+                  )}
+                  {p.procedure && (
+                    <div>
+                      <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', color: GOLD, marginBottom: '1mm' }}>Procedure</div>
+                      <div style={{ fontSize: '10pt', lineHeight: 1.5 }}>{p.procedure}</div>
+                    </div>
+                  )}
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PrescriptionPreview({ hideBranding, ...rest }: PrescriptionPreviewProps) {
   if (hideBranding) return <LetterheadLayout {...rest} />;
+  if (rest.prescriptionTemplateUrl) return <CustomTemplateLayout {...rest} />;
   return <DigitalLayout {...rest} />;
 }

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X, Send } from 'lucide-react';
+import { PlusCircle, Trash2, Printer, Save, Search, Calendar, X, Send, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
 import { collection, addDoc, updateDoc, doc, query, where, deleteDoc } from 'firebase/firestore';
@@ -84,11 +84,13 @@ export default function EPrescriptionPage() {
   const [allergies, setAllergies] = React.useState('');
   const [coMorbids, setCoMorbids] = React.useState('');
   const [notes, setNotes] = React.useState('');
+  const [prescriptionAge, setPrescriptionAge] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [savedId, setSavedId] = React.useState<string | null>(null);
   const [printOnLetterhead, setPrintOnLetterhead] = React.useState(false);
   const [previewRx, setPreviewRx] = React.useState<any | null>(null);
   const [rxToDelete, setRxToDelete] = React.useState<string | null>(null);
+  const [selectedDoctorId, setSelectedDoctorId] = React.useState<string | null>(null);
 
   const resetForm = () => {
     setSelectedPatient(null);
@@ -104,6 +106,7 @@ export default function EPrescriptionPage() {
     setAllergies('');
     setCoMorbids('');
     setNotes('');
+    setPrescriptionAge('');
     setSavedId(null);
   };
 
@@ -132,15 +135,27 @@ export default function EPrescriptionPage() {
     toast({ title: 'Prescription Loaded', description: 'Data has been pre-filled from history.' });
   };
 
+
   const linkedDoctor = React.useMemo(() => {
-    if (!doctors || !user) return null;
-    if ((user as any).doctorId) return doctors.find(d => d.id === (user as any).doctorId) || null;
-    const norm = user.name?.toLowerCase().replace(/^dr\.?\s+/g, '').trim() || '';
-    return doctors.find(d => {
-      const dn = (d.fullName || '').toLowerCase().replace(/^dr\.?\s+/g, '').trim();
-      return dn.includes(norm) || norm.includes(dn);
-    }) || null;
-  }, [doctors, user]);
+    if (!doctors) return null;
+    
+    // 1. Use manually selected doctor if available
+    if (selectedDoctorId) {
+      return doctors.find(d => d.id === selectedDoctorId) || null;
+    }
+
+    // 2. Fallback to automatic linking for current user
+    if (user) {
+      if ((user as any).doctorId) return doctors.find(d => d.id === (user as any).doctorId) || null;
+      const norm = user.name?.toLowerCase().replace(/^dr\.?\s+/g, '').trim() || '';
+      return doctors.find(d => {
+        const dn = (d.fullName || '').toLowerCase().replace(/^dr\.?\s+/g, '').trim();
+        return dn.includes(norm) || norm.includes(dn);
+      }) || null;
+    }
+
+    return null;
+  }, [doctors, user, selectedDoctorId]);
 
   const filteredPatients = React.useMemo(() => {
     if (!patients) return [];
@@ -240,7 +255,9 @@ export default function EPrescriptionPage() {
     coMorbids,
     today,
     hideBranding: printOnLetterhead,
-    maritalStatus: selectedPatient?.maritalStatus 
+    maritalStatus: selectedPatient?.maritalStatus,
+    prescriptionTemplateUrl: (linkedDoctor?.useCustomPrescription && !printOnLetterhead) ? linkedDoctor.prescriptionTemplateUrl : undefined,
+    prescriptionAge: prescriptionAge || selectedPatient?.age?.toString()
   };
 
   return (
@@ -299,6 +316,36 @@ export default function EPrescriptionPage() {
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
           {/* ─ Form ─ */}
           <div className="xl:col-span-3 space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Prescribing Doctor</CardTitle></CardHeader>
+              <CardContent>
+                <Select 
+                  value={linkedDoctor?.id || ''} 
+                  onValueChange={(val) => setSelectedDoctorId(val)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a doctor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctors?.map((doc) => (
+                      <SelectItem key={doc.id} value={doc.id}>
+                        {doc.fullName} — {doc.specialization}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!linkedDoctor && !doctors && (
+                  <p className="text-[10px] text-muted-foreground mt-2 italic flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Loading doctors...
+                  </p>
+                )}
+                {linkedDoctor && (
+                  <p className="text-[10px] text-primary mt-2 font-medium">
+                    Currently using {linkedDoctor.fullName}'s {linkedDoctor.useCustomPrescription ? 'custom template' : 'standard letterhead'}.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader><CardTitle className="text-base">Patient</CardTitle></CardHeader>
@@ -324,7 +371,18 @@ export default function EPrescriptionPage() {
                       <p className="font-semibold text-sm">{selectedPatient.name}</p>
                       <p className="text-xs text-muted-foreground">{selectedPatient.mobileNumber} · {selectedPatient.gender} · Age {selectedPatient.age}</p>
                     </div>
-                    <Button size="sm" variant="ghost" onClick={() => setSelectedPatient(null)}>×</Button>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-end">
+                        <Label className="text-[10px] mb-1">Override Age</Label>
+                        <Input 
+                          placeholder="Age..." 
+                          className="w-16 h-8 text-xs" 
+                          value={prescriptionAge} 
+                          onChange={e => setPrescriptionAge(e.target.value)} 
+                        />
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedPatient(null)}>×</Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

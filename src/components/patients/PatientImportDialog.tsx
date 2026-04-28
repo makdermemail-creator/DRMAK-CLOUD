@@ -63,18 +63,6 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                 // More flexible header detection
                 const keys = Object.keys(row);
                 
-                // Find name: Look for Name, Patient Name, Full Name, etc.
-                let nameKey = keys.find(k => 
-                    /name|patient|full.name/i.test(k)
-                );
-                
-                // Fallback for name: Use first non-numeric, non-mobile column
-                if (!nameKey) {
-                    nameKey = keys.find(k => k !== mobileKey && isNaN(Number(row[k])) && String(row[k]).length > 2);
-                }
-                
-                const name = nameKey ? String(row[nameKey]).trim() : '';
-
                 // Find mobile: Look for Phone, Mobile, Contact, etc.
                 let mobileKey = keys.find(k => 
                     /phone|mobile|contact|tel|no/i.test(k)
@@ -95,6 +83,23 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                     mobileRaw = mobileRaw.toFixed(0);
                 }
                 const mobileNumber = String(mobileRaw).replace(/\D/g, '');
+
+                // Find name: Look for Name, Patient Name, Full Name, etc.
+                let nameKey = keys.find(k => 
+                    /name|patient|full.name/i.test(k)
+                );
+                
+                // Fallback for name: Use first non-numeric, non-mobile column that isn't Gender/Age/Date
+                if (!nameKey) {
+                    nameKey = keys.find(k => 
+                        k !== mobileKey && 
+                        !/gender|sex|age|date|reg/i.test(k) &&
+                        isNaN(Number(row[k])) && 
+                        String(row[k]).length > 2
+                    );
+                }
+                
+                const name = nameKey ? String(row[nameKey]).trim() : '';
 
                 // Skip if invalid or duplicate
                 if (!name || !mobileNumber) return;
@@ -139,6 +144,7 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                 }
 
                 patients.push({
+                    id: mobileNumber, // Ensure ID is present
                     name,
                     mobileNumber,
                     age,
@@ -190,6 +196,7 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
 
                     if (namePart) {
                         patients.push({
+                            id: mobile,
                             name: namePart,
                             mobileNumber: mobile,
                             age: ageMatch ? Number(ageMatch[0]) : 0,
@@ -250,13 +257,25 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
         let successCount = 0;
 
         try {
-            for (const patient of previewData) {
+            console.log(`Starting import of ${previewData.length} patients...`);
+            
+            // For small batches, individual writes are fine, but we'll use Promise.all for speed
+            const importPromises = previewData.map(async (patient) => {
                 if (patient.mobileNumber) {
-                    // Use mobileNumber as ID to match existing logic
-                    await setDoc(doc(patientsCollection, patient.mobileNumber), patient);
-                    successCount++;
+                    try {
+                        // Use mobileNumber as ID to match existing logic
+                        await setDoc(doc(patientsCollection, patient.mobileNumber), patient);
+                        successCount++;
+                    } catch (e) {
+                        console.error(`Failed to import patient ${patient.mobileNumber}:`, e);
+                    }
                 }
-            }
+            });
+
+            await Promise.all(importPromises);
+
+            console.log(`Successfully imported ${successCount} patients.`);
+            
             toast({
                 title: 'Import Complete',
                 description: `Successfully imported ${successCount} patients.`

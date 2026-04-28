@@ -37,6 +37,9 @@ import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useSearch } from '@/context/SearchProvider';
 
+import { Switch } from '@/components/ui/switch';
+import { PrescriptionTemplateUpload } from '@/components/doctors/PrescriptionTemplateUpload';
+
 const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpenChange: (open: boolean) => void, doctor?: Doctor }) => {
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -49,7 +52,7 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
       if (doctor) {
         setFormData(doctor);
       } else {
-        setFormData({});
+        setFormData({ useCustomPrescription: false });
       }
     }
   }, [doctor, open]);
@@ -64,8 +67,6 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
     setFormData(prev => ({ ...prev, [id]: value.split(',').map(s => s.trim()) }));
   }
 
-
-
   const handleSubmit = () => {
     if (!firestore) return;
 
@@ -79,6 +80,7 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
       addDocumentNonBlocking(collectionRef, {
         ...formData,
         consultationFees: Number(formData.consultationFees) || 0,
+        useCustomPrescription: formData.useCustomPrescription ?? false,
       });
       toast({ title: "Doctor Added", description: "The new doctor has been added." });
     }
@@ -87,50 +89,77 @@ const DoctorFormDialog = ({ open, onOpenChange, doctor }: { open: boolean, onOpe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{doctor ? 'Edit Doctor' : 'Add New Doctor'}</DialogTitle>
           <DialogDescription>
             {doctor ? "Update the doctor's details below." : "Fill in the details to add a new doctor."}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="fullName" className="text-right">Full Name</Label>
-            <Input id="fullName" value={formData.fullName || ''} onChange={handleChange} className="col-span-3" />
+        <div className="grid gap-6 py-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input id="fullName" value={formData.fullName || ''} onChange={handleChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="specialization">Specialization</Label>
+                <Input id="specialization" value={formData.specialization || ''} onChange={handleChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="qualification">Qualification</Label>
+                <Input id="qualification" value={formData.qualification || ''} onChange={handleChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="consultationFees">Fees (Rs)</Label>
+                <Input id="consultationFees" type="number" value={formData.consultationFees || ''} onChange={handleChange} />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="availableDays">Available Days</Label>
+                <Input id="availableDays" placeholder="Mon, Tue, Wed" value={formData.availableDays?.join(', ') || ''} onChange={handleArrayChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="availableTimings">Timings</Label>
+                <Input id="availableTimings" placeholder="10 AM - 5 PM" value={formData.availableTimings || ''} onChange={handleChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Doctor Photo</Label>
+                <AvatarUpload
+                  uid={doctor?.id || tempUid}
+                  firestore={firestore}
+                  currentPhotoURL={formData.avatarUrl}
+                  onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
+                  firestoreCollection="doctors"
+                  disableAutoSave={!doctor?.id}
+                />
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="specialization" className="text-right">Specialization</Label>
-            <Input id="specialization" value={formData.specialization || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="qualification" className="text-right">Qualification</Label>
-            <Input id="qualification" value={formData.qualification || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="consultationFees" className="text-right">Fees (Rs)</Label>
-            <Input id="consultationFees" type="number" value={formData.consultationFees || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="availableDays" className="text-right">Available Days</Label>
-            <Input id="availableDays" placeholder="Mon, Tue, Wed" value={formData.availableDays?.join(', ') || ''} onChange={handleArrayChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="availableTimings" className="text-right">Timings</Label>
-            <Input id="availableTimings" placeholder="10 AM - 5 PM" value={formData.availableTimings || ''} onChange={handleChange} className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Photo</Label>
-            <div className="col-span-3">
-              <AvatarUpload
-                uid={doctor?.id || tempUid}
-                firestore={firestore}
-                currentPhotoURL={formData.avatarUrl}
-                onUploadSuccess={(url) => setFormData(prev => ({ ...prev, avatarUrl: url }))}
-                firestoreCollection="doctors"
-                disableAutoSave={!doctor?.id} // Don't auto-save if doctor hasn't been created yet
+
+          <div className="border-t pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-base">Use Custom Prescription Letterhead</Label>
+                <p className="text-sm text-muted-foreground">
+                  If enabled, this doctor's prescriptions will use the uploaded template.
+                </p>
+              </div>
+              <Switch
+                checked={formData.useCustomPrescription || false}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, useCustomPrescription: checked }))}
               />
             </div>
+
+            <PrescriptionTemplateUpload
+              uid={doctor?.id || tempUid}
+              firestore={firestore}
+              currentTemplateURL={formData.prescriptionTemplateUrl}
+              onUploadSuccess={(url) => setFormData(prev => ({ ...prev, prescriptionTemplateUrl: url }))}
+              disableAutoSave={!doctor?.id}
+            />
           </div>
         </div>
         <DialogFooter>

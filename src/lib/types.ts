@@ -33,6 +33,8 @@ export type Doctor = {
   availableDays: string[];
   availableTimings: string;
   avatarUrl: string;
+  prescriptionTemplateUrl?: string;
+  useCustomPrescription?: boolean;
 };
 
 export type Patient = {
