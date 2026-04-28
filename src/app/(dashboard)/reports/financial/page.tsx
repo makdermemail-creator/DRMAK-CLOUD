@@ -5,6 +5,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '@/components/ui/card';
 import {
   Table,
@@ -30,6 +31,7 @@ import {
   differenceInDays,
   add
 } from 'date-fns';
+import { cn } from '@/lib/utils';
 import {
   File,
   Search,
@@ -62,6 +64,7 @@ import {
   Sparkles,
   Lock,
   RotateCcw,
+  Coins,
 } from 'lucide-react';
 import {
   collection,
@@ -433,6 +436,64 @@ export default function FinancialReportPage() {
     };
   }, [billingRecords, filteredBilling, selectedRange, financialKPIs, allSalaries, allSocialCosts, allSocialROAS, allExpenses]);
 
+  const currentMarketingSpend = React.useMemo(() => {
+    const month = format(new Date(), 'MMMM');
+    const year = new Date().getFullYear();
+    const current = allSocialCosts?.find(c => c.month === month && c.year === year);
+    return current || null;
+  }, [allSocialCosts]);
+
+  const roasData = React.useMemo(() => {
+    const now = new Date();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const months: {
+        label: string; shortLabel: string; month: number; year: number;
+        spend: number; revenue: number; roas: number;
+        leadsGenerated: number; leadsConverted: number;
+        costPerLead: number; conversionRate: number;
+    }[] = [];
+
+    for (let i = 5; i >= 0; i--) {
+        const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const mIdx = target.getMonth();
+        const yr = target.getFullYear();
+        const monthName = monthNames[mIdx];
+        const shortLabel = format(target, 'MMM');
+
+        const roasReport = (allSocialROAS || []).find(r => r.month === monthName && r.year === yr);
+
+        months.push({
+            label: monthName,
+            shortLabel,
+            month: mIdx,
+            year: yr,
+            spend: roasReport?.totalAdSpend || 0,
+            revenue: roasReport?.revenueFromConversions || 0,
+            roas: roasReport?.roas || 0,
+            leadsGenerated: roasReport?.leadsGenerated || 0,
+            leadsConverted: roasReport?.leadsConverted || 0,
+            costPerLead: roasReport?.costPerLead || 0,
+            conversionRate: roasReport?.conversionRate || 0,
+        });
+    }
+
+    const totalSpend = months.reduce((s, m) => s + m.spend, 0);
+    const totalRevenue = months.reduce((s, m) => s + m.revenue, 0);
+    const totalLeads = months.reduce((s, m) => s + m.leadsGenerated, 0);
+    const totalConverted = months.reduce((s, m) => s + m.leadsConverted, 0);
+
+    return {
+        months,
+        totalSpend,
+        totalRevenue,
+        totalLeads,
+        totalConverted,
+        overallRoas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
+        overallCPL: totalLeads > 0 ? totalSpend / totalLeads : 0,
+        overallConvRate: totalLeads > 0 ? (totalConverted / totalLeads) * 100 : 0
+    };
+  }, [allSocialROAS]);
+
   const tabs = [
     { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
     { value: 'expenses', label: 'Operational BURN', icon: Receipt },
@@ -709,6 +770,197 @@ export default function FinancialReportPage() {
 
                         <TabsContent value="analytics" className="pt-2 animate-in slide-in-from-bottom-4 duration-500">
                              <div className="space-y-8">
+                                {/* Social Marketing Performance Overview */}
+                                <div className="grid gap-6 md:grid-cols-4">
+                                    <Card className="border-none bg-slate-900 shadow-2xl shadow-slate-200 rounded-[2.5rem] overflow-hidden p-1 col-span-1 md:col-span-4">
+                                        <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+                                            <div className="flex items-center gap-6">
+                                                <div className="h-16 w-16 bg-amber-600 rounded-2xl flex items-center justify-center shadow-xl shadow-amber-900/20">
+                                                    <Coins className="h-8 w-8 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-2xl font-black text-white tracking-tight">Marketing Budget <span className="text-amber-500">Audit</span></h3>
+                                                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Active Social Spend for {currentMarketingSpend?.month || format(new Date(), 'MMMM')} {currentMarketingSpend?.year || new Date().getFullYear()}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-12">
+                                                <div className="space-y-1">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ads Spend</p>
+                                                    <p className="text-xl font-black text-white">Rs {(currentMarketingSpend?.adSpend || 0).toLocaleString()}</p>
+                                                </div>
+                                                <div className="space-y-1 border-l border-slate-800 pl-8">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Boostings</p>
+                                                    <p className="text-xl font-black text-white">Rs {(currentMarketingSpend?.boostingSpend || 0).toLocaleString()}</p>
+                                                </div>
+                                                <div className="space-y-1 border-l border-slate-800 pl-8">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PR / Influencer</p>
+                                                    <p className="text-xl font-black text-white">Rs {(currentMarketingSpend?.prSpend || 0).toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-amber-600/10 border border-amber-600/20 rounded-2xl px-8 py-3">
+                                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Total Burn</p>
+                                                    <p className="text-2xl font-black text-amber-500">Rs {(currentMarketingSpend?.totalSpent || 0).toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </div>
+
+                                {/* ROAS Intelligence Section */}
+                                <Card className="border-none bg-white shadow-2xl shadow-slate-200/50 rounded-[2.5rem] overflow-hidden">
+                                    <CardHeader className="p-8 pb-0">
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div>
+                                                <CardTitle className="text-2xl font-black tracking-tighter text-slate-900 flex items-center gap-3">
+                                                    <div className="p-3 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl shadow-lg shadow-violet-200">
+                                                        <TrendingUp className="h-6 w-6 text-white" />
+                                                    </div>
+                                                    ROAS <span className="text-violet-500">Intelligence</span>
+                                                </CardTitle>
+                                                <CardDescription className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mt-2">
+                                                    Return on Ad Spend · Last 6 Months · Social Marketing vs Clinic Revenue
+                                                </CardDescription>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                                                    <div className="h-3 w-3 rounded-sm bg-violet-500" /> Spend
+                                                    <div className="h-3 w-3 rounded-sm bg-emerald-500 ml-2" /> Revenue
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="p-8">
+                                        {/* ROAS KPI Cards */}
+                                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+                                            {/* Overall ROAS */}
+                                            <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-[2rem] p-6 border border-violet-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-violet-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest mb-2 relative">ROAS Ratio</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    {roasData.overallRoas > 0 ? `${roasData.overallRoas.toFixed(1)}x` : '—'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-violet-400 uppercase tracking-wider mt-1 relative">
+                                                    {roasData.overallRoas >= 3 ? '🔥 Excellent' : roasData.overallRoas >= 1 ? '✅ Profitable' : roasData.overallRoas > 0 ? '⚠️ Below Target' : 'No Data'}
+                                                </p>
+                                            </div>
+
+                                            {/* Total Spend */}
+                                            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-[2rem] p-6 border border-rose-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-rose-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2 relative">Total Ad Spend</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    Rs {roasData.totalSpend > 0 ? (roasData.totalSpend / 1000).toFixed(0) + 'K' : '0'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-rose-400 uppercase tracking-wider mt-1 relative">6 Month Cumulative</p>
+                                            </div>
+
+                                            {/* Revenue Generated */}
+                                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[2rem] p-6 border border-emerald-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 relative">Total Revenue</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    Rs {roasData.totalRevenue > 0 ? (roasData.totalRevenue / 1000000).toFixed(1) + 'M' : '0'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1 relative">Gross Collections</p>
+                                            </div>
+
+                                            {/* Total Leads */}
+                                            <div className="bg-gradient-to-br from-blue-50 to-sky-50 rounded-[2rem] p-6 border border-blue-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-blue-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 relative">Total Leads</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    {roasData.totalLeads > 0 ? roasData.totalLeads.toLocaleString() : '0'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider mt-1 relative">Generated via Social</p>
+                                            </div>
+
+                                            {/* Total Conversions */}
+                                            <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-[2rem] p-6 border border-teal-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-teal-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2 relative">Conversions</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    {roasData.totalConverted > 0 ? roasData.totalConverted.toLocaleString() : '0'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-teal-500 uppercase tracking-wider mt-1 relative">
+                                                    {roasData.overallConvRate > 0 ? `${roasData.overallConvRate.toFixed(1)}% Conv. Rate` : 'Patient conversions'}
+                                                </p>
+                                            </div>
+
+                                            {/* Cost Per Lead */}
+                                            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-[2rem] p-6 border border-amber-100/50 relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-amber-200/20 rounded-full -translate-x-4 -translate-y-4 blur-2xl" />
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 relative">Avg Cost/Lead</p>
+                                                <p className="text-3xl font-black tracking-tighter text-slate-900 relative">
+                                                    Rs {roasData.overallCPL > 0 ? Math.round(roasData.overallCPL).toLocaleString() : '0'}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-amber-500 uppercase tracking-wider mt-1 relative">Acquisition Cost</p>
+                                            </div>
+                                        </div>
+
+                                        {/* ROAS Bar Chart */}
+                                        <div className="h-[350px] bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <RechartsBarChart data={roasData.months.map(m => ({
+                                                    name: m.shortLabel,
+                                                    'Ad Spend': m.spend,
+                                                    'Revenue': m.revenue,
+                                                    roas: m.roas
+                                                }))} barGap={4}>
+                                                    <CartesianGrid strokeDasharray="10 10" vertical={false} stroke="#e2e8f0" />
+                                                    <XAxis
+                                                        dataKey="name"
+                                                        fontSize={11}
+                                                        tickLine={false}
+                                                        axisLine={false}
+                                                        fontWeight="800"
+                                                        tick={{ fill: '#64748b' }}
+                                                    />
+                                                    <YAxis
+                                                        fontSize={10}
+                                                        tickLine={false}
+                                                        axisLine={false}
+                                                        fontWeight="800"
+                                                        tick={{ fill: '#94a3b8' }}
+                                                        tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : `${v}`}
+                                                    />
+                                                    <RechartsTooltip
+                                                        contentStyle={{
+                                                            borderRadius: '20px',
+                                                            border: 'none',
+                                                            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.12)',
+                                                            fontWeight: '700',
+                                                            fontSize: '12px',
+                                                            padding: '16px',
+                                                        }}
+                                                        formatter={(value: number) => `Rs ${value.toLocaleString()}`}
+                                                    />
+                                                    <Bar dataKey="Ad Spend" fill="#8b5cf6" radius={[8, 8, 0, 0]} barSize={28} />
+                                                    <Bar dataKey="Revenue" fill="#10b981" radius={[8, 8, 0, 0]} barSize={28} />
+                                                </RechartsBarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+
+                                        {/* Monthly ROAS Breakdown Table */}
+                                        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                                            {roasData.months.map(m => (
+                                                <div key={`roas-${m.label}-${m.year}`} className="bg-white border border-slate-100 rounded-2xl p-4 text-center hover:border-violet-200 hover:shadow-lg hover:shadow-violet-50 transition-all">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.shortLabel}</p>
+                                                    <p className={cn(
+                                                        "text-xl font-black tracking-tighter mt-1",
+                                                        m.roas >= 3 ? "text-emerald-600" : m.roas >= 1 ? "text-slate-900" : m.roas > 0 ? "text-amber-600" : "text-slate-300"
+                                                    )}>
+                                                        {m.roas > 0 ? `${m.roas.toFixed(1)}x` : '—'}
+                                                    </p>
+                                                    <div className="mt-2 space-y-0.5">
+                                                        <p className="text-[8px] font-bold text-rose-400">↓ Rs {m.spend.toLocaleString()}</p>
+                                                        <p className="text-[8px] font-bold text-emerald-500">↑ Rs {m.revenue.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
                                 {/* Strategic Customer Metrics */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <Card className="border-none bg-indigo-50/50 shadow-sm rounded-3xl p-8 flex items-center gap-6">
