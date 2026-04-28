@@ -378,10 +378,22 @@ export default function EPrescriptionPage() {
                   <Textarea placeholder="Clinical diagnosis..." value={diagnosis} onChange={e => setDiagnosis(e.target.value)} rows={3} />
                 </div>
 
-                {/* 4. Treatment (Medicines) */}
+                {/* 4. Allergies */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">4. Allergies</Label>
+                  <Textarea placeholder="Known drug or food allergies..." value={allergies} onChange={e => setAllergies(e.target.value)} rows={2} />
+                </div>
+
+                {/* 5. Co-Morbids */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-primary font-bold">5. Co-Morbids</Label>
+                  <Textarea placeholder="Diabetes, Hypertension, etc..." value={coMorbids} onChange={e => setCoMorbids(e.target.value)} rows={2} />
+                </div>
+
+                {/* 6. Treatment (Medicines) */}
                 <div className="space-y-3 pt-4 border-t">
                   <div className="flex items-center justify-between">
-                    <Label className="text-primary font-bold">4. Treatment (Medicines)</Label>
+                    <Label className="text-primary font-bold">6. Treatment (Medicines)</Label>
                     <Button size="sm" variant="outline" onClick={() => setMedicines(prev => [...prev, defaultMedicine()])}><PlusCircle className="mr-2 h-4 w-4" />Add Medicine</Button>
                   </div>
                   <div className="space-y-4 mt-2">
@@ -547,21 +559,27 @@ export default function EPrescriptionPage() {
                   </div>
                 </div>
 
-                {/* 5. Advice */}
+                {/* 7. Advice */}
                 <div className="space-y-2 pt-4 border-t">
-                  <Label className="text-primary font-bold">5. Advice</Label>
+                  <Label className="text-primary font-bold">7. Advice</Label>
                   <Textarea placeholder="Special advice for the patient..." value={advice} onChange={e => setAdvice(e.target.value)} rows={3} />
                 </div>
 
-                {/* 6. Procedure */}
+                {/* 8. Procedure */}
                 <div className="space-y-2 pt-4 border-t">
-                  <Label className="text-primary font-bold">6. Procedure</Label>
+                  <Label className="text-primary font-bold">8. Procedure</Label>
                   <Textarea placeholder="Procedures performed or recommended..." value={procedure} onChange={e => setProcedure(e.target.value)} rows={3} />
                 </div>
 
-                {/* 7. Follow up */}
+
+                {/* Internal Notes */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-muted-foreground text-xs">Private Notes (Not Printed)</Label>
+                  <Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
+                {/* 9. Follow up */}
                 <div className="space-y-3 pt-4 border-t">
-                  <Label className="text-primary font-bold flex items-center gap-2">7. Follow-up Appointments</Label>
+                  <Label className="text-primary font-bold flex items-center gap-2">9. Follow-up Appointments</Label>
                   <div className="flex gap-2">
                     <Input 
                       type="date" 
@@ -592,24 +610,6 @@ export default function EPrescriptionPage() {
                       </Badge>
                     ))}
                   </div>
-                </div>
-
-                {/* 8. Allergies */}
-                <div className="space-y-2 pt-4 border-t">
-                  <Label className="text-primary font-bold">8. Allergies</Label>
-                  <Textarea placeholder="Known drug or food allergies..." value={allergies} onChange={e => setAllergies(e.target.value)} rows={2} />
-                </div>
-
-                {/* 9. Co-Morbids */}
-                <div className="space-y-2 pt-4 border-t">
-                  <Label className="text-primary font-bold">9. Co-Morbids</Label>
-                  <Textarea placeholder="Diabetes, Hypertension, etc..." value={coMorbids} onChange={e => setCoMorbids(e.target.value)} rows={2} />
-                </div>
-
-                {/* Internal Notes */}
-                <div className="space-y-2 pt-4 border-t">
-                  <Label className="text-muted-foreground text-xs">Private Notes (Not Printed)</Label>
-                  <Input placeholder="Internal notes..." value={notes} onChange={e => setNotes(e.target.value)} />
                 </div>
               </CardContent>
             </Card>

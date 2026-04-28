@@ -1,5 +1,8 @@
 'use client';
 import * as React from 'react';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Card,
   CardContent,
@@ -494,6 +497,55 @@ export default function FinancialReportPage() {
     };
   }, [allSocialROAS]);
 
+  const handleExport = (type: 'excel' | 'pdf') => {
+    if (type === 'excel') {
+      const data = [
+        ['Financial Report', format(selectedRange?.from || new Date(), 'dd MMM yyyy') + ' - ' + format(selectedRange?.to || new Date(), 'dd MMM yyyy')],
+        [''],
+        ['Summary Metrics'],
+        ['Gross Revenue', financialKPIs.grossRevenue],
+        ['Operational Burn', financialKPIs.operationalBurn],
+        ['Net Position', financialKPIs.netPosition],
+        ['Vendor Debt', financialKPIs.pendingVendorDebt],
+        [''],
+        ['Strategic P&L'],
+        ['EBITDA', strategicMetrics?.ebitda || 0],
+        ['EBITDA Margin', (strategicMetrics?.ebitdaMargin || 0).toFixed(1) + '%'],
+        ['Net Profit', strategicMetrics?.netProfit || 0],
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Financial Summary");
+      XLSX.writeFile(wb, `Financial_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      
+      toast({ title: "Export Successful", description: "Your Excel report has been generated." });
+    } else {
+      const doc = new jsPDF();
+      doc.setFontSize(20);
+      doc.text("Financial Hub - Executive Report", 14, 22);
+      doc.setFontSize(10);
+      doc.text(`Period: ${format(selectedRange?.from || new Date(), 'dd MMM yyyy')} - ${format(selectedRange?.to || new Date(), 'dd MMM yyyy')}`, 14, 30);
+
+      autoTable(doc, {
+        startY: 40,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Gross Revenue', `Rs ${financialKPIs.grossRevenue.toLocaleString()}`],
+          ['Operational Burn', `Rs ${financialKPIs.operationalBurn.toLocaleString()}`],
+          ['Net Position', `Rs ${financialKPIs.netPosition.toLocaleString()}`],
+          ['Vendor Debt', `Rs ${financialKPIs.pendingVendorDebt.toLocaleString()}`],
+          ['EBITDA', `Rs ${(strategicMetrics?.ebitda || 0).toLocaleString()}`],
+          ['EBITDA Margin', `${(strategicMetrics?.ebitdaMargin || 0).toFixed(1)}%`],
+          ['Net Profit', `Rs ${(strategicMetrics?.netProfit || 0).toLocaleString()}`],
+        ],
+      });
+
+      doc.save(`Financial_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+      toast({ title: "Export Successful", description: "Your PDF report has been generated." });
+    }
+  };
+
   const tabs = [
     { value: 'revenue', label: 'Revenue HUB', icon: TrendingUp },
     { value: 'expenses', label: 'Operational BURN', icon: Receipt },
@@ -515,10 +567,21 @@ export default function FinancialReportPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <DatePickerWithRange date={selectedRange} onDateChange={setSelectedRange} />
-                    <Button variant="outline" className="rounded-2xl border-slate-200 h-14 px-8 font-black hover:bg-slate-50 shadow-sm transition-all active:scale-95">
-                        <Download className="mr-2 h-5 w-5" /> Export
-                    </Button>
-                    <Button className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 h-14 px-8 font-black shadow-2xl shadow-indigo-200 transition-all active:scale-95">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="rounded-2xl border-slate-200 h-14 px-8 font-black hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                                <Download className="mr-2 h-5 w-5" /> Export
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleExport('excel')}>Excel Spreadsheet (.xlsx)</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport('pdf')}>PDF Document (.pdf)</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button 
+                        onClick={() => window.print()}
+                        className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 h-14 px-8 font-black shadow-2xl shadow-indigo-200 transition-all active:scale-95"
+                    >
                         <Printer className="mr-2 h-5 w-5" /> Print Board
                     </Button>
                 </div>
