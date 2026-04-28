@@ -60,35 +60,78 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
             const patients: Partial<Patient>[] = [];
 
             jsonData.forEach((row: any) => {
-                // Extract name
-                const name = row['Patient Name'] || row.Name || row.name || '';
+                // More flexible header detection
+                const keys = Object.keys(row);
+                
+                // Find name: Look for Name, Patient Name, Full Name, etc.
+                let nameKey = keys.find(k => 
+                    /name|patient|full.name/i.test(k)
+                );
+                
+                // Fallback for name: Use first non-numeric, non-mobile column
+                if (!nameKey) {
+                    nameKey = keys.find(k => k !== mobileKey && isNaN(Number(row[k])) && String(row[k]).length > 2);
+                }
+                
+                const name = nameKey ? String(row[nameKey]).trim() : '';
 
-                // Extract and sanitize mobile number
-                const mobileRaw = row.Phone || row.phone || row.Mobile || row.mobile || '';
+                // Find mobile: Look for Phone, Mobile, Contact, etc.
+                let mobileKey = keys.find(k => 
+                    /phone|mobile|contact|tel|no/i.test(k)
+                );
+
+                // Fallback: If no mobile header found, look for a column that contains 10+ digits
+                if (!mobileKey) {
+                    mobileKey = keys.find(k => {
+                        const val = String(row[k]);
+                        return val.replace(/\D/g, '').length >= 10;
+                    });
+                }
+
+                let mobileRaw = mobileKey ? row[mobileKey] : '';
+                
+                // Handle Excel's scientific notation or decimal .0
+                if (typeof mobileRaw === 'number') {
+                    mobileRaw = mobileRaw.toFixed(0);
+                }
                 const mobileNumber = String(mobileRaw).replace(/\D/g, '');
 
                 // Skip if invalid or duplicate
-                if (!name || !mobileNumber || existingMobiles.has(mobileNumber) || seenInFile.has(mobileNumber)) {
+                if (!name || !mobileNumber) return;
+                
+                // Check if already in system or already seen in this file
+                if (existingMobiles.has(mobileNumber) || seenInFile.has(mobileNumber)) {
                     return;
                 }
 
                 // Extract age (handles "22 Years" -> 22)
-                const ageRaw = row.Age || row.age || row.AGE || '';
+                const ageKey = keys.find(k => /age/i.test(k));
+                const ageRaw = ageKey ? row[ageKey] : '';
                 const age = typeof ageRaw === 'number' ? ageRaw : parseInt(String(ageRaw).replace(/\D/g, ''), 10) || 0;
 
                 // Extract gender
-                const genderRaw = String(row.Gender || row.gender || 'Other').toLowerCase();
+                const genderKey = keys.find(k => /gender|sex/i.test(k));
+                const genderRaw = String(genderKey ? row[genderKey] : 'Other').toLowerCase();
                 const gender = genderRaw.startsWith('m') ? 'Male' : genderRaw.startsWith('f') ? 'Female' : 'Other';
 
                 // Parse Registration Date
                 let registrationDate = new Date().toISOString();
-                const dateRaw = row['REGISTRATION DATE'] || row['Registration Date'] || row['registration date'] || row.date || row.Date;
+                const dateKey = keys.find(k => /date|reg/i.test(k));
+                const dateRaw = dateKey ? row[dateKey] : null;
+                
                 if (dateRaw) {
-                    if (typeof dateRaw === 'string' && dateRaw.includes('/')) {
-                        const [day, month, year] = dateRaw.split('/');
-                        const parsedDate = new Date(`${year}-${month}-${day}`);
-                        if (!isNaN(parsedDate.getTime())) {
-                            registrationDate = parsedDate.toISOString();
+                    if (typeof dateRaw === 'number') {
+                        // Excel serial date
+                        const date = XLSX.SSF.parse_date_code(dateRaw);
+                        registrationDate = new Date(date.y, date.m - 1, date.d).toISOString();
+                    } else if (typeof dateRaw === 'string' && dateRaw.includes('/')) {
+                        const parts = dateRaw.split('/');
+                        if (parts.length === 3) {
+                            const [day, month, year] = parts;
+                            const parsedDate = new Date(`${year}-${month}-${day}`);
+                            if (!isNaN(parsedDate.getTime())) {
+                                registrationDate = parsedDate.toISOString();
+                            }
                         }
                     } else if (!isNaN(new Date(dateRaw).getTime())) {
                         registrationDate = new Date(dateRaw).toISOString();
@@ -100,9 +143,9 @@ export function PatientImportDialog({ open, onOpenChange, onImportSuccess }: Pat
                     mobileNumber,
                     age,
                     gender: gender as Patient['gender'],
-                    address: row.Address || row.address || '',
+                    address: row.Address || row.address || row.Location || '',
                     registrationDate,
-                    status: (row.Status || row.status || 'Active') as Patient['status'],
+                    status: 'Active',
                     avatarUrl: '',
                 });
                 seenInFile.add(mobileNumber);
